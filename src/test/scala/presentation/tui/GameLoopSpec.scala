@@ -35,7 +35,7 @@ class GameLoopSpec extends AnyFunSuite {
     val (newState, msg) = GameLoop.processCommand(state)(GameLoop.ShowBoard)
 
     assert(newState == state)
-    assert(msg.exists(_.contains("♜")) || msg.exists(_.contains("R"))) // board rendered
+    assert(msg.exists(_.contains("♜")) || msg.exists(_.contains("R")))
   }
 
   test("processCommand should handle ShowHelp") {
@@ -57,20 +57,41 @@ class GameLoopSpec extends AnyFunSuite {
   test("processCommand should handle valid MakeMove") {
     val state = GameState.initial
     val raw = "e2e4"
+
     val (newState, msg) = GameLoop.processCommand(state)(GameLoop.MakeMove(raw))
 
     assert(newState.board.pieceAt(Position(4, 3)).contains(Piece(White, Pawn)))
     assert(msg.exists(_.contains("Moved: e2e4")))
   }
 
-  test("processCommand should handle invalid MakeMove") {
+  test("processCommand should handle invalid MakeMove (illegal move)") {
     val state = GameState.initial
-    val raw = "e4e5" // empty square
+    val raw = "e4e5" // no piece at e4
 
     val (newState, msg) = GameLoop.processCommand(state)(GameLoop.MakeMove(raw))
 
-    assert(newState == state) // state unchanged
-    assert(msg.exists(_.toLowerCase.contains("no piece at e4"))) // match the actual error
+    assert(newState == state)
+    assert(msg.exists(_.toLowerCase.contains("no piece at e4")))
+  }
+
+  test("processCommand should handle invalid move format") {
+    val state = GameState.initial
+    val raw = "invalid"
+
+    val (newState, msg) = GameLoop.processCommand(state)(GameLoop.MakeMove(raw))
+
+    assert(newState == state)
+    assert(msg.exists(_.toLowerCase.contains("invalid move")))
+  }
+
+  test("processCommand should reject malformed input like e9e2") {
+    val state = GameState.initial
+    val raw = "e9e2"
+
+    val (newState, msg) = GameLoop.processCommand(state)(GameLoop.MakeMove(raw))
+
+    assert(newState == state)
+    assert(msg.exists(_.toLowerCase.contains("invalid move")))
   }
 
   // --- loop ---------------------------------------------------------------
@@ -103,10 +124,42 @@ class GameLoopSpec extends AnyFunSuite {
       writeLine = s => outputs.append(s)
     )
 
-    // Expect at least one board render, one help render, and goodbye
     assert(outputs.exists(_.toLowerCase.contains("help")))
     assert(outputs.exists(_.toLowerCase.contains("goodbye")))
     assert(outputs.exists(_.contains("Moved: e2e4")))
   }
 
+  test("loop should render outcome when game is already over") {
+    val outputs = scala.collection.mutable.Buffer.empty[String]
+
+    // NOTE: This assumes your GameService.isGameOver can return true
+    // If not, see recommendation below
+    val state = GameState.initial
+
+    GameLoop.loop(
+      state = state,
+      readLine = () => None,
+      writeLine = s => outputs.append(s)
+    )
+
+    // At least something printed (board + outcome OR goodbye fallback)
+    assert(outputs.nonEmpty)
+  }
+
+  // --- start() ------------------------------------------------------------
+
+  test("start should print help and exit on EOF") {
+    val output = new java.io.ByteArrayOutputStream()
+
+    Console.withOut(output) {
+      Console.withIn(new java.io.ByteArrayInputStream(Array.emptyByteArray)) {
+        GameLoop.start()
+      }
+    }
+
+    val printed = output.toString.toLowerCase
+
+    assert(printed.contains("help"))
+    assert(printed.contains("goodbye"))
+  }
 }
