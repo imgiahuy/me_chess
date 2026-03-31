@@ -9,6 +9,5 @@ lazy val root = (project in file("."))
 
     libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.19" % Test,
 
-    coverageExcludedPackages := ".*Main.*"
 
 )
