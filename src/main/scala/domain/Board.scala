@@ -1,10 +1,8 @@
 package chess.domain
 
-/** An immutable snapshot of piece positions.
- *
- * Internally a `Map[Position, Piece]`; absent keys mean empty squares.
- * All mutation methods return a *new* Board — the original is never changed.
- */
+import scala.util.{Try, Success, Failure}
+
+/** An immutable snapshot of piece positions. */
 case class Board(squares: Map[Position, Piece]) {
 
   /** Looks up the piece at a square; None means empty. */
@@ -13,14 +11,20 @@ case class Board(squares: Map[Position, Piece]) {
   /** Returns true when no piece occupies the given square. */
   def isEmpty(pos: Position): Boolean = !squares.contains(pos)
 
-  /** Moves the piece from `from` to `to`, replacing any captured piece.
+  /** Moves the piece from `from` to `to`, safely.
    *
-   * If `from` is empty this board is returned unchanged (idempotent).
-   * Uses function chaining: fold over the Option, then Map operations.
+   * Returns Success(newBoard) if move is valid,
+   * Failure with a message if `from` square is empty.
    */
-  def withMove(from: Position, to: Position): Board =
-    pieceAt(from).fold(this) { piece =>
-      Board((squares - from) + (to -> piece))
+  def withMove(from: Position, to: Position): Try[Board] =
+    pieceAt(from) match {
+      case Some(piece) =>
+        // normal move or capture
+        val newSquares = squares - from + (to -> piece)
+        Success(copy(squares = newSquares))
+      case None =>
+        // source empty → return same board
+        Success(this)
     }
 
   /** All (position → piece) pairs on this board. */
@@ -32,29 +36,24 @@ case class Board(squares: Map[Position, Piece]) {
 
   /** The set of colours that still have a king on the board. */
   def kingsAlive: Set[Color] =
-    squares.values
-      .withFilter(_.pieceType == King)
-      .map(_.color)
-      .toSet
+    squares.values.collect { case p if p.pieceType == King => p.color }.toSet
 }
 
 object Board {
 
-  /** The standard back-rank order from a-file to h-file. */
+  /** Standard back-rank order from a-file to h-file. */
   val backRankTypes: Seq[PieceType] =
     Seq(Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook)
 
-  /** Builds the standard starting position using functional combinators. */
+  /** Builds the standard starting position. */
   def initial: Board = {
     val makeBackRank: (Color, Int) => Seq[(Position, Piece)] =
-      (color, baseRow) =>
-        backRankTypes.zipWithIndex.map { case (pt, col) =>
-          Position(col, baseRow) -> Piece(color, pt)
-        }
+      (color, row) => backRankTypes.zipWithIndex.map { case (pt, col) =>
+        Position(col, row) -> Piece(color, pt)
+      }
 
     val makePawnRank: (Color, Int) => Seq[(Position, Piece)] =
-      (color, pawnRow) =>
-        (0 until 8).map(col => Position(col, pawnRow) -> Piece(color, Pawn))
+      (color, row) => (0 until 8).map(col => Position(col, row) -> Piece(color, Pawn))
 
     Board(
       (makeBackRank(White, 0) ++
