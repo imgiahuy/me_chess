@@ -3,29 +3,14 @@ package chess.presentation.tui
 import chess.domain._
 import chess.application.{GameService, MoveParser}
 
-/** The interactive game loop.
- *
- * Design principles:
- *   - The loop itself is tail-recursive (`@tailrec`), no mutable state.
- *   - I/O is injected via `readLine` and `writeLine` parameters, making
- *     every function here fully unit-testable without touching stdin/stdout.
- *   - Command parsing and state transitions are pure functions that can be
- *     tested in isolation.
- *
- * The only impure function is `start()`, which wires real stdin/stdout and
- * is the single entry point from `Main`.
- */
+/** The interactive game loop. */
 object GameLoop {
-
-  // ── Command ADT ──────────────────────────────────────────────────────────────
 
   sealed trait Command
   case object ShowBoard             extends Command
   case object ShowHelp              extends Command
   case object Quit                  extends Command
   case class  MakeMove(raw: String) extends Command
-
-  // ── Command parsing ──────────────────────────────────────────────────────────
 
   /** Maps a trimmed, lower-cased input string to a Command. Pure function. */
   def parseCommand(input: String): Command =
@@ -36,50 +21,32 @@ object GameLoop {
       case other   => MakeMove(other)
     }
 
-  // ── Command processing ───────────────────────────────────────────────────────
-
-  /** Applies a Command to a GameState.
-   *
-   * Returns (newState, optionalMessage).  State is unchanged for display-only
-   * commands.  A partially-applied helper `applyMoveCmd` is extracted to keep
-   * the match arms short.
-   *
-   * Curried form used so callers can partially apply the state:
-   *   val handle = processCommand(currentState) _
-   */
+  /** Applies a Command to a GameState. */
   def processCommand(state: GameState)(cmd: Command): (GameState, Option[String]) = {
-    val applyMoveCmd: String => (GameState, Option[String]) = raw =>
-      MoveParser.parse(raw) match {
-        case None =>
-          (state, Some(ConsoleRenderer.renderError(s"Invalid move: '$raw'. Use format e.g. e2e4")))
-        case Some(move) =>
-          GameService.applyMove(state, move) match {
-            case Left(err)       => (state, Some(ConsoleRenderer.renderError(err)))
-            case Right(newState) => (newState, Some(s"Moved: ${move.toAlgebraic}"))
-          }
-      }
 
+    // ── Helper for applying moves ──────────────────────────────────────────────
+    val applyMoveCmd: String => (GameState, Option[String]) = raw => {
+      // Chain Option -> Either -> Either using for-comprehension
+      val result: Either[String, (GameState, String)] = for {
+        move <- MoveParser.parse(raw).toRight(s"Invalid move: '$raw'. Use format e.g. e2e4")
+        newState <- GameService.applyMove(state, move)
+      } yield (newState, s"Moved: ${move.toAlgebraic}")
+
+      result match {
+        case Right((s, msg)) => (s, Some(msg))
+        case Left(err)       => (state, Some(ConsoleRenderer.renderError(err)))
+      }
+    }
+
+    // ── Main match on command ────────────────────────────────────────────────
     cmd match {
-      case ShowBoard       => (state, Some(ConsoleRenderer.renderBoard(state.board)))
-      case ShowHelp        => (state, Some(ConsoleRenderer.renderHelp))
-      case Quit            => (state, Some("Goodbye!"))
-      case MakeMove(raw)   => applyMoveCmd(raw)
+      case ShowBoard     => (state, Some(ConsoleRenderer.renderBoard(state.board)))
+      case ShowHelp      => (state, Some(ConsoleRenderer.renderHelp))
+      case Quit          => (state, Some("Goodbye!"))
+      case MakeMove(raw) => applyMoveCmd(raw)
     }
   }
 
-  // ── Main loop ────────────────────────────────────────────────────────────────
-
-  /** Tail-recursive game loop.
-   *
-   * Termination conditions:
-   *   - `readLine()` returns None  (EOF / stream exhausted)
-   *   - User types "quit"
-   *   - `GameEngine.isGameOver` becomes true
-   *
-   * @param state     current game state (immutable; threaded through recursion)
-   * @param readLine  supplier of the next line; None signals end-of-input
-   * @param writeLine consumer of output lines (e.g. println)
-   */
   @scala.annotation.tailrec
   def loop(
             state:     GameState,
@@ -108,9 +75,7 @@ object GameLoop {
     }
   }
 
-  // ── Entry point ──────────────────────────────────────────────────────────────
-
-  /** Wires real stdin/stdout and starts the game.  Only impure function. */
+  /** Wires real stdin/stdout and starts the game. Only impure function. */
   def start(): Unit = {
     val readLine: () => Option[String] = () => Option(scala.io.StdIn.readLine())
     println(ConsoleRenderer.renderHelp)
