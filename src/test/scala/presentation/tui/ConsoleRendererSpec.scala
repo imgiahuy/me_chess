@@ -3,8 +3,15 @@ package chess.presentation.tui
 import org.scalatest.funsuite.AnyFunSuite
 import chess.domain._
 import chess.application.GameService
+import scala.util.{Try, Success, Failure}
 
 class ConsoleRendererSpec extends AnyFunSuite {
+
+  // Helper to unwrap Try for tests
+  private def unwrap(gs: Try[GameState]): GameState = gs match {
+    case Success(s) => s
+    case Failure(ex) => fail(s"Unexpected move failure: $ex")
+  }
 
   // --- renderBoard ---------------------------------------------------------
 
@@ -47,7 +54,7 @@ class ConsoleRendererSpec extends AnyFunSuite {
     assert(output.contains("No moves yet"))
 
     val move = Move(Position(4, 1), Position(4, 3)) // e2e4
-    val newState = state.applyMove(move)
+    val newState = unwrap(state.applyMove(move))
     val newOutput = ConsoleRenderer.renderGameState(newState)
     assert(newOutput.contains("Last move: e2e4"))
     assert(newOutput.contains("Moves played: 1"))
