@@ -10,24 +10,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Git checkout (merge)
+      - name: Checkout
         uses: actions/checkout@v3
-        if: github.event_name != 'pull_request'
-        with:
-          fetch-depth: 0
-
-      - name: Git checkout (PR)
-        uses: actions/checkout@v3
-        if: github.event_name == 'pull_request'
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
+
+      - name: Install sbt
+        run: |
+          curl -L https://github.com/sbt/sbt/releases/download/v1.10.0/sbt-1.10.0.tgz | tar xz
+          echo "$PWD/sbt/bin" >> $GITHUB_PATH
 
       - name: Run tests with coverage
         run: sbt clean coverage test
