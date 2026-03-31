@@ -134,12 +134,11 @@ class GameLoopSpec extends AnyFunSuite {
 
     // NOTE: This assumes your GameService.isGameOver can return true
     // If not, see recommendation below
-    val state = GameState.initial
-
     GameLoop.loop(
-      state = state,
+      state = GameState.initial,
       readLine = () => None,
-      writeLine = s => outputs.append(s)
+      writeLine = outputs.append,
+      isGameOver = _ => true // Force game-over condition for testing
     )
 
     // At least something printed (board + outcome OR goodbye fallback)
