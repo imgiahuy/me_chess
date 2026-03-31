@@ -1,16 +1,9 @@
 package chess.application
 
 import chess.domain._
+import scala.util.{Try, Success, Failure}
 
-/** Pure game-rule functions.
- *
- * All functions are referentially transparent:
- *   - No mutation
- *   - No I/O
- *   - Same input always produces the same output
- *
- * `applyMove` is the primary entry point from the UI layer.
- */
+/** Pure game-rule functions. */
 object GameService {
 
   // ── Move application ────────────────────────────────────────────────────────
@@ -20,17 +13,14 @@ object GameService {
    * Returns Right(newState) on success, Left(reason) on failure.
    * Uses for-comprehension over Either for clean chained validation.
    */
-  def applyMove(state: GameState, move: Move): Either[String, GameState] =
-    validate(state, move).map(_ => state.applyMove(move))
+  def applyMove(state: GameState, move: Move): Either[String, GameState] = {
+    for {
+      _        <- validate(state, move)
+      newState <- state.applyMove(move).toEither.left.map(_.getMessage)
+    } yield newState
+  }
 
-  /** Runs all precondition checks in order, short-circuiting on first failure.
-   *
-   * Checks performed (no piece-movement rules yet — to be extended):
-   *   1. Both squares are within the 8×8 board
-   *   2. Source and destination are different squares
-   *   3. A piece exists on the source square
-   *   4. That piece belongs to the player whose turn it is
-   */
+  /** Runs all precondition checks in order, short-circuiting on first failure. */
   def validate(state: GameState, move: Move): Either[String, Unit] =
     for {
       _ <- Either.cond(
