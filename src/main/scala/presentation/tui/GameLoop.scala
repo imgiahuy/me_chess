@@ -51,9 +51,10 @@ object GameLoop {
   def loop(
             state:     GameState,
             readLine:  () => Option[String],
-            writeLine: String => Unit
+            writeLine: String => Unit,
+            isGameOver: GameState => Boolean = GameService.isGameOver
           ): Unit = {
-    if (GameService.isGameOver(state)) {
+    if (isGameOver(state)) {
       writeLine(ConsoleRenderer.renderBoard(state.board))
       writeLine(ConsoleRenderer.renderOutcome(state))
     } else {
