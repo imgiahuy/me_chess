@@ -1,22 +1,38 @@
-- name: Git checkout (merge)
-  uses: actions/checkout@v3
-  if: github.event_name != 'pull_request'
-  with:
-    fetch-depth: 0
+name: CI
 
-- name: Git checkout (PR)
-  uses: actions/checkout@v3
-  if: github.event_name == 'pull_request'
-  with:
-    fetch-depth: 0
-    # see: https://frontside.com/blog/2020-05-26-github-actions-pull_request/#how-does-pull_request-affect-actionscheckout
-    ref: ${{ github.event.pull_request.head.sha }}
+on:
+  push:
+    branches: [ main ]
+  pull_request:
 
-- name: Run tests
-  run: sbt clean coverage test
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-- name: Upload coverage data to Coveralls
-  run: sbt coverageReport coveralls
-  env:
-    COVERALLS_REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    COVERALLS_FLAG_NAME: Scala ${{ matrix.scala }}
+    steps:
+      - name: Git checkout (merge)
+        uses: actions/checkout@v3
+        if: github.event_name != 'pull_request'
+        with:
+          fetch-depth: 0
+
+      - name: Git checkout (PR)
+        uses: actions/checkout@v3
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Run tests with coverage
+        run: sbt clean coverage test
+
+      - name: Upload coverage to Coveralls
+        run: sbt coverageReport coveralls
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
