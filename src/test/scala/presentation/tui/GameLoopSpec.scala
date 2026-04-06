@@ -2,7 +2,8 @@ package chess.presentation.tui
 
 import org.scalatest.funsuite.AnyFunSuite
 import chess.domain._
-import chess.application.{GameService, MoveParser}
+import chess.application.GameService
+import presentation.parser.MoveParser
 
 class GameLoopSpec extends AnyFunSuite {
 

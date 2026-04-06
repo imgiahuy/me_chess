@@ -15,4 +15,24 @@ case object Pawn   extends PieceType
 
 object PieceType {
   val all: Seq[PieceType] = Seq(King, Queen, Rook, Bishop, Knight, Pawn)
+
+  def toAbbrev(pt: PieceType): Char = pt match {
+    case King => 'K'
+    case Queen => 'Q'
+    case Rook => 'R'
+    case Bishop => 'B'
+    case Knight => 'N'
+    case Pawn => 'P'
+  }
+
+  def fromAbbrev(c: Char): PieceType = c match {
+    case 'K' => King
+    case 'Q' => Queen
+    case 'R' => Rook
+    case 'B' => Bishop
+    case 'N' => Knight
+    case 'P' => Pawn
+    case _ => throw new IllegalArgumentException(s"Invalid piece type: $c")
+  }
 }
+
