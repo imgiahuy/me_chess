@@ -1,7 +1,8 @@
 package chess.presentation.gui
 
 import chess.domain._
-import chess.application.{GameService, MoveParser}
+import chess.application.GameService
+import presentation.parser.MoveParser
 import scalafx.scene.layout.BorderPane
 
 class GuiController {
