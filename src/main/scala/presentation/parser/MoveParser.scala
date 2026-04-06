@@ -1,4 +1,4 @@
-package chess.application
+package presentation.parser
 
 import chess.domain.{Move, Position}
 
