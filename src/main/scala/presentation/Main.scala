@@ -1,5 +1,6 @@
 package presentation
 
+import chess.presentation.gui.GuiController
 import chess.presentation.tui.GameLoop
 
 /** Application entry point.
