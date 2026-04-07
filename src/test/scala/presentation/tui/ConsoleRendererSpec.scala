@@ -1,9 +1,12 @@
 package chess.presentation.tui
 
 import org.scalatest.funsuite.AnyFunSuite
-import chess.domain._
+import chess.domain.*
 import chess.application.GameService
-import scala.util.{Try, Success, Failure}
+import domain.engine.GameState
+import domain.model.{Black, Board, King, Move, Piece, Position, Rook, White}
+
+import scala.util.{Failure, Success, Try}
 
 class ConsoleRendererSpec extends AnyFunSuite {
 

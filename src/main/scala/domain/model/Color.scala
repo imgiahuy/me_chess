@@ -1,4 +1,4 @@
-package chess.domain
+package domain.model
 
 /** Represents the two player colours.
  *

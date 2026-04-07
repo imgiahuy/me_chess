@@ -1,5 +1,6 @@
 package chess.domain
 
+import domain.model.Position
 import org.scalatest.funsuite.AnyFunSuite
 
 class PositionSpec extends AnyFunSuite {

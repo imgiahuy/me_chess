@@ -1,5 +1,6 @@
 package chess.domain
 
+import domain.model.{Black, White}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 

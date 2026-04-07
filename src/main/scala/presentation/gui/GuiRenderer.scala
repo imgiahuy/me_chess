@@ -1,17 +1,19 @@
 package chess.presentation.gui
 
-import scalafx.scene.layout.{GridPane, StackPane}
+import scalafx.scene.layout.{BorderPane, GridPane, StackPane, VBox}
 import scalafx.scene.paint.Color
 import scalafx.scene.shape.Rectangle
 import scalafx.scene.image.{Image, ImageView}
-import chess.domain._
+import scalafx.scene.control.Button
+import scalafx.geometry.Insets
+import domain.model.{Black, Board, Piece, Position, White}
 
 object GuiRenderer {
 
   private def pieceImage(piece: Piece): ImageView = {
     val prefix = (piece.color match {
-      case chess.domain.White => "w"
-      case chess.domain.Black => "b"
+      case White => "w"
+      case Black => "b"
     }) + piece.symbol.toLower
 
     new ImageView(new Image(s"/pieces/$prefix.png")) {
@@ -47,9 +49,72 @@ object GuiRenderer {
 
       square.onMouseClicked = _ => onClick(col, row)
 
-      grid.add(square, col, 7 - row) // flip like your TUI
+      grid.add(square, col, 7 - row)
     }
 
     grid
+  }
+
+  def renderGameUI(
+                    board: Board,
+                    onClick: (Int, Int) => Unit,
+                    onExit: () => Unit,
+                    onSave: () => Unit,
+                    onLoad: () => Unit
+                  ): BorderPane = {
+
+    def styledButton(text: String, action: () => Unit): Button = {
+      new Button(text) {
+        prefWidth = 120
+        style =
+          """
+            | -fx-font-size: 14px;
+            | -fx-font-weight: bold;
+            | -fx-background-radius: 10;
+            | -fx-padding: 10 15 10 15;
+            | -fx-background-color: linear-gradient(#4CAF50, #2E7D32);
+            | -fx-text-fill: white;
+            |""".stripMargin
+
+        onAction = _ => action()
+
+        onMouseEntered = _ => style =
+          """
+            | -fx-font-size: 14px;
+            | -fx-font-weight: bold;
+            | -fx-background-radius: 10;
+            | -fx-padding: 10 15 10 15;
+            | -fx-background-color: linear-gradient(#66BB6A, #388E3C);
+            | -fx-text-fill: white;
+            |""".stripMargin
+
+        onMouseExited = _ => style =
+          """
+            | -fx-font-size: 14px;
+            | -fx-font-weight: bold;
+            | -fx-background-radius: 10;
+            | -fx-padding: 10 15 10 15;
+            | -fx-background-color: linear-gradient(#4CAF50, #2E7D32);
+            | -fx-text-fill: white;
+            |""".stripMargin
+      }
+    }
+
+    val boardView = renderBoard(board, onClick)
+
+    val saveButton = styledButton("Save", onSave)
+    val loadButton = styledButton("Load", onLoad)
+    val exitButton = styledButton("Exit", onExit)
+
+    val sidePanel = new VBox {
+      spacing = 10
+      padding = Insets(10)
+      children = List(saveButton, loadButton, exitButton)
+    }
+
+    new BorderPane {
+      center = boardView
+      right = sidePanel
+    }
   }
 }
