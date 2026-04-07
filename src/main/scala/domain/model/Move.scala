@@ -1,4 +1,4 @@
-package chess.domain
+package domain.model
 
 /** An immutable description of one player's move: a source and destination square.
  *

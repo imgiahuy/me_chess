@@ -1,5 +1,6 @@
 package chess.domain
 
+import domain.model.{Bishop, Black, King, Knight, Pawn, Piece, Queen, Rook, White}
 import org.scalatest.funsuite.AnyFunSuite
 
 class PieceSpec extends AnyFunSuite {

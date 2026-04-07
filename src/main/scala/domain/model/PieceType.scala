@@ -1,11 +1,13 @@
-package chess.domain
+package domain.model
 
 /** The six chess piece types.
  *
  * Sealed trait ensures exhaustive pattern matching everywhere a PieceType
  * is deconstructed.
  */
-sealed trait PieceType
+sealed trait PieceType {
+  def myMove(move: Move): Boolean
+}
 case object King   extends PieceType
 case object Queen  extends PieceType
 case object Rook   extends PieceType

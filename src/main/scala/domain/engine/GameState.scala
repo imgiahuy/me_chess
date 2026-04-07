@@ -1,6 +1,8 @@
-package chess.domain
+package domain.engine
 
-import scala.util.{Try, Success, Failure}
+import domain.model.*
+
+import scala.util.{Try}
 
 /** The complete, immutable state of a chess game at one point in time. */
 case class GameState(
