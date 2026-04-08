@@ -18,17 +18,17 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-          
-      - name: Install Xvfb
-        run: sudo apt-get install xvfb
-        
-      - name: Run tests in Xvfb
-        run: xvfb-run sbt test
 
       - name: Install sbt
         run: |
           curl -L https://github.com/sbt/sbt/releases/download/v1.10.0/sbt-1.10.0.tgz | tar xz
           echo "$PWD/sbt/bin" >> $GITHUB_PATH
+
+      - name: Install Xvfb
+        run: sudo apt-get install xvfb
+        
+      - name: Run tests in Xvfb
+        run: xvfb-run sbt test
 
       - name: Run tests with coverage
         run: sbt clean coverage test
