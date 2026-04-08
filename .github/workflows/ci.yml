@@ -18,6 +18,12 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+          
+      - name: Install Xvfb
+        run: sudo apt-get install xvfb
+        
+      - name: Run tests in Xvfb
+        run: xvfb-run sbt test
 
       - name: Install sbt
         run: |
