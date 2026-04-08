@@ -5,9 +5,7 @@ package domain.model
  * Sealed trait ensures exhaustive pattern matching everywhere a PieceType
  * is deconstructed.
  */
-sealed trait PieceType {
-  def myMove(move: Move): Boolean
-}
+sealed trait PieceType
 case object King   extends PieceType
 case object Queen  extends PieceType
 case object Rook   extends PieceType
