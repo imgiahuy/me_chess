@@ -1,8 +1,10 @@
 package chess.presentation.tui
 
 import org.scalatest.funsuite.AnyFunSuite
-import chess.domain._
+import chess.domain.*
 import chess.application.GameService
+import domain.engine.GameState
+import domain.model.{Pawn, Piece, Position, White}
 import presentation.parser.MoveParser
 
 class GameLoopSpec extends AnyFunSuite {

@@ -1,7 +1,7 @@
 package chess.application
 
-import chess.domain._
-import scala.util.{Try, Success, Failure}
+import domain.engine.GameState
+import domain.model.{Color, Move}
 
 /** Pure game-rule functions. */
 object GameService {

@@ -1,7 +1,9 @@
 package chess.application
 
 import org.scalatest.funsuite.AnyFunSuite
-import chess.domain._
+import chess.domain.*
+import domain.engine.GameState
+import domain.model.{Black, Board, King, Move, Pawn, Piece, Position, White}
 
 class GameServiceSpec extends AnyFunSuite {
 

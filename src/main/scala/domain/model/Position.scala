@@ -1,4 +1,4 @@
-package chess.domain
+package domain.model
 
 /** A board coordinate (col 0–7, row 0–7).
  *

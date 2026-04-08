@@ -1,6 +1,6 @@
 package presentation.parser
 
-import chess.domain.{Move, Position}
+import domain.model.{Move, Position}
 
 /** Parses text input into `Move` values.
  *

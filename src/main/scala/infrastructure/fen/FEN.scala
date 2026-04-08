@@ -1,6 +1,6 @@
 package chess.infrastructure
 
-import chess.domain.{Board, Position, Piece, PieceType, Color, White, Black}
+import domain.model.{Black, Board, Color, Piece, PieceType, Position, White}
 
 
 object FEN {

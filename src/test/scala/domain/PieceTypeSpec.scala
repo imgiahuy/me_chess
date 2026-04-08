@@ -1,5 +1,6 @@
 package chess.domain
 
+import domain.model.{Bishop, King, Knight, Pawn, PieceType, Queen, Rook}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 

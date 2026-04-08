@@ -1,8 +1,9 @@
 package chess.presentation.tui
 
-import chess.domain.*
+import domain.model
 import chess.application.GameService
 import chess.infrastructure.GameStateFEN
+import domain.engine.GameState
 import presentation.parser.MoveParser
 
 /** The interactive game loop. */

@@ -1,7 +1,9 @@
 package chess.domain
 
+import domain.model.{Black, Board, King, Pawn, Piece, Position, Rook, White}
 import org.scalatest.funsuite.AnyFunSuite
-import scala.util.{Try, Success, Failure}
+
+import scala.util.{Failure, Success, Try}
 
 class BoardSpec extends AnyFunSuite {
 
