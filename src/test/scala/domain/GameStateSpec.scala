@@ -1,7 +1,10 @@
 package chess.domain
 
+import domain.engine.GameState
+import domain.model.{Black, Board, Move, Pawn, Piece, Position, Rook, White}
 import org.scalatest.funsuite.AnyFunSuite
-import scala.util.{Try, Success, Failure}
+
+import scala.util.{Failure, Success, Try}
 
 class GameStateSpec extends AnyFunSuite {
 

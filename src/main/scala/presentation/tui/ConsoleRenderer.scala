@@ -1,7 +1,8 @@
 package chess.presentation.tui
 
-import chess.domain._
 import chess.application.GameService
+import domain.engine.GameState
+import domain.model.{Board, Color, Position}
 
 /** Converts domain objects to displayable strings.
  *

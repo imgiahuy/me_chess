@@ -1,6 +1,6 @@
-package chess.domain
+package domain.model
 
-import scala.util.{Try, Success, Failure}
+import scala.util.{Failure, Success, Try}
 
 /** An immutable snapshot of piece positions. */
 case class Board(squares: Map[Position, Piece]) {

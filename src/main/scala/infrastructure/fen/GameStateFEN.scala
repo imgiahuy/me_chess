@@ -1,6 +1,8 @@
 package chess.infrastructure
 
-import chess.domain._
+import domain.engine.GameState
+import domain.{engine, model}
+import domain.model.Move
 
 object GameStateFEN {
 
@@ -21,6 +23,6 @@ object GameStateFEN {
         lines.drop(2).map(Move.fromAlgebraic).collect { case Some(m) => m }
       } else List.empty
 
-    GameState(board, turn, moves)
+    engine.GameState(board, turn, moves)
   }
 }
