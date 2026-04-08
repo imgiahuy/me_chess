@@ -19,7 +19,7 @@ object GameLoop {
 
   /** Maps a trimmed, lower-cased input string to a Command. Pure function. */
   def parseCommand(input: String): Command = {
-    val parts = input.trim.split("\\s+")
+    val parts = input.trim.toLowerCase.split("\\s+")
     parts.toList match {
       case "board" :: Nil         => ShowBoard
       case "help"  :: Nil         => ShowHelp
