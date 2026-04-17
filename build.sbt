@@ -1,5 +1,5 @@
 ThisBuild / version := "0.1.0-SNAPSHOT"
-ThisBuild / scalaVersion := "3.3.7"
+ThisBuild / scalaVersion := "2.13.14"
 
 // Detect OS for JavaFX
 val osName = System.getProperty("os.name").toLowerCase
@@ -24,6 +24,11 @@ lazy val root = (project in file("."))
           // JavaFX (REQUIRED)
           "org.openjfx" % "javafx-base" % "21" classifier platform,
           "org.openjfx" % "javafx-controls" % "21" classifier platform,
-          "org.openjfx" % "javafx-graphics" % "21" classifier platform
+          "org.openjfx" % "javafx-graphics" % "21" classifier platform,
+
+          "com.typesafe.akka" %% "akka-actor-typed" % "2.8.5",
+          "com.typesafe.akka" %% "akka-http" % "10.5.3",
+          "com.typesafe.akka" %% "akka-stream" % "2.8.5",
+          "de.heikoseeberger" %% "akka-http-play-json" % "1.39.2"
       )
   )

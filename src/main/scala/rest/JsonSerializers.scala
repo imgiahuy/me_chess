@@ -1,8 +1,10 @@
-package presentation.rest
+package rest
 
 import domain.engine.GameState
-import domain.model.*
-import play.api.libs.json.*
+import domain.model._
+import play.api.libs.json._
+// Import Color from domain.model, not from scalafx to avoid ambiguity
+import domain.model.{Black, White}
 
 /** JSON serializers for chess domain models. */
 object JsonSerializers {
