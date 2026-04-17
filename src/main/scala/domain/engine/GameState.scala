@@ -1,7 +1,6 @@
 package domain.engine
 
-import domain.model.*
-
+import domain.model.{Board, Color, Move, White}
 import scala.util.{Try}
 
 /** The complete, immutable state of a chess game at one point in time. */

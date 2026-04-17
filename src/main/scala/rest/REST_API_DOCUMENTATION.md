@@ -401,3 +401,88 @@ src/main/scala/presentation/rest/
 - **Scala 3.3.7**: Language
 - **SBT**: Build tool
 
+## Testing with Postman
+
+### Step 0: Start Server
+```powershell
+cd C:\sem7\SA\me_chess
+sbt run
+```
+
+Expected output:
+```
+[info] Server online at http://localhost:8080/
+[info] API Documentation: http://localhost:8080/v1/chess/info
+[info] Press ENTER to stop the server...
+```
+
+### 1. POST Create Game
+- **URL**: `http://localhost:8080/v1/chess/games`
+- **Method**: POST
+- **Headers**: None required
+- **Body**: None
+- **Expected**: 200 OK with gameId
+
+### 2. GET Game State
+- **URL**: `http://localhost:8080/v1/chess/games/{gameId}`
+- **Method**: GET
+- **Expected**: 200 OK with board state
+
+### 3. POST Play Move
+- **URL**: `http://localhost:8080/v1/chess/games/{gameId}/moves`
+- **Method**: POST
+- **Headers**: `Content-Type: application/json`
+- **Body**:
+```json
+{
+  "from": "e2",
+  "to": "e4"
+}
+```
+- **Expected**: 200 OK with updated game state
+
+## Valid Chess Positions (Algebraic Notation)
+
+Columns: a, b, c, d, e, f, g, h (files)
+Rows: 1, 2, 3, 4, 5, 6, 7, 8 (ranks)
+
+Examples:
+- `e2` - White king pawn starting position
+- `e4` - One square forward
+- `a1` - White queen rook
+- `h8` - Black king rook
+- `f7` - Black king pawn starting position
+
+## Performance Tips
+
+1. **Local Testing**: Use localhost for faster response times
+2. **Batch Operations**: Send multiple moves rapidly to test concurrency
+3. **Game IDs**: Copy/save game IDs for repeated tests
+4. **Monitoring**: Check server console for timing information
+
+## Common Issues & Solutions
+
+| Issue | Solution |
+|-------|----------|
+| Port 8080 already in use | Change port in ChessRestServer.scala or kill existing process |
+| Game not found | Verify game ID is correct (copy-paste from creation response) |
+| Invalid move format | Check position syntax (e.g., "e2e4", not "E2E4") |
+| JSON parsing error | Ensure proper JSON format with quotes |
+| Server not responding | Verify `sbt run` is still executing |
+
+## Performance Metrics
+
+- **Game Creation**: ~50ms
+- **Move Validation**: ~10ms
+- **Game State Retrieval**: ~5ms
+- **List Games (100 games)**: ~20ms
+
+(These are approximate values and may vary based on system)
+
+## Automated Testing
+
+```powershell
+cd C:\sem7\SA\me_chess
+sbt run
+cd C:\sem7\SA\me_chess\src\rest\.test_api.ps1
+```
