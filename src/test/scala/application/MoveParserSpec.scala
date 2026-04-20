@@ -2,7 +2,7 @@ package chess.application
 
 import org.scalatest.funsuite.AnyFunSuite
 import domain.model.{Move, Position}
-import presentation.parser.MoveParser
+import presentation.tui.MoveParser
 
 class MoveParserSpec extends AnyFunSuite {
 

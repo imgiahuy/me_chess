@@ -1,4 +1,4 @@
-package rest
+package presentation.rest
 
 import scala.language.postfixOps
 import akka.actor.typed.ActorSystem

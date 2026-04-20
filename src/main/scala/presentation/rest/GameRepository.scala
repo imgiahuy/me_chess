@@ -1,4 +1,4 @@
-package rest
+package presentation.rest
 
 import domain.engine.GameState
 import domain.model.Move
