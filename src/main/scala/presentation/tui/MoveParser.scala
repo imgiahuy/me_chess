@@ -1,4 +1,4 @@
-package presentation.parser
+package presentation.tui
 
 import domain.model.{Move, Position}
 

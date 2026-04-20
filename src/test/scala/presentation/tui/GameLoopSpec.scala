@@ -5,7 +5,7 @@ import chess.domain.*
 import chess.application.GameService
 import domain.engine.GameState
 import domain.model.{Pawn, Piece, Position, White}
-import presentation.parser.MoveParser
+import presentation.tui.MoveParser
 
 class GameLoopSpec extends AnyFunSuite {
 

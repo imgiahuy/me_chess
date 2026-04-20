@@ -4,7 +4,7 @@ import domain.model
 import chess.application.GameService
 import chess.infrastructure.GameStateFEN
 import domain.engine.GameState
-import presentation.parser.MoveParser
+import presentation.tui.MoveParser
 
 /** The interactive game loop. */
 object GameLoop {
