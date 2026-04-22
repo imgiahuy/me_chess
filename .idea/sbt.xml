@@ -10,7 +10,11 @@
         <option name="modules">
           <set>
             <option value="$PROJECT_DIR$" />
+            <option value="$PROJECT_DIR$/core" />
+            <option value="$PROJECT_DIR$/gui" />
             <option value="$PROJECT_DIR$/project" />
+            <option value="$PROJECT_DIR$/rest-api" />
+            <option value="$PROJECT_DIR$/tui" />
           </set>
         </option>
         <option name="sbtVersion" value="1.12.8" />
