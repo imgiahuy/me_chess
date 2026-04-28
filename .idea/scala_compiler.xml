@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ScalaCompilerConfiguration">
-    <profile name="sbt 1" modules="me_chess" />
+    <profile name="sbt 1" modules="me_chess,me_chess.application,me_chess.application~1,me_chess.core,me_chess.domain,me_chess.gui,me_chess.infrastructure,me_chess.restApi,me_chess.tui" />
   </component>
 </project>
