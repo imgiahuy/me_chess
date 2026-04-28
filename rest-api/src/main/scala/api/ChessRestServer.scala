@@ -41,8 +41,6 @@ object ChessRestServer {
           println("============================================================")
           println("[SUCCESS] Server online at http://" + localAddress.getHostString + ":" + localAddress.getPort + "/")
           println("[INFO] Chess API: http://" + localAddress.getHostString + ":" + localAddress.getPort + "/v1/chess/info")
-          println("[INFO] Module API: http://" + localAddress.getHostString + ":" + localAddress.getPort + "/v1/modules/info")
-          println("[INFO] Module Snapshot: http://" + localAddress.getHostString + ":" + localAddress.getPort + "/v1/modules/snapshot")
           println("============================================================")
           println("[INFO] Press ENTER to stop the server...")
           println("")
