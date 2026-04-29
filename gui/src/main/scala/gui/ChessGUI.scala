@@ -195,10 +195,16 @@ object ChessGUI extends JFXApp3 {
     }
   }
 
-  // -------------------------
-  // START UI
-  // -------------------------
-  override def start(): Unit = {
+  def createGameUI(stage: JFXApp3.PrimaryStage): VBox = {
+    val buttonStyle =
+      """
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+    -fx-text-fill: white;
+    -fx-background-color: linear-gradient(#4a90e2, #357ABD);
+    -fx-background-radius: 12;
+    -fx-padding: 10 20 10 20;
+  """
 
     val status = new Label("Ready")
 
@@ -208,17 +214,23 @@ object ChessGUI extends JFXApp3 {
       padding = Insets(10)
     }
 
-    val newGameBtn = new Button("New Game") {
+    val newGameBtn = new Button("New") {
+      prefWidth = 100
+      style = buttonStyle
       onAction = _ => createGame(status, boardGrid)
     }
 
     val refreshBtn = new Button("Refresh") {
+      prefWidth = 100
+      style = buttonStyle
       onAction = _ => refresh(status, boardGrid)
     }
 
-    val root = new VBox {
+    new VBox {
       spacing = 10
       padding = Insets(10)
+      style = "-fx-background-color: #1e1e1e;"
+
 
       children = Seq(
         newGameBtn,
@@ -227,23 +239,90 @@ object ChessGUI extends JFXApp3 {
         status
       )
     }
+  }
+
+  def createMenuUI(stage: JFXApp3.PrimaryStage): VBox = {
+
+    val buttonStyle =
+      """
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+    -fx-text-fill: white;
+    -fx-background-color: linear-gradient(#4a90e2, #357ABD);
+    -fx-background-radius: 12;
+    -fx-padding: 10 20 10 20;
+  """
+
+    val hoverStyle =
+      """
+    -fx-background-color: linear-gradient(#5aa3f5, #2f6fb3);
+  """
+
+    val playBtn = new Button("Play") {
+      prefWidth = 200
+      style = buttonStyle
+      onMouseEntered = _ => style = buttonStyle + hoverStyle
+      onMouseExited = _ => style = buttonStyle
+      onAction = _ => {
+        stage.scene = new Scene(600, 1000) {
+          root = createGameUI(stage)
+        }
+      }
+    }
+
+    val continueBtn = new Button("Continue") {
+      prefWidth = 200
+      style = buttonStyle
+      onMouseEntered = _ => style = buttonStyle + hoverStyle
+      onMouseExited = _ => style = buttonStyle
+    }
+
+    val settingsBtn = new Button("Settings") {
+      prefWidth = 200
+      style = buttonStyle
+      onMouseEntered = _ => style = buttonStyle + hoverStyle
+      onMouseExited = _ => style = buttonStyle
+    }
+
+    val exitBtn = new Button("Exit") {
+      prefWidth = 200
+      style = buttonStyle
+      onMouseEntered = _ => style = buttonStyle + hoverStyle
+      onMouseExited = _ => style = buttonStyle
+      onAction = _ => {
+        Platform.exit()
+      }
+    }
+
+    new VBox {
+      spacing = 20
+      padding = Insets(50)
+      style = "-fx-alignment: center;" +
+        "-fx-background-color: #1e1e1e;"
+
+      children = Seq(
+        new Label("Chess Game") {
+          style = "-fx-font-size: 28px;"},
+        playBtn,
+        continueBtn,
+        settingsBtn,
+        exitBtn
+      )
+    }
+  }
+
+  // -------------------------
+  // START UI
+  // -------------------------
+  override def start(): Unit = {
 
     stage = new JFXApp3.PrimaryStage {
-      title = "Chess GUI (Upgraded)"
-      scene = new Scene(600, 650) {
-        val rootPane = new VBox {
-          spacing = 10
-          padding = Insets(10)
+      title = "Chess GUI"
 
-          children = Seq(
-            newGameBtn,
-            refreshBtn,
-            boardGrid,
-            status
-          )
-        }
+      val primaryStageRef = this // Capture reference to primary stage for later use
 
-        this.root = rootPane
+      scene = new Scene(600, 1000) {
+        root = createMenuUI(primaryStageRef)
       }
     }
   }
