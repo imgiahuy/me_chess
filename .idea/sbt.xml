@@ -14,6 +14,7 @@
             <option value="$PROJECT_DIR$/gui" />
             <option value="$PROJECT_DIR$/project" />
             <option value="$PROJECT_DIR$/rest-api" />
+            <option value="$PROJECT_DIR$/shared" />
             <option value="$PROJECT_DIR$/tui" />
           </set>
         </option>

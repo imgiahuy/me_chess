@@ -1,6 +1,6 @@
 package api
 
-import api.JsonSerializers.{ErrorResponse, GameResponse, MoveRequest}
+import api.JsonSerializers.{ErrorResponse, MoveRequest}
 
 import scala.language.postfixOps
 import akka.actor.typed.ActorSystem
@@ -12,6 +12,8 @@ import de.heikoseeberger.akkahttpplayjson.PlayJsonSupport
 import domain.model.Move
 import play.api.libs.json._
 import api.JsonSerializers._
+import parser.FEN
+
 
 /** REST API routes for chess game management and play. */
 class ChessApiRoutes(gameRepository: GameRepository)(implicit system: ActorSystem[?])
@@ -42,7 +44,7 @@ class ChessApiRoutes(gameRepository: GameRepository)(implicit system: ActorSyste
                 val isGameOver = GameService.isGameOver(state)
                 val winner = GameService.winner(state)
                 val response = GameResponse(
-                  board = state.board,
+                  board = FEN.boardToFEN(state.board),
                   currentTurn = state.currentTurn,
                   moveHistory = state.moveHistory.reverse,
                   isGameOver = isGameOver,
@@ -74,7 +76,7 @@ class ChessApiRoutes(gameRepository: GameRepository)(implicit system: ActorSyste
                           val isGameOver = GameService.isGameOver(newState)
                           val winner = GameService.winner(newState)
                           val response = GameResponse(
-                            board = newState.board,
+                            board = FEN.boardToFEN(newState.board),
                             currentTurn = newState.currentTurn,
                             moveHistory = newState.moveHistory.reverse,
                             isGameOver = isGameOver,
