@@ -13,7 +13,7 @@ import scala.concurrent.{ExecutionContext, Future}
 case class MoveRequest(from: String, to: String)
 
 case class GameResponse(
-                         board: JsValue,
+                         board: String,
                          currentTurn: String,
                          isGameOver: Boolean
                        )
@@ -39,7 +39,7 @@ class ChessClient(baseUrl: String)(implicit system: ActorSystem[?])
       res <- Http().singleRequest(req)
       json <- Unmarshal(res.entity).to[JsValue]
     } yield GameResponse(
-      board = (json \ "board").as[JsValue],
+      board = (json \ "board").as[String],
       currentTurn = (json \ "currentTurn").as[String],
       isGameOver = (json \ "isGameOver").as[Boolean]
     )
@@ -58,7 +58,7 @@ class ChessClient(baseUrl: String)(implicit system: ActorSystem[?])
       res <- Http().singleRequest(req)
       json <- Unmarshal(res.entity).to[JsValue]
     } yield GameResponse(
-      board = (json \ "board").as[JsValue],
+      board = (json \ "board").as[String],
       currentTurn = (json \ "currentTurn").as[String],
       isGameOver = (json \ "isGameOver").as[Boolean]
     )

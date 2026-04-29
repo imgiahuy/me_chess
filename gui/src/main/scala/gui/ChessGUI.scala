@@ -2,20 +2,17 @@ package gui
 
 import scalafx.application.JFXApp3
 import scalafx.scene.Scene
-import scalafx.scene.layout.{GridPane, VBox}
+import scalafx.scene.layout.{GridPane, StackPane, VBox}
 import scalafx.scene.control.{Button, Label}
 import scalafx.geometry.Insets
 import scalafx.scene.paint.Color
 import scalafx.scene.shape.Rectangle
 import scalafx.scene.text.Text
-import scalafx.Includes._
-
 import akka.actor.typed.ActorSystem
 import akka.actor.typed.scaladsl.Behaviors
-
+import scalafx.application.Platform
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success}
-import play.api.libs.json._
 
 object ChessGUI extends JFXApp3 {
 
@@ -29,8 +26,6 @@ object ChessGUI extends JFXApp3 {
 
   var gameId: Option[String] = None
   var selectedFrom: Option[String] = None
-
-  val squares = Array.ofDim[Text](8, 8)
 
   // -------------------------
   // PIECE MAPPING
@@ -57,42 +52,68 @@ object ChessGUI extends JFXApp3 {
   // -------------------------
   // BOARD RENDERING
   // -------------------------
-  def renderBoard(grid: GridPane, board: JsValue, status: Label): Unit = {
+  def addSquare(
+                 grid: GridPane,
+                 r: Int,
+                 c: Int,
+                 piece: String,
+                 status: Label
+               ): Unit = {
 
+    val isLight = (r + c) % 2 == 0
+
+    val square = new StackPane {
+      prefWidth = 70
+      prefHeight = 70
+
+      children = Seq(
+        new Rectangle {
+          width = 70
+          height = 70
+          fill = if (isLight) Color.Beige else Color.Brown
+        },
+        new Text {
+          text = piece
+          style = "-fx-font-size: 32px;"
+        }
+      )
+
+      onMouseClicked = _ => handleClick(r, c, status, grid)
+    }
+
+    grid.add(square, c, r)
+  }
+
+  def renderBoard(grid: GridPane, fen: String, status: Label): Unit = {
     grid.children.clear()
 
-    for (r <- 0 until 8; c <- 0 until 8) {
+    val rows = fen.split("/")
 
-      val piece = (board(r)(c)).asOpt[String].getOrElse("")
+    for (r <- 0 until 8) {
+      var c = 0
 
-      val bg = new Rectangle {
-        width = 60
-        height = 60
-        fill = if ((r + c) % 2 == 0) Color.Beige else Color.Sienna
+      for (ch <- rows(r)) {
+
+        if (ch.isDigit) {
+          val empty = ch.asDigit
+          for (_ <- 0 until empty) {
+            addSquare(grid, r, c, "", status)
+            c += 1
+          }
+        } else {
+          val piece = pieceToUnicode(ch.toString)
+          addSquare(grid, r, c, piece, status)
+          c += 1
+        }
       }
-
-      val text = new Text {
-        this.text = pieceToUnicode(piece)
-        style = "-fx-font-size: 28px;"
-      }
-
-      squares(r)(c) = text
-
-      val cell = new VBox {
-        children = Seq(bg, text)
-        alignment = scalafx.geometry.Pos.Center
-
-        onMouseClicked = _ => handleClick(r, c, status)
-      }
-
-      grid.add(cell, c, r)
     }
+    println("Rendering board...")
   }
 
   // -------------------------
   // CLICK LOGIC
   // -------------------------
-  def handleClick(r: Int, c: Int, status: Label): Unit = {
+  def handleClick(r: Int, c: Int, status: Label, grid: GridPane): Unit = {
     val sq = coordToSquare(r, c)
 
     selectedFrom match {
@@ -102,7 +123,7 @@ object ChessGUI extends JFXApp3 {
 
       case Some(from) =>
         selectedFrom = None
-        makeMove(from, sq, status)
+        makeMove(from, sq, status, grid)
     }
   }
 
@@ -114,12 +135,16 @@ object ChessGUI extends JFXApp3 {
 
     client.createGame().onComplete {
       case Success(id) =>
-        gameId = Some(id)
-        status.text = s"Game: $id"
-        refresh(status, grid)
+        Platform.runLater{
+          gameId = Some(id)
+          status.text = s"Game: $id"
+          refresh(status, grid)
+        }
 
       case Failure(ex) =>
-        status.text = ex.getMessage
+        Platform.runLater{
+          status.text = ex.getMessage
+        }
     }
   }
 
@@ -129,13 +154,16 @@ object ChessGUI extends JFXApp3 {
       case Some(id) =>
         client.getGame(id).onComplete {
           case Success(game) =>
-            status.text =
-              s"Turn: ${game.currentTurn} | Over: ${game.isGameOver}"
-
-            renderBoard(grid, game.board, status)
+            Platform.runLater{
+              status.text =
+                s"Turn: ${game.currentTurn} | Over: ${game.isGameOver}"
+              renderBoard(grid, game.board, status)
+            }
 
           case Failure(ex) =>
-            status.text = ex.getMessage
+            Platform.runLater{
+              status.text = ex.getMessage
+            }
         }
 
       case None =>
@@ -143,17 +171,23 @@ object ChessGUI extends JFXApp3 {
     }
   }
 
-  def makeMove(from: String, to: String, status: Label): Unit = {
+  def makeMove(from: String, to: String, status: Label, grid: GridPane): Unit = {
     gameId match {
 
       case Some(id) =>
         client.makeMove(id, from, to).onComplete {
           case Success(game) =>
-            status.text =
-              s"Turn: ${game.currentTurn} | Over: ${game.isGameOver}"
+            Platform.runLater {
+              status.text =
+                s"Turn: ${game.currentTurn} | Over: ${game.isGameOver}"
+
+              refresh(status, grid)   // ✅ clean and reliable
+            }
 
           case Failure(ex) =>
-            status.text = ex.getMessage
+            Platform.runLater {
+              status.text = ex.getMessage
+            }
         }
 
       case None =>

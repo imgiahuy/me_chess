@@ -19,6 +19,10 @@ lazy val core = project
   .in(file("core"))
   .settings(commonSettings)
 
+lazy val shared = project
+  .in(file("shared"))
+  .settings(commonSettings)
+
 lazy val tui = project
   .in(file("tui"))
   .settings(commonSettings)
@@ -43,10 +47,10 @@ lazy val gui = project
     )
   )
 
+
 // --- REST API (Http4s) ---
 lazy val restApi = project
   .in(file("rest-api"))
-  .dependsOn(core)
   .settings(
     commonSettings,
     libraryDependencies ++= Seq(
@@ -56,6 +60,7 @@ lazy val restApi = project
       "de.heikoseeberger" %% "akka-http-play-json" % "1.39.2"
     )
   )
+  .dependsOn(core)
 
 // --- Root project (aggregator only) ---
 lazy val root = project

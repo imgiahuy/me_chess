@@ -1,4 +1,4 @@
-package fen
+package parser
 
 import domain.model._
 

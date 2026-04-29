@@ -89,7 +89,7 @@ object JsonSerializers {
   implicit val moveRequestFormat: Format[MoveRequest] = Json.format[MoveRequest]
 
   case class GameResponse(
-    board: Board,
+    board: String,
     currentTurn: Color,
     moveHistory: List[Move],
     isGameOver: Boolean,
