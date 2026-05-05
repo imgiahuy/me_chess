@@ -1,5 +1,9 @@
 package tui
 
+import domain.engine.GameState
+import domain.model.{Board, Color, Position}
+import service.GameService
+
 /** Converts domain objects to displayable strings.
  *
  * Every function here is pure (String → String or Domain → String).

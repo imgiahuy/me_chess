@@ -26,6 +26,7 @@ lazy val shared = project
 lazy val tui = project
   .in(file("tui"))
   .settings(commonSettings)
+  .dependsOn(core, shared)
 
 // --- GUI (ScalaFX) ---
 lazy val gui = project
@@ -46,7 +47,7 @@ lazy val gui = project
       "de.heikoseeberger" %% "akka-http-play-json" % "1.39.2"
     )
   )
-
+  .dependsOn(core, shared)
 
 // --- REST API (Http4s) ---
 lazy val restApi = project

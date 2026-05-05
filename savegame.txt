@@ -1,10 +1,3 @@
-rnbqkbnr/ppp4p/8/3pppp1/2PPPP2/8/PP4PP/RNBQKBNR w
+rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b
 MOVES:
-d7d5
-c2c4
-e7e5
 e2e4
-g7g5
-d2d4
-f7f5
-f2f4
