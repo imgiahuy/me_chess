@@ -1,6 +1,6 @@
 package parser
 
-import domain.model._
+import model._
 
 object FEN {
 

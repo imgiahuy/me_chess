@@ -1,4 +1,4 @@
-package domain.model
+package model
 
 /** A board coordinate (col 0–7, row 0–7).
  *

@@ -1,4 +1,4 @@
-package domain.model
+package model
 
 /** The six chess piece types.
  *
