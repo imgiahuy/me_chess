@@ -1,8 +1,8 @@
 package tui
 
-import controller.GameService
 import domain.engine.GameState
 import parser.{GameStateFEN, MoveParser}
+import service.GameService
 
 /** The interactive game loop. */
 object GameLoop {

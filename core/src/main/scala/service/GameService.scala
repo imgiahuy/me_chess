@@ -1,10 +1,12 @@
-package controller
+package service
 
 import domain.engine.GameState
 import domain.model.{Color, Move}
 
 /** Pure game-rule functions. */
 object GameService {
+
+  def createGame(): GameState = GameState.initial
 
   // ── Move application ────────────────────────────────────────────────────────
 

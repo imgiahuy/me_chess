@@ -7,12 +7,12 @@ import akka.actor.typed.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
-import controller.GameService
 import de.heikoseeberger.akkahttpplayjson.PlayJsonSupport
 import domain.model.Move
 import play.api.libs.json._
 import api.JsonSerializers._
 import parser.FEN
+import service.GameService
 
 
 /** REST API routes for chess game management and play. */
