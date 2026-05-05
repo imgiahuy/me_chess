@@ -1,12 +1,13 @@
 package controller
 
+import domain.engine.GameState
+import domain.model.Move
+
 trait GameControllerInterface {
-  def create(): Unit
+  def create(): GameState
   def undo(): Unit
   def redo(): Unit
-  def save(): Unit
-  def load(): Unit
-  def makeMove(from: String, to: String): Unit
-  def get(): Unit
-  def delete():Unit
+  def save(state : GameState): Unit
+  def load(): GameState
+  def makeMove(state: GameState, move: Move): Either[String, GameState]
 }

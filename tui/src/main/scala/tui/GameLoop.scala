@@ -1,7 +1,7 @@
 package tui
 
 import domain.engine.GameState
-import parser.{GameStateFEN, MoveParser}
+import parser.MoveParser
 import service.GameService
 
 /** The interactive game loop. */

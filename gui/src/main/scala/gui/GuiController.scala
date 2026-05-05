@@ -1,20 +1,23 @@
 package gui
 
+import controller.GameControllerInterface
 import domain.engine.GameState
-import parser.{GameStateFEN, MoveParser}
+import parser.MoveParser
 import scalafx.scene.layout.BorderPane
-import service.GameService
 
-import java.nio.file.{Files, Paths}
+class GuiController(gameControllerInterface: GameControllerInterface) {
 
-class GuiController {
-
-  private var state: GameState = GameState.initial
+  private var state: GameState = gameControllerInterface.create()
   private var selected: Option[(Int, Int)] = None
 
   val root = new BorderPane()
 
   def start(): Unit = {
+    render()
+  }
+
+  def update(newState: GameState): Unit = {
+    state = newState
     render()
   }
 
@@ -39,7 +42,7 @@ class GuiController {
 
         val result = for {
           move <- MoveParser.parse(moveStr).toRight("Invalid move")
-          newState <- GameService.applyMove(state, move)
+          newState <- gameControllerInterface.makeMove(state, move)
         } yield newState
 
         result match {
@@ -61,10 +64,7 @@ class GuiController {
 
   private def handleSave(): Unit = {
     try {
-      val data = GameStateFEN.save(state)
-      val path = Paths.get("savegame.txt")
-      Files.write(path, data.getBytes)
-      println(s"Game saved to $path")
+      gameControllerInterface.save(state)
     } catch {
       case e: Exception =>
         println(s"Error saving: ${e.getMessage}")
@@ -73,11 +73,8 @@ class GuiController {
 
   private def handleLoad(): Unit = {
     try {
-      val path = Paths.get("savegame.txt")
-      val content = new String(Files.readAllBytes(path))
-      state = GameStateFEN.load(content)
+      state = gameControllerInterface.load()
       selected = None
-      println(s"Game loaded from $path")
       render()
     } catch {
       case e: Exception =>

@@ -1,12 +1,40 @@
 package service
 
-import domain.engine.GameState
-import domain.model.{Color, Move}
+import model._
+import parser.FEN
 
 /** Pure game-rule functions. */
 object GameService {
 
-  def createGame(): GameState = GameState.initial
+  //Todo: create a game snapshot at a specific state or initialize a new game. Snapshot at the beginning of the
+  // game should have the standard starting position, while snapshots at later stages can be created by applying a sequence of moves to the initial state.
+  def createGame(): Snapshot = {
+
+    val backRankTypes: Seq[PieceType] =
+      Seq(Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook)
+
+    val makeBackRank: (Color, Int) => Seq[(Position, Piece)] =
+      (color, row) => backRankTypes.zipWithIndex.map { case (pt, col) =>
+        Position(col, row) -> Piece(color, pt)
+      }
+
+    val makePawnRank: (Color, Int) => Seq[(Position, Piece)] =
+      (color, row) => (0 until 8).map(col => Position(col, row) -> Piece(color, Pawn))
+
+    val newBoard = Board(
+      (makeBackRank(White, 0) ++
+        makePawnRank(White, 1) ++
+        makePawnRank(Black, 6) ++
+        makeBackRank(Black, 7)).toMap
+    ) // Initializes to standard chess starting position
+
+    val snap = new Snapshot(
+      board = newBoard,
+      turn = White,
+      moveHistory = Seq.empty
+    )
+    snap
+  }
 
   // ── Move application ────────────────────────────────────────────────────────
 
@@ -15,15 +43,10 @@ object GameService {
    * Returns Right(newState) on success, Left(reason) on failure.
    * Uses for-comprehension over Either for clean chained validation.
    */
-  def applyMove(state: GameState, move: Move): Either[String, GameState] = {
-    for {
-      _        <- validate(state, move)
-      newState <- state.applyMove(move).toEither.left.map(_.getMessage)
-    } yield newState
-  }
+  def applyMove(snapshot: Snapshot, move: Move): Either[String, Snapshot] = {}
 
   /** Runs all precondition checks in order, short-circuiting on first failure. */
-  def validate(state: GameState, move: Move): Either[String, Unit] =
+  def validate(snapshot: Snapshot, move: Move): Either[String, Unit] =
     for {
       _ <- Either.cond(
         move.from.isValid && move.to.isValid,
@@ -35,27 +58,27 @@ object GameService {
         (),
         "Source and destination are the same square"
       )
-      piece <- state.board
+      piece <- snapshot.board
         .pieceAt(move.from)
         .toRight(s"No piece at ${move.from.toAlgebraic}")
       _ <- Either.cond(
-        piece.color == state.currentTurn,
+        piece.color == snapshot.turn,
         (),
-        s"It is ${state.currentTurn}'s turn, not ${piece.color}'s"
+        s"It is ${snapshot.turn}'s turn, not ${piece.color}'s"
       )
     } yield ()
 
   // ── Game-over detection ──────────────────────────────────────────────────────
 
   /** The game is over when at least one king has been captured. */
-  def isGameOver(state: GameState): Boolean =
-    state.board.kingsAlive.size < 2
+  def isGameOver(snapshot: Snapshot): Boolean =
+    snapshot.board.kingsAlive.size < 2
 
   /** Returns the winner if exactly one king remains; None if still ongoing
    * or if both kings were lost simultaneously (theoretical edge case).
    */
-  def winner(state: GameState): Option[Color] =
-    state.board.kingsAlive.toList match {
+  def winner(snapshot: Snapshot): Option[Color] =
+    snapshot.board.kingsAlive.toList match {
       case color :: Nil => Some(color)
       case _            => None
     }
@@ -63,6 +86,26 @@ object GameService {
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
   /** True when the active player still has at least one piece on the board. */
-  def currentPlayerHasPieces(state: GameState): Boolean =
-    state.board.piecesOf(state.currentTurn).nonEmpty
+  def currentPlayerHasPieces(snapshot: Snapshot): Boolean =
+    snapshot.board.piecesOf(snapshot.turn).nonEmpty
+
+  def save(snapshot: Snapshot): String = {
+    val fen = FEN.toFEN(snapshot.board, snapshot.turn)
+    val moves = snapshot.moveHistory.map(_.toAlgebraic).mkString("\n")
+    s"$fen\nMOVES:\n$moves"
+  }
+
+  def load(input: String): Snapshot = {
+    val lines = input.linesIterator.toList
+    if (lines.isEmpty) throw new Exception("Empty game file")
+
+    val (board, turn) = FEN.fromFEN(lines.head)
+
+    val moves =
+      if (lines.length >= 2 && lines(1) == "MOVES:") {
+        lines.drop(2).map(Move.fromAlgebraic).collect { case Some(m) => m }
+      } else List.empty
+
+    Snapshot(board, turn, moves)
+  }
 }

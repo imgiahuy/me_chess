@@ -1,4 +1,4 @@
-package domain.model
+package model
 
 /** An immutable chess piece: a colour + a type.
  *
