@@ -14,3 +14,11 @@ For now, the project is in a monolith structure with all code stay in one source
 With this structure it is easy to manage (update, patch, bugs, ...) the software, and to extend the software.
 
 This is an ongoing project and more function and meanings will be added later as the course go.
+
+Roadmap:
+
+- Improve and expand Parser
+- Imporve web ui and add docker-compose
+- Persistent
+- Performance
+- Bot AI Deployment
