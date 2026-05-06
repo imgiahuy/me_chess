@@ -22,25 +22,25 @@ class GameController extends GameControllerInterface {
 
   }
 
-  override def save(state : GameState): Unit = {
+  override def save(state : Snapshot): Unit = {
     val data = GameService.save(state)
     val path = Paths.get("savegame.txt")
     Files.write(path, data.getBytes)
     println(s"Game saved to $path")
   }
 
-  override def load(): GameState = {
+  override def load(): Snapshot = {
     val path = Paths.get("savegame.txt")
     val content = new String(Files.readAllBytes(path))
     val state = GameService.load(content)
     println(s"Game loaded from $path")
     state
   }
-  // Todo: Implement FastParse for move input, and use GameService.applyMove to validate and update state
+
   override def makeMove(
-                state: GameState,
+                state: Snapshot,
                 input: String
-              ): Either[String, GameState] = {
+              ): Either[String, Snapshot] = {
 
     for {
       move     <- MoveParser.parse(input).toRight("Invalid move format")

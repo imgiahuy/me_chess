@@ -6,8 +6,6 @@ import parser.FEN
 /** Pure game-rule functions. */
 object GameService {
 
-  //Todo: create a game snapshot at a specific state or initialize a new game. Snapshot at the beginning of the
-  // game should have the standard starting position, while snapshots at later stages can be created by applying a sequence of moves to the initial state.
   def createGame(): Snapshot = {
 
     val backRankTypes: Seq[PieceType] =
@@ -28,10 +26,10 @@ object GameService {
         makeBackRank(Black, 7)).toMap
     ) // Initializes to standard chess starting position
 
-    val snap = new Snapshot(
+    val snap = Snapshot(
       board = newBoard,
       turn = White,
-      moveHistory = Seq.empty
+      moveHistory = List.empty
     )
     snap
   }
@@ -43,7 +41,18 @@ object GameService {
    * Returns Right(newState) on success, Left(reason) on failure.
    * Uses for-comprehension over Either for clean chained validation.
    */
-  def applyMove(snapshot: Snapshot, move: Move): Either[String, Snapshot] = {}
+  def applyMove(snapshot: Snapshot, move: Move): Either[String, Snapshot] = {
+    for {
+      _ <- validate(snapshot, move)
+      piece <- snapshot.board
+        .pieceAt(move.from)
+        .toRight(s"No piece at ${move.from.toAlgebraic}")
+      newBoard = Board(
+        snapshot.board.squares - move.from + (move.to -> piece)
+      ) // Naive move application; does not handle captures, promotions, castling, en passant, etc.
+      nextTurn = if (snapshot.turn == White) Black else White
+    } yield snapshot.copy(board = newBoard, turn = nextTurn, moveHistory = snapshot.moveHistory :+ move)
+  }
 
   /** Runs all precondition checks in order, short-circuiting on first failure. */
   def validate(snapshot: Snapshot, move: Move): Either[String, Unit] =

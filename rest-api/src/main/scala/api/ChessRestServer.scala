@@ -4,11 +4,13 @@ import akka.actor.typed.ActorSystem
 import akka.actor.typed.scaladsl.Behaviors
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.{Directives, Route}
+import controller.GameController
 
 import scala.concurrent.ExecutionContextExecutor
 import scala.io.StdIn
 import scala.language.postfixOps
 import scala.util.{Failure, Success}
+import repository.GameRepository
 
 /** REST API server for the Chess application.
  *
@@ -26,10 +28,12 @@ object ChessRestServer {
     implicit val ec: ExecutionContextExecutor = system.executionContext
 
     try {
-      val gameRepository = new GameRepository()
+      val controller = new GameController()
+      val gameRepository = new GameRepository
+      val sessionController = new GameSessionController(controller, gameRepository)
 
 
-      val chessRoutes = new ChessApiRoutes(gameRepository).routes
+      val chessRoutes = new ChessApiRoutes(sessionController).routes
       val allRoutes: Route = Directives.concat(chessRoutes)
 
       val bindingFuture = Http().newServerAt(host, port).bind(allRoutes)

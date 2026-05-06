@@ -1,23 +1,17 @@
 package gui
 
 import controller.GameControllerInterface
-import domain.engine.GameState
-import parser.MoveParser
 import scalafx.scene.layout.BorderPane
+import model.Snapshot
 
 class GuiController(gameControllerInterface: GameControllerInterface) {
 
-  private var state: GameState = gameControllerInterface.create()
+  private var state: Snapshot = gameControllerInterface.create()
   private var selected: Option[(Int, Int)] = None
 
   val root = new BorderPane()
 
   def start(): Unit = {
-    render()
-  }
-
-  def update(newState: GameState): Unit = {
-    state = newState
     render()
   }
 
@@ -40,10 +34,8 @@ class GuiController(gameControllerInterface: GameControllerInterface) {
       case Some((fromCol, fromRow)) =>
         val moveStr = s"${toAlg(fromCol, fromRow)}${toAlg(col, row)}"
 
-        val result = for {
-          move <- MoveParser.parse(moveStr).toRight("Invalid move")
-          newState <- gameControllerInterface.makeMove(state, move)
-        } yield newState
+        val result = gameControllerInterface.makeMove(state, moveStr)
+
 
         result match {
           case Right(newState) =>

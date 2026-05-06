@@ -1,8 +1,7 @@
 package api
 
 // Import Color from domain.model, not from scalafx to avoid ambiguity
-import domain.engine.GameState
-import domain.model.{Bishop, Black, Board, Color, King, Knight, Move, Pawn, Piece, PieceType, Position, Queen, Rook, White}
+import model.{Bishop, Black, Board, Color, King, Knight, Move, Pawn, Piece, PieceType, Position, Queen, Rook, Snapshot, White}
 import play.api.libs.json.{Format, JsError, JsResult, JsString, JsSuccess, JsValue, Json}
 
 /** JSON serializers for chess domain models. */
@@ -81,7 +80,7 @@ object JsonSerializers {
 
   // ─── GameState JSON ───────────────────────────────────────────────────────
 
-  implicit val gameStateFormat: Format[GameState] = Json.format[GameState]
+  implicit val gameStateFormat: Format[Snapshot] = Json.format[Snapshot]
 
   // ─── API Request/Response models ──────────────────────────────────────────
 
@@ -92,8 +91,6 @@ object JsonSerializers {
     board: String,
     currentTurn: Color,
     moveHistory: List[Move],
-    isGameOver: Boolean,
-    winner: Option[Color]
   )
   implicit val gameResponseFormat: Format[GameResponse] = Json.format[GameResponse]
 
