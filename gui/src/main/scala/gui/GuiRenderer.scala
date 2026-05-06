@@ -4,7 +4,7 @@ import scalafx.scene.layout.{BorderPane, GridPane, StackPane, VBox}
 import scalafx.scene.paint.Color
 import scalafx.scene.shape.Rectangle
 import scalafx.scene.image.{Image, ImageView}
-import domain.model.{Black, Board, Piece, Position, White}
+import model.{Black, Board, Piece, Position, White}
 import scalafx.geometry.Insets
 import scalafx.scene.control.Button
 

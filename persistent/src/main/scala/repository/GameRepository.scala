@@ -1,6 +1,6 @@
-package api
+package repository
 
-import domain.engine.GameState
+import model.Snapshot
 
 import scala.collection.mutable
 
@@ -11,20 +11,20 @@ import scala.collection.mutable
  */
 class GameRepository {
 
-  private val games = mutable.Map[String, GameState]()
+  private val games = mutable.Map[String, Snapshot]()
 
   /** Creates a new game session with a random ID and returns the ID. */
-  def createGame(): String = {
+  def createGame(initialState: Snapshot): String = {
     val gameId = java.util.UUID.randomUUID().toString
-    games(gameId) = GameState.initial
+    games(gameId) = initialState
     gameId
   }
 
   /** Retrieves a game by ID, or None if it doesn't exist. */
-  def getGame(gameId: String): Option[GameState] = games.get(gameId)
+  def getGame(gameId: String): Option[Snapshot] = games.get(gameId)
 
   /** Updates a game state by ID. Returns true if successful, false if game not found. */
-  def updateGame(gameId: String, newState: GameState): Boolean = {
+  def updateGame(gameId: String, newState: Snapshot): Boolean = {
     if (games.contains(gameId)) {
       games(gameId) = newState
       true

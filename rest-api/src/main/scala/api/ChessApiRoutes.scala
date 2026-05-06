@@ -8,15 +8,13 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import de.heikoseeberger.akkahttpplayjson.PlayJsonSupport
-import domain.model.Move
+import model.Move
 import play.api.libs.json._
 import api.JsonSerializers._
 import parser.FEN
-import service.GameService
-
 
 /** REST API routes for chess game management and play. */
-class ChessApiRoutes(gameRepository: GameRepository)(implicit system: ActorSystem[?])
+class ChessApiRoutes(sessionController: GameSessionController)(implicit system: ActorSystem[?])
     extends PlayJsonSupport {
 
   private val apiVersion = "v1"
@@ -29,7 +27,7 @@ class ChessApiRoutes(gameRepository: GameRepository)(implicit system: ActorSyste
         /** POST /v1/chess/games - Create a new game */
         post {
           path("games") {
-            val gameId = gameRepository.createGame()
+            val gameId = sessionController.createGame()
             complete(Json.obj("gameId" -> gameId, "message" -> "Game created successfully"))
           }
         }
@@ -39,16 +37,12 @@ class ChessApiRoutes(gameRepository: GameRepository)(implicit system: ActorSyste
         /** GET /v1/chess/games/{gameId} - Get current game state */
         get {
           path("games" / Segment) { gameId =>
-            gameRepository.getGame(gameId) match {
+            sessionController.getGame(gameId) match {
               case Some(state) =>
-                val isGameOver = GameService.isGameOver(state)
-                val winner = GameService.winner(state)
                 val response = GameResponse(
                   board = FEN.boardToFEN(state.board),
-                  currentTurn = state.currentTurn,
+                  currentTurn = state.turn,
                   moveHistory = state.moveHistory.reverse,
-                  isGameOver = isGameOver,
-                  winner = winner
                 )
                 complete(response)
               case None =>
@@ -63,31 +57,21 @@ class ChessApiRoutes(gameRepository: GameRepository)(implicit system: ActorSyste
         post {
           path("games" / Segment / "moves") { gameId =>
             entity(as[MoveRequest]) { moveReq =>
-              gameRepository.getGame(gameId) match {
-                case Some(currentState) =>
-                  // Parse move from algebraic notation
-                  val moveOpt = Move.fromAlgebraic(moveReq.from + moveReq.to)
-                  moveOpt match {
-                    case Some(move) =>
+              sessionController.getGame(gameId) match {
+                case Some(_) =>
+                  val input = moveReq.from + moveReq.to
                       // Validate and apply move
-                      GameService.applyMove(currentState, move) match {
-                        case Right(newState) =>
-                          gameRepository.updateGame(gameId, newState)
-                          val isGameOver = GameService.isGameOver(newState)
-                          val winner = GameService.winner(newState)
-                          val response = GameResponse(
-                            board = FEN.boardToFEN(newState.board),
-                            currentTurn = newState.currentTurn,
-                            moveHistory = newState.moveHistory.reverse,
-                            isGameOver = isGameOver,
-                            winner = winner
-                          )
-                          complete(response)
-                        case Left(reason) =>
-                          complete(StatusCodes.BadRequest, ErrorResponse(reason))
-                      }
-                    case None =>
-                      complete(StatusCodes.BadRequest, ErrorResponse(s"Invalid move format: ${moveReq.from}${moveReq.to}"))
+                  sessionController.makeMove(gameId, input) match {
+                    case Right(newState) =>
+                      sessionController.updateGame(gameId, newState)
+                      val response = GameResponse(
+                        board = FEN.boardToFEN(newState.board),
+                        currentTurn = newState.turn,
+                        moveHistory = newState.moveHistory.reverse,
+                      )
+                      complete(response)
+                    case Left(reason) =>
+                      complete(StatusCodes.BadRequest, ErrorResponse(reason))
                   }
                 case None =>
                   complete(StatusCodes.NotFound, ErrorResponse(s"Game not found: $gameId"))
@@ -101,7 +85,7 @@ class ChessApiRoutes(gameRepository: GameRepository)(implicit system: ActorSyste
         /** GET /v1/chess/games - List all active games */
         get {
           path("games") {
-            val gameIds = gameRepository.listGames()
+            val gameIds = sessionController.listGames()
             complete(Json.obj("games" -> gameIds, "count" -> gameIds.length))
           }
         }
@@ -111,7 +95,7 @@ class ChessApiRoutes(gameRepository: GameRepository)(implicit system: ActorSyste
         /** DELETE /v1/chess/games/{gameId} - Delete/end a game */
         delete {
           path("games" / Segment) { gameId =>
-            if (gameRepository.deleteGame(gameId)) {
+            if (sessionController.deleteGame(gameId)) {
               complete(Json.obj("message" -> s"Game $gameId deleted successfully"))
             } else {
               complete(StatusCodes.NotFound, ErrorResponse(s"Game not found: $gameId"))

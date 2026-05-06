@@ -41,12 +41,13 @@ lazy val gui = project
       "org.openjfx" % "javafx-controls" % "21" classifier platform,
       "org.openjfx" % "javafx-graphics" % "21" classifier platform,
 
-      "com.typesafe.akka" %% "akka-actor-typed" % "2.8.5",
-      "com.typesafe.akka" %% "akka-http" % "10.5.3",
-      "com.typesafe.akka" %% "akka-stream" % "2.8.5",
-      "de.heikoseeberger" %% "akka-http-play-json" % "1.39.2"
     )
   )
+  .dependsOn(core, shared)
+
+lazy val persistent = project
+  .in(file("persistent"))
+  .settings(commonSettings)
   .dependsOn(core, shared)
 
 // --- REST API (Http4s) ---
@@ -61,7 +62,7 @@ lazy val restApi = project
       "de.heikoseeberger" %% "akka-http-play-json" % "1.39.2"
     )
   )
-  .dependsOn(core)
+  .dependsOn(core, persistent, shared)
 
 // --- Root project (aggregator only) ---
 lazy val root = project
