@@ -1,7 +1,7 @@
 package service
 
 import model._
-import parser.FEN
+import parser.manualParse.FEN
 
 /** Pure game-rule functions. */
 object GameService {

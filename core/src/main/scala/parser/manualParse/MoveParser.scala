@@ -1,6 +1,6 @@
-package parser
+package parser.manualParse
 
-import domain.model.{Move, Position}
+import model.{Move, Position}
 
 /** Parses text input into `Move` values.
  *
