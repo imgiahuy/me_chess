@@ -1,7 +1,7 @@
 package controller
 
 import model.Snapshot
-import parser.MoveParser
+import parser.manualParse.MoveParser
 import service.GameService
 
 import java.nio.file.{Files, Paths}

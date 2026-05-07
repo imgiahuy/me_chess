@@ -1,4 +1,4 @@
-package parser
+package parser.manualParse
 
 import model._
 

@@ -17,7 +17,11 @@ lazy val commonSettings = Seq(
 
 lazy val core = project
   .in(file("core"))
-  .settings(commonSettings)
+  .settings(commonSettings,
+    libraryDependencies ++= Seq(
+      "de.heikoseeberger" %% "akka-http-play-json" % "1.39.2"
+    )
+  )
 
 lazy val shared = project
   .in(file("shared"))
