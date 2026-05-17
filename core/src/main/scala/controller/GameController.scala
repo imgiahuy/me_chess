@@ -1,12 +1,15 @@
 package controller
 
 import model.Snapshot
-import parser.manualParse.MoveParser
+import parser.Output
+import parser.manualParse.route.InputRouter.route
 import service.GameService
 
 import java.nio.file.{Files, Paths}
 
 class GameController extends GameControllerInterface {
+
+  val chessParser = new parser.manualParse.api.ChessParser
 
   override def create(): Snapshot = {
     GameService.createGame()
@@ -38,13 +41,23 @@ class GameController extends GameControllerInterface {
   }
 
   override def makeMove(
-                state: Snapshot,
-                input: String
-              ): Either[String, Snapshot] = {
+                         state: Snapshot,
+                         input: String
+                       ): Either[String, Snapshot] = {
 
-    for {
-      move     <- MoveParser.parse(input).toRight("Invalid move format")
-      newState <- GameService.applyMove(state, move)
-    } yield newState
+    val routed = route(input)
+    println(s"[DEBUG] routed input = $routed")
+
+    val parsed = chessParser.parse(routed)
+    println(s"[DEBUG] parsed result = $parsed")
+
+    parsed match
+      case Output.uciToModel(m) =>
+        for {
+          newState <- GameService.applyMove(state, m)
+        } yield newState
+
+      case _ =>
+        Left("Invalid move format")
   }
 }

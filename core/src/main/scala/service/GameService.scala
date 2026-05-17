@@ -1,10 +1,15 @@
 package service
 
 import model._
-import parser.manualParse.FEN
+import parser.Input.{ListMoves, ModelSnap}
+import parser.Output
+import parser.manualParse.route.InputRouter.route
+import parser.manualParse.api.ChessParser
 
 /** Pure game-rule functions. */
 object GameService {
+
+  val chessParser = new ChessParser()
 
   def createGame(): Snapshot = {
 
@@ -46,7 +51,7 @@ object GameService {
       _ <- validate(snapshot, move)
       piece <- snapshot.board
         .pieceAt(move.from)
-        .toRight(s"No piece at ${move.from.toAlgebraic}")
+        .toRight(s"No piece at destination square")
       newBoard = Board(
         snapshot.board.squares - move.from + (move.to -> piece)
       ) // Naive move application; does not handle captures, promotions, castling, en passant, etc.
@@ -69,7 +74,7 @@ object GameService {
       )
       piece <- snapshot.board
         .pieceAt(move.from)
-        .toRight(s"No piece at ${move.from.toAlgebraic}")
+        .toRight(s"No piece at source square")
       _ <- Either.cond(
         piece.color == snapshot.turn,
         (),
@@ -99,8 +104,8 @@ object GameService {
     snapshot.board.piecesOf(snapshot.turn).nonEmpty
 
   def save(snapshot: Snapshot): String = {
-    val fen = FEN.toFEN(snapshot.board, snapshot.turn)
-    val moves = snapshot.moveHistory.map(_.toAlgebraic).mkString("\n")
+    val fen = chessParser.reverse(ModelSnap(snapshot))
+    val moves = chessParser.reverse(ListMoves(snapshot))
     s"$fen\nMOVES:\n$moves"
   }
 
@@ -108,11 +113,23 @@ object GameService {
     val lines = input.linesIterator.toList
     if (lines.isEmpty) throw new Exception("Empty game file")
 
-    val (board, turn) = FEN.fromFEN(lines.head)
+    val result = chessParser.parse(route(lines.head))
+
+    val (board, turn) =
+      result match
+        case Output.fenToModel(board, turn) =>
+          (board, turn)
+
+        case _ =>
+          throw new Exception("Expected FEN")
 
     val moves =
       if (lines.length >= 2 && lines(1) == "MOVES:") {
-        lines.drop(2).map(Move.fromAlgebraic).collect { case Some(m) => m }
+        val movesStr =
+          lines.dropWhile(_ != "MOVES:").drop(1).mkString("\n")
+        chessParser.parse(route(movesStr)) match
+          case Output.pgnToModel(moves) => moves
+          case _ => throw new Exception("Expected move list after FEN")
       } else List.empty
 
     Snapshot(board, turn, moves)

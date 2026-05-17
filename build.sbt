@@ -1,5 +1,5 @@
 ThisBuild / version := "0.1.0-SNAPSHOT"
-ThisBuild / scalaVersion := "2.13.14"
+ThisBuild / scalaVersion := "3.8.3"
 
 // --- OS detection for JavaFX ---
 val osName = System.getProperty("os.name").toLowerCase
@@ -19,7 +19,8 @@ lazy val core = project
   .in(file("core"))
   .settings(commonSettings,
     libraryDependencies ++= Seq(
-      "de.heikoseeberger" %% "akka-http-play-json" % "1.39.2"
+      "com.lihaoyi" %% "upickle" % "3.1.0",
+      "com.lihaoyi" %% "fastparse" % "3.1.1"
     )
   )
 
@@ -63,7 +64,7 @@ lazy val restApi = project
       "com.typesafe.akka" %% "akka-actor-typed" % "2.8.5",
       "com.typesafe.akka" %% "akka-http" % "10.5.3",
       "com.typesafe.akka" %% "akka-stream" % "2.8.5",
-      "de.heikoseeberger" %% "akka-http-play-json" % "1.39.2"
+      "com.lihaoyi" %% "upickle" % "3.1.0"
     )
   )
   .dependsOn(core, persistent, shared)

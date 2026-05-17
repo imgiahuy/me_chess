@@ -10,7 +10,6 @@ import akka.http.scaladsl.server.Route
 import de.heikoseeberger.akkahttpplayjson.PlayJsonSupport
 import play.api.libs.json._
 import api.JsonSerializers._
-import parser.manualParse.FEN
 
 /** REST API routes for chess game management and play. */
 class ChessApiRoutes(sessionController: GameSessionController)(implicit system: ActorSystem[?])
@@ -39,7 +38,7 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
             sessionController.getGame(gameId) match {
               case Some(state) =>
                 val response = GameResponse(
-                  board = FEN.boardToFEN(state.board),
+                  board = FenParser.boardToFEN(state.board),
                   currentTurn = state.turn,
                   moveHistory = state.moveHistory.reverse,
                 )
@@ -64,7 +63,7 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
                     case Right(newState) =>
                       sessionController.updateGame(gameId, newState)
                       val response = GameResponse(
-                        board = FEN.boardToFEN(newState.board),
+                        board = FenParser.boardToFEN(newState.board),
                         currentTurn = newState.turn,
                         moveHistory = newState.moveHistory.reverse,
                       )

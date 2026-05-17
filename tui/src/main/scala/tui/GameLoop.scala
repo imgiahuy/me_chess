@@ -1,6 +1,5 @@
 package tui
 
-import parser.manualParse.MoveParser
 import domain.engine.GameState
 import service.GameService
 
@@ -34,7 +33,7 @@ object GameLoop {
 
     def applyMoveCmd(raw: String): (GameState, Option[String]) = {
       val result: Either[String, (GameState, String)] = for {
-        move <- MoveParser.parse(raw).toRight(s"Invalid move: '$raw'. Use format e.g. e2e4")
+        move <- UciParser.parse(raw).toRight(s"Invalid move: '$raw'. Use format e.g. e2e4")
         newState <- GameService.applyMove(state, move)
       } yield (newState, s"Moved: ${move.toAlgebraic}")
 
