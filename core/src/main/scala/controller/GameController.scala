@@ -60,4 +60,6 @@ class GameController extends GameControllerInterface {
       case _ =>
         Left("Invalid move format")
   }
+
+  def isGameOver(state: Snapshot): Boolean = GameService.isGameOver(state)
 }

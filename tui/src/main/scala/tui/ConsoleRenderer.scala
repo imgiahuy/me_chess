@@ -1,7 +1,7 @@
 package tui
 
-import domain.engine.GameState
-import domain.model.{Board, Color, Position}
+import model.{Board, Color, Position, Snapshot}
+import parser.Input.ModelMove
 import service.GameService
 
 /** Converts domain objects to displayable strings.
@@ -17,6 +17,8 @@ import service.GameService
  *   - Rank 8 is at the top (Black side), Rank 1 at the bottom (White side)
  */
 object ConsoleRenderer {
+
+  private val chessParser = new parser.manualParse.api.ChessParser
 
   private val LightEmpty = ' '
   private val DarkEmpty  = '.'
@@ -44,14 +46,14 @@ object ConsoleRenderer {
 
   // ── Game state ───────────────────────────────────────────────────────────────
 
-  def renderGameState(state: GameState): String = {
-    val lastMoveInfo = state.lastMove
-      .map(m => s"Last move: ${m.toAlgebraic}")
+  def renderGameState(state: Snapshot): String = {
+    val lastMoveInfo = state.moveHistory.lastOption
+      .map(m => s"Last move: ${chessParser.reverse(ModelMove(m))}")
       .getOrElse("No moves yet")
 
     Seq(
       renderBoard(state.board),
-      s"Turn: ${state.currentTurn}  |  Moves played: ${state.totalMoves}",
+      s"Turn: ${state.turn}  |  Moves played: ${state.moveHistory.length}",
       lastMoveInfo
     ).mkString("\n")
   }
@@ -63,7 +65,7 @@ object ConsoleRenderer {
   def renderError(msg: String): String    = s"Error: $msg"
 
   /** Formats the outcome of the current game state. */
-  def renderOutcome(state: GameState): String =
+  def renderOutcome(state: Snapshot): String =
     GameService.winner(state)
       .map(renderWinner)
       .getOrElse(renderDraw)
@@ -75,9 +77,11 @@ object ConsoleRenderer {
        |+----------------------------------+
        ||  <move>  Make a move             |
        ||          e.g. e2e4  e2 e4        |
-       ||  board   Redisplay the board     |
-       ||  help    Show this help          |
-       ||  quit    Exit the game           |
+       || board   Redisplay the board      |
+       || help    Show this help           |
+       || quit    Exit the game            |
+       || save    Save the game to a file  |
+       || load    Load the game from a file|
        |+----------------------------------+
        ||  K/k King   Q/q Queen  R/r Rook  |
        ||  B/b Bishop N/n Knight P/p Pawn  |
