@@ -1,7 +1,7 @@
 package service
 
-import model._
-import parser.Input.{ListMoves, ModelSnap}
+import model.*
+import parser.Input.{ListMoves, ModelSnap, Pgn}
 import parser.Output
 import parser.manualParse.route.InputRouter.route
 import parser.manualParse.api.ChessParser
@@ -127,7 +127,7 @@ object GameService {
       if (lines.length >= 2 && lines(1) == "MOVES:") {
         val movesStr =
           lines.dropWhile(_ != "MOVES:").drop(1).mkString("\n")
-        chessParser.parse(route(movesStr)) match
+        chessParser.parse(Pgn(movesStr)) match
           case Output.pgnToModel(moves) => moves
           case _ => throw new Exception("Expected move list after FEN")
       } else List.empty

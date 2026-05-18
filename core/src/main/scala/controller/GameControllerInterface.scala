@@ -1,6 +1,6 @@
 package controller
 
-import model.{Move, Snapshot}
+import model.Snapshot
 
 trait GameControllerInterface {
   def create(): Snapshot
@@ -9,4 +9,5 @@ trait GameControllerInterface {
   def save(state : Snapshot): Unit
   def load(): Snapshot
   def makeMove(state: Snapshot, move: String): Either[String, Snapshot]
+  def isGameOver(state: Snapshot): Boolean
 }
