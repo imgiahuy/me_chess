@@ -2,28 +2,44 @@ package gui
 
 import controller.GameControllerInterface
 import scalafx.scene.layout.BorderPane
+import scalafx.scene.control.{Alert, Button, ButtonType, Dialog, TextField}
+import scalafx.scene.control.ButtonBar.ButtonData
+import scalafx.scene.Scene
+import scalafx.stage.Stage
+import scalafx.Includes.*
 import model.PositionState
 
 class GuiController(gameControllerInterface: GameControllerInterface) {
 
-  private var state: PositionState = gameControllerInterface.create()
+  private var state: PositionState = null
   private var selected: Option[(Int, Int)] = None
   private var isProcessingMove: Boolean = false
   private var validMoves: Set[(Int, Int)] = Set()
+  private var showingSetup: Boolean = true
 
   val root = new BorderPane()
 
   def start(): Unit = {
-    render()
+    showPlayerSetup()
+  }
+
+  private def showPlayerSetup(): Unit = {
+    showingSetup = true
+    root.center = GuiRenderer.renderPlayerSetup(
+      handleStartGame,
+      handleExit
+    )
   }
 
   private def render(): Unit = {
+    showingSetup = false
     root.center = GuiRenderer.renderGameUI(
       state.board,
       handleClick,
       handleExit,
       handleSave,
       handleLoad,
+      handleExportPgn,
       selected,
       validMoves
     )
@@ -107,5 +123,24 @@ class GuiController(gameControllerInterface: GameControllerInterface) {
     val file = ('a' + col).toChar
     val rank = (row + 1).toString
     s"$file$rank"
+  }
+
+  private def handleStartGame(whiteName: String, blackName: String): Unit = {
+    val whitePlayer = if (whiteName.trim.nonEmpty) whiteName.trim else "White"
+    val blackPlayer = if (blackName.trim.nonEmpty) blackName.trim else "Black"
+    
+    state = gameControllerInterface.create(whitePlayer, blackPlayer)
+    render()
+    println(s"Starting game: $whitePlayer vs $blackPlayer")
+  }
+
+  private def handleExportPgn(): Unit = {
+    try {
+      gameControllerInterface.exportToPgn(state, "GUI Game", "Local", "game.pgn")
+      println("Game exported successfully to 'game.pgn'")
+    } catch {
+      case e: Exception =>
+        println(s"Failed to export game: ${e.getMessage}")
+    }
   }
 }

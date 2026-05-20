@@ -2,10 +2,10 @@ package api
 
 import scala.language.postfixOps
 import akka.actor.typed.ActorSystem
-import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes, HttpHeader, headers}
-import akka.http.scaladsl.server.Directives.* 
-import akka.http.scaladsl.server.{Route, RejectionHandler}
-import api.JsonCodecs.{CreatedGameResponse, GameInfos, GameStateResponse, ErrorResponse, MoveRequest, GamesListResponse, GameSummary, ActionResponse}
+import akka.http.scaladsl.model.{ContentTypes, HttpEntity, HttpHeader, StatusCodes, headers}
+import akka.http.scaladsl.server.Directives.*
+import akka.http.scaladsl.server.{RejectionHandler, Route}
+import api.JsonCodecs.{ActionResponse, CreateGameRequest, CreatedGameResponse, ErrorResponse, GameInfos, GameStateResponse, GameSummary, GamesListResponse, MoveRequest}
 
 
 
@@ -52,12 +52,19 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
           /** POST /v1/chess/games - Create a new game */
           post {
             path("games") {
-              try {
-                val gameId = sessionController.createGame()
-                complete(StatusCodes.Created, jsonResponse(CreatedGameResponse(gameId, "Game created successfully")))
-              } catch {
-                case e: Exception =>
-                  complete(StatusCodes.InternalServerError, jsonResponse(ErrorResponse(s"Failed to create game: ${e.getMessage}")))
+              entity(as[String]) { body =>
+                parseJson[CreateGameRequest](body) match {
+                  case Right(request) =>
+                    try {
+                      val gameId = sessionController.createGame(request.whitePlayer, request.blackPlayer)
+                      complete(StatusCodes.Created, jsonResponse(CreatedGameResponse(gameId, "Game created successfully")))
+                    } catch {
+                      case e: Exception =>
+                        complete(StatusCodes.InternalServerError, jsonResponse(ErrorResponse(s"Failed to create game: ${e.getMessage}")))
+                    }
+                  case Left(error) =>
+                    complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+                }
               }
             }
           }
@@ -219,6 +226,43 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
                       complete(jsonResponse(response))
                     case None =>
                       complete(StatusCodes.NotFound, jsonResponse(ErrorResponse(s"Game not found: $gameId")))
+                  }
+                case Left(error) =>
+                  complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+              }
+            }
+          }
+        ) ~(
+          // ─── PGN Export ───────────────────────────────────────────────────────
+
+          /** POST /v1/chess/games/{gameId}/export - Export game to PGN */
+          post {
+            path("games" / Segment / "export") { gameId =>
+              validateGameId(gameId) match {
+                case Right(_) =>
+                  entity(as[String]) { body =>
+                    parseJson[JsonCodecs.ExportRequest](body) match {
+                      case Right(request) =>
+                        sessionController.getGame(gameId) match {
+                          case Some(state) =>
+                            try {
+                              val pgnContent = sessionController.exportToPgn(gameId, request.event, request.site)
+                              val response = JsonCodecs.ExportResponse(
+                                gameId = gameId,
+                                pgnContent = pgnContent,
+                                filename = s"game_${gameId}.pgn"
+                              )
+                              complete(jsonResponse(response))
+                            } catch {
+                              case e: Exception =>
+                                complete(StatusCodes.InternalServerError, jsonResponse(ErrorResponse(s"Failed to export PGN: ${e.getMessage}")))
+                            }
+                          case None =>
+                            complete(StatusCodes.NotFound, jsonResponse(ErrorResponse(s"Game not found: $gameId")))
+                        }
+                      case Left(error) =>
+                        complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+                    }
                   }
                 case Left(error) =>
                   complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))

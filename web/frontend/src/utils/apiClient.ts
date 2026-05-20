@@ -1,8 +1,10 @@
 const BASE_URL = "/v1/chess";
 
-export async function createGame() {
+export async function createGame(whitePlayer: string, blackPlayer: string) {
     const res = await fetch(`${BASE_URL}/games`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ whitePlayer, blackPlayer }),
     });
     if (!res.ok) throw new Error(`Failed to create game: ${res.status}`);
     return res.json();
@@ -60,5 +62,15 @@ export async function loadGame() {
         method: "POST",
     });
     if (!res.ok) throw new Error(`Failed to load game: ${res.status}`);
+    return res.json();
+}
+
+export async function exportPgn(gameId: string, event: string, site: string) {
+    const res = await fetch(`${BASE_URL}/games/${gameId}/export`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event, site }),
+    });
+    if (!res.ok) throw new Error(`Failed to export PGN: ${res.status}`);
     return res.json();
 }

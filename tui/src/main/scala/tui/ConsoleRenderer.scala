@@ -110,6 +110,7 @@ object ConsoleRenderer {
        ||   help      Show this help message                      |
        ||   save      Save the game to 'savegame.txt'             |
        ||   load      Load the game from 'savegame.txt'           |
+       ||   export pgn Export game to PGN file ('game.pgn')       |
        ||   quit      Exit the game                               |
        |+============================================================+
        || PIECES:                                                   |

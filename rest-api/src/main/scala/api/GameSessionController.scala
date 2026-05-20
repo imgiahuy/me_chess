@@ -12,7 +12,13 @@ class GameSessionController(
 
   /** Create a new game session and return its ID */
   def createGame(): String = {
-    val initialState = controller.create()
+    val initialState = controller.create("White", "Black")
+    repo.createGame(initialState)
+  }
+
+  /** Create a new game session with player names and return its ID */
+  def createGame(whitePlayer: String, blackPlayer: String): String = {
+    val initialState = controller.create(whitePlayer, blackPlayer)
     repo.createGame(initialState)
   }
 
@@ -111,6 +117,18 @@ class GameSessionController(
         Right((state.moveHistory.length, state.turn.toString, GameService.isGameOver(state), GameService.winner(state).map(_.toString)))
       case None => 
         Left("Game not found")
+    }
+  }
+  
+  /** Export game to PGN format */
+  def exportToPgn(gameId: String, event: String, site: String): String = {
+    repo.getGame(gameId) match {
+      case Some(state) =>
+        controller.exportToPgn(state, event, site, s"game_${gameId}.pgn")
+        // Return the PGN content directly for the API response
+        service.GameService.exportToPgn(state, event, site)
+      case None =>
+        throw new Exception("Game not found")
     }
   }
 }
