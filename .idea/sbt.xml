@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ScalaSbtSettings">
-    <option name="customLauncherPath" />
     <option name="customVMPath" value="$USER_HOME$/.jdks/ms-17.0.18" />
     <option name="linkedExternalProjectsSettings">
       <SbtProjectSettings>
@@ -9,14 +8,14 @@
         <option name="externalProjectPath" value="$PROJECT_DIR$" />
         <option name="modules">
           <set>
-            <option value="$PROJECT_DIR$" />
-            <option value="$PROJECT_DIR$/core" />
-            <option value="$PROJECT_DIR$/gui" />
-            <option value="$PROJECT_DIR$/persistent" />
-            <option value="$PROJECT_DIR$/project" />
-            <option value="$PROJECT_DIR$/rest-api" />
-            <option value="$PROJECT_DIR$/shared" />
-            <option value="$PROJECT_DIR$/tui" />
+            <option value="C:\sem7\SA\me_chess" />
+            <option value="C:\sem7\SA\me_chess\core" />
+            <option value="C:\sem7\SA\me_chess\gui" />
+            <option value="C:\sem7\SA\me_chess\persistent" />
+            <option value="C:\sem7\SA\me_chess\project" />
+            <option value="C:\sem7\SA\me_chess\rest-api" />
+            <option value="C:\sem7\SA\me_chess\shared" />
+            <option value="C:\sem7\SA\me_chess\tui" />
           </set>
         </option>
         <option name="sbtVersion" value="1.12.8" />

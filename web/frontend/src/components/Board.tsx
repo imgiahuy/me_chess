@@ -26,26 +26,28 @@ export function Board({ fen, onMove }: Props) {
     return (
         <div
             style={{
-        display: "grid",
-            gridTemplateColumns: "repeat(8, 60px)",
-            border: "2px solid black",
-    }}
->
-    {board.flat().map((piece, i) => {
-        const pos = indexToSquare(i);
-        const isDark = (Math.floor(i / 8) + i) % 2 === 1;
+                display: "grid",
+                gridTemplateColumns: "repeat(8, 60px)",
+                border: "2px solid #1a1a1a",
+                borderRadius: "4px",
+                overflow: "hidden",
+            }}
+        >
+            {board.flat().map((piece, i) => {
+                const pos = indexToSquare(i);
+                const isDark = (Math.floor(i / 8) + i) % 2 === 1;
 
-        return (
-            <Square
-                key={i}
-        piece={piece}
-        position={pos}
-        isDark={isDark}
-        isSelected={selected === pos}
-        onClick={handleClick}
-        />
+                return (
+                    <Square
+                        key={i}
+                        piece={piece}
+                        position={pos}
+                        isDark={isDark}
+                        isSelected={selected === pos}
+                        onClick={handleClick}
+                    />
+                );
+            })}
+        </div>
     );
-    })}
-    </div>
-);
 }

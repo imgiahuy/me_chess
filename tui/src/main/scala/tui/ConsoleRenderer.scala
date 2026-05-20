@@ -1,7 +1,6 @@
 package tui
 
-import model.{Board, Color, Position, Snapshot}
-import parser.Input.ModelMove
+import model.{Board, Position, PositionState}
 import service.GameService
 
 /** Converts domain objects to displayable strings.
@@ -13,18 +12,17 @@ import service.GameService
  *   - White pieces: upper-case  (K Q R B N P)
  *   - Black pieces: lower-case  (k q r b n p)
  *   - Light squares: ' '
- *   - Dark  squares: ','
+ *   - Dark  squares: '.'
  *   - Rank 8 is at the top (Black side), Rank 1 at the bottom (White side)
  */
 object ConsoleRenderer {
-
-  private val chessParser = new parser.manualParse.api.ChessParser
-
+  
   private val LightEmpty = ' '
   private val DarkEmpty  = '.'
 
   // ── Board ────────────────────────────────────────────────────────────────────
 
+  /** Renders the chess board with coordinates and piece positions. */
   def renderBoard(board: Board): String = {
     val header = "  a b c d e f g h"
     val rows   = (7 to 0 by -1).map(renderRank(board))
@@ -32,59 +30,95 @@ object ConsoleRenderer {
   }
 
   /** Renders one rank (row) as "N cell cell …" where N is the rank number. */
-  val renderRank: Board => Int => String =
-    board =>
-      row => {
-        val cells = (0 until 8).map { col =>
-          board.pieceAt(Position(col, row))
-            .fold(if ((row + col) % 2 == 0) LightEmpty.toString else DarkEmpty.toString)(
-              _.symbol.toString
-            )
-        }
-        s"${row + 1} ${cells.mkString(" ")}"
-      }
+  private def renderRank(board: Board)(row: Int): String = {
+    val cells = (0 until 8).map { col =>
+      board.pieceAt(Position(col, row))
+        .fold(if ((row + col) % 2 == 0) LightEmpty.toString else DarkEmpty.toString)(
+          _.symbol.toString
+        )
+    }
+    s"${row + 1} ${cells.mkString(" ")}"
+  }
 
   // ── Game state ───────────────────────────────────────────────────────────────
 
-  def renderGameState(state: Snapshot): String = {
-    val lastMoveInfo = state.moveHistory.lastOption
-      .map(m => s"Last move: ${chessParser.reverse(ModelMove(m))}")
-      .getOrElse("No moves yet")
+  /** Renders the current game state including board, turn, and game status. */
+  def renderGameState(state: PositionState): String = {
+    val board = renderBoard(state.board)
+    val turn = s"Turn: ${state.turn}"
+    val status = renderGameStatus(state)
+    Seq(board, turn, status).mkString("\n")
+  }
 
-    Seq(
-      renderBoard(state.board),
-      s"Turn: ${state.turn}  |  Moves played: ${state.moveHistory.length}",
-      lastMoveInfo
-    ).mkString("\n")
+  /** Renders the current game status (check, checkmate, stalemate, normal). */
+  def renderGameStatus(state: PositionState): String = {
+    if GameService.isCheckmate(state) then
+      s"CHECKMATE! ${state.turn.opposite} wins!"
+    else if GameService.isStalemate(state) then
+      "STALEMATE! The game is a draw."
+    else if GameService.isKingInCheck(state.board, state.turn) then
+      s"CHECK! ${state.turn} is in check."
+    else
+      "Game in progress"
   }
 
   // ── Outcome messages ─────────────────────────────────────────────────────────
 
-  def renderWinner(color: Color): String  = s"Game over! $color wins!"
-  def renderDraw: String                  = "Game over! It's a draw!"
-  def renderError(msg: String): String    = s"Error: $msg"
-
   /** Formats the outcome of the current game state. */
-  def renderOutcome(state: Snapshot): String =
-    GameService.winner(state)
-      .map(renderWinner)
-      .getOrElse(renderDraw)
+  def renderOutcome(state: PositionState): String = {
+    if GameService.isCheckmate(state) then
+      s"CHECKMATE! ${state.turn.opposite} wins!"
+    else if GameService.isStalemate(state) then
+      "STALEMATE! The game is a draw."
+    else
+      GameService.winner(state)
+        .map(color => s"Game over! $color wins!")
+        .getOrElse("Game over!")
+  }
+
+  def renderError(msg: String): String = s"[ERROR] $msg"
+  def renderSuccess(msg: String): String = s"[OK] $msg"
+
+  // ── Move history ─────────────────────────────────────────────────────────────
+
+  /** Renders the move history in a compact format. */
+  def renderMoveHistory(state: PositionState): String = {
+    if state.moveHistory.isEmpty then
+      "No moves yet."
+    else
+      val moves = state.moveHistory.zipWithIndex.map { case (move, idx) =>
+        val moveNum = idx / 2 + 1
+        val notation = s"${('a' + move.from.col).toChar}${move.from.row + 1}-${('a' + move.to.col).toChar}${move.to.row + 1}"
+        if idx % 2 == 0 then s"$moveNum. $notation" else notation
+      }
+      moves.grouped(6).map(_.mkString(" ")).mkString("\n")
+  }
 
   // ── Help text ────────────────────────────────────────────────────────────────
+  
+  /** Displays help information and available commands. */
   val renderHelp: String =
-    """|+----------------------------------+
-       ||           Scala Chess            |
-       |+----------------------------------+
-       ||  <move>  Make a move             |
-       ||          e.g. e2e4  e2 e4        |
-       || board   Redisplay the board      |
-       || help    Show this help           |
-       || quit    Exit the game            |
-       || save    Save the game to a file  |
-       || load    Load the game from a file|
-       |+----------------------------------+
-       ||  K/k King   Q/q Queen  R/r Rook  |
-       ||  B/b Bishop N/n Knight P/p Pawn  |
-       ||  uppercase=White lowercase=Black |
-       |+----------------------------------+""".stripMargin
+    """|+============================================================+
+       ||                    Scala Chess                            |
+       |+============================================================+
+       || COMMANDS:                                                 |
+       ||   <move>    Make a move (UCI notation)                   |
+       ||             Examples: e2e4, g1f3, e7e8q (promotion)     |
+       ||   board     Redisplay the board                         |
+       ||   moves     Show move history                           |
+       ||   status    Show game status (check, checkmate, etc.)   |
+       ||   help      Show this help message                      |
+       ||   save      Save the game to 'savegame.txt'             |
+       ||   load      Load the game from 'savegame.txt'           |
+       ||   quit      Exit the game                               |
+       |+============================================================+
+       || PIECES:                                                   |
+       ||   K/k King   Q/q Queen  R/r Rook  B/b Bishop            |
+       ||   N/n Knight P/p Pawn                                    |
+       ||   Uppercase = White  |  Lowercase = Black               |
+       |+============================================================+
+       || BOARD:                                                    |
+       ||   Light squares: ' '  |  Dark squares: '.'              |
+       ||   Rank 8 (top) = Black side  |  Rank 1 (bottom) = White |
+       |+============================================================+""".stripMargin
 }
