@@ -1,13 +1,11 @@
 package controller
 
-import model.Snapshot
+import model.PositionState
 
 trait GameControllerInterface {
-  def create(): Snapshot
-  def undo(): Unit
-  def redo(): Unit
-  def save(state : Snapshot): Unit
-  def load(): Snapshot
-  def makeMove(state: Snapshot, move: String): Either[String, Snapshot]
-  def isGameOver(state: Snapshot): Boolean
+  def create(): PositionState
+  def save(state : PositionState): Unit
+  def load(): PositionState
+  def makeMove(state: PositionState, move: String): Either[String, PositionState]
+  def isGameOver(state: PositionState): Boolean
 }

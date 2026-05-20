@@ -1,38 +1,25 @@
 package controller
 
-import model.Snapshot
-import parser.Output
-import parser.manualParse.route.InputRouter.route
+import model.PositionState
+import parser.UciParser
 import service.GameService
 
 import java.nio.file.{Files, Paths}
 
 class GameController extends GameControllerInterface {
 
-  val chessParser = new parser.manualParse.api.ChessParser
-
-  override def create(): Snapshot = {
+  override def create(): PositionState = {
     GameService.createGame()
   }
-
-  //Todo: Implement undo/redo functionality by maintaining a history stack of GameStates, and a pointer to the current state. Undo moves the pointer back, redo moves it forward.
-  // Using Observer pattern, we can notify the GUI and TUI to update whenever the state changes due to undo/redo.
-  override def undo(): Unit = {
-
-  }
-
-  override def redo(): Unit = {
-
-  }
-
-  override def save(state : Snapshot): Unit = {
+  
+  override def save(state : PositionState): Unit = {
     val data = GameService.save(state)
     val path = Paths.get("savegame.txt")
     Files.write(path, data.getBytes)
     println(s"Game saved to $path")
   }
 
-  override def load(): Snapshot = {
+  override def load(): PositionState = {
     val path = Paths.get("savegame.txt")
     val content = new String(Files.readAllBytes(path))
     val state = GameService.load(content)
@@ -41,25 +28,19 @@ class GameController extends GameControllerInterface {
   }
 
   override def makeMove(
-                         state: Snapshot,
-                         input: String
-                       ): Either[String, Snapshot] = {
+    state: PositionState,
+    input: String
+  ): Either[String, PositionState] = {
+    val cleanInput = input.trim.toLowerCase.replaceAll("[\\s\\-]+", "")
+    
+    UciParser.parse(cleanInput) match {
+      case Right(m) =>
+        GameService.applyMove(state, m)
 
-    val routed = route(input)
-    println(s"[DEBUG] routed input = $routed")
-
-    val parsed = chessParser.parse(routed)
-    println(s"[DEBUG] parsed result = $parsed")
-
-    parsed match
-      case Output.uciToModel(m) =>
-        for {
-          newState <- GameService.applyMove(state, m)
-        } yield newState
-
-      case _ =>
-        Left("Invalid move format")
+      case Left(err) =>
+        Left(s"Invalid move format: $err (use UCI notation like e2e4)")
+    }
   }
 
-  def isGameOver(state: Snapshot): Boolean = GameService.isGameOver(state)
+  def isGameOver(state: PositionState): Boolean = GameService.isGameOver(state)
 }

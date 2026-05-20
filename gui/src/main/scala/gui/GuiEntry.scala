@@ -1,5 +1,7 @@
+package gui
+
 import controller.GameController
-import gui.GuiController
+import gui.GuiEntry.stage
 import scalafx.application.JFXApp3
 import scalafx.scene.Scene
 
@@ -14,7 +16,7 @@ object GuiEntry extends JFXApp3 {
 
     stage = new JFXApp3.PrimaryStage {
       title = "Scala Chess GUI"
-      width = 650
+      width = 800
       height = 680
       scene = new Scene {
         root = controller.root

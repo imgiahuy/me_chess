@@ -1,8 +1,9 @@
 package api
 
 import controller.GameControllerInterface
-import model.Snapshot
+import model.PositionState
 import repository.GameRepository
+import service.GameService
 
 class GameSessionController(
                              controller: GameControllerInterface,
@@ -16,17 +17,22 @@ class GameSessionController(
   }
 
   /** Get a game by ID */
-  def getGame(gameId: String): Option[Snapshot] =
+  def getGame(gameId: String): Option[PositionState] =
     repo.getGame(gameId)
 
   /** Apply a move using gameId */
-  def makeMove(gameId: String, input: String): Either[String, Snapshot] = {
-    for {
-      state    <- repo.getGame(gameId).toRight("Game not found")
-      newState <- controller.makeMove(state, input)
-    } yield {
-      repo.updateGame(gameId, newState)
-      newState
+  def makeMove(gameId: String, input: String): Either[String, PositionState] = {
+    if (input.trim.isEmpty) {
+      Left("Move input cannot be empty")
+    } else {
+      for {
+        state    <- repo.getGame(gameId).toRight("Game not found")
+        _        <- if (GameService.isGameOver(state)) Left("Game is already over") else Right(())
+        newState <- controller.makeMove(state, input)
+      } yield {
+        repo.updateGame(gameId, newState)
+        newState
+      }
     }
   }
 
@@ -42,22 +48,69 @@ class GameSessionController(
   def saveGame(gameId: String): Either[String, Unit] = {
     repo.getGame(gameId) match {
       case Some(state) =>
-        controller.save(state)
-        Right(())
+        try {
+          controller.save(state)
+          Right(())
+        } catch {
+          case e: Exception => Left(s"Failed to save game: ${e.getMessage}")
+        }
       case None =>
         Left("Game not found")
     }
   }
 
   /** Load a game and create a new session for it */
-  def loadGame(): String = {
-    val state = controller.load()
-    repo.createGame(state)
+  def loadGame(): Either[String, String] = {
+    try {
+      val state = controller.load()
+      Right(repo.createGame(state))
+    } catch {
+      case e: Exception => Left(s"Failed to load game: ${e.getMessage}")
+    }
   }
 
-  def isGameOver(state: Snapshot): Nothing = ???
+  /** Check if a game is over */
+  def isGameOver(gameId: String): Either[String, Boolean] = {
+    repo.getGame(gameId) match {
+      case Some(state) => Right(GameService.isGameOver(state))
+      case None => Left("Game not found")
+    }
+  }
 
-  def updateGame(gameId: String, newState: Snapshot): Unit = repo.updateGame(gameId, newState)
+  /** Update a game state by ID */
+  def updateGame(gameId: String, newState: PositionState): Unit = repo.updateGame(gameId, newState)
 
-  def winner(state: Snapshot): Nothing = ???
+  /** Get the winner of a game, if any */
+  def getWinner(gameId: String): Either[String, Option[String]] = {
+    repo.getGame(gameId) match {
+      case Some(state) => Right(GameService.winner(state).map(_.toString))
+      case None => Left("Game not found")
+    }
+  }
+  
+  /** Get the current turn for a game */
+  def getCurrentTurn(gameId: String): Either[String, String] = {
+    repo.getGame(gameId) match {
+      case Some(state) => Right(state.turn.toString)
+      case None => Left("Game not found")
+    }
+  }
+  
+  /** Get move count for a game */
+  def getMoveCount(gameId: String): Either[String, Int] = {
+    repo.getGame(gameId) match {
+      case Some(state) => Right(state.moveHistory.length)
+      case None => Left("Game not found")
+    }
+  }
+  
+  /** Get game statistics */
+  def getGameStats(gameId: String): Either[String, (Int, String, Boolean, Option[String])] = {
+    repo.getGame(gameId) match {
+      case Some(state) => 
+        Right((state.moveHistory.length, state.turn.toString, GameService.isGameOver(state), GameService.winner(state).map(_.toString)))
+      case None => 
+        Left("Game not found")
+    }
+  }
 }

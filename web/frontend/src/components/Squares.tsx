@@ -8,6 +8,11 @@ interface SquareProps {
     onClick?: (pos: string) => void;
 }
 
+const PIECE_SYMBOLS: Record<string, string> = {
+    'K': '♔', 'Q': '♕', 'R': '♖', 'B': '♗', 'N': '♘', 'P': '♙',
+    'k': '♚', 'q': '♛', 'r': '♜', 'b': '♝', 'n': '♞', 'p': '♟',
+};
+
 export function Square({
                            piece,
                            position,
@@ -16,10 +21,12 @@ export function Square({
                            onClick,
                        }: SquareProps) {
     const backgroundColor = isSelected
-        ? "yellow"
+        ? "#ffd700"
         : isDark
             ? "#769656"
             : "#eeeed2";
+
+    const pieceSymbol = piece ? PIECE_SYMBOLS[piece] || piece : '';
 
     return (
         <div
@@ -32,11 +39,27 @@ export function Square({
                 justifyContent: "center",
                 backgroundColor,
                 cursor: "pointer",
-                fontSize: 24,
+                fontSize: 40,
                 userSelect: "none",
+                transition: "background-color 0.1s",
+            }}
+            onMouseEnter={(e) => {
+                if (!isSelected) {
+                    e.currentTarget.style.backgroundColor = isDark ? "#85a965" : "#f0f0d0";
+                }
+            }}
+            onMouseLeave={(e) => {
+                if (!isSelected) {
+                    e.currentTarget.style.backgroundColor = backgroundColor;
+                }
             }}
         >
-            {piece}
+            <span style={{ 
+                color: piece === piece.toUpperCase() ? '#fff' : '#000',
+                textShadow: piece === piece.toUpperCase() ? '0 0 2px #000' : 'none'
+            }}>
+                {pieceSymbol}
+            </span>
         </div>
     );
 }
