@@ -23,7 +23,7 @@ object ChessRestServer {
     run()
   }
 
-  def run(host: String = "localhost", port: Int = 8080): Unit = {
+  def run(host: String = "0.0.0.0", port: Int = 8080): Unit = {
     implicit val system: ActorSystem[Unit] = ActorSystem(Behaviors.empty[Unit], "chess-api")
     implicit val ec: ExecutionContextExecutor = system.executionContext
 
@@ -54,15 +54,21 @@ object ChessRestServer {
           println("[INFO] Create Game: POST " + serverUrl + "/v1/chess/games")
           println("[INFO] List Games: GET " + serverUrl + "/v1/chess/games")
           println("============================================================")
-          println("[INFO] Press ENTER to stop the server...")
+          println("[INFO] Server running continuously...")
           println("")
 
-          StdIn.readLine()
+          // Add a hook to keep the server running
+          sys.addShutdownHook {
+            println("[INFO] Shutting down server...")
+            binding.unbind().onComplete { _ =>
+              println("[INFO] Server stopped")
+              system.terminate()
+            }
+          }
 
-          println("[INFO] Shutting down server...")
-          binding.unbind().onComplete { _ =>
-            println("[INFO] Server stopped")
-            system.terminate()
+          // Keep the server running indefinitely
+          while (true) {
+            Thread.sleep(1000)
           }
         case Failure(exception) =>
           println("")

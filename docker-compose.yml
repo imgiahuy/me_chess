@@ -1,0 +1,81 @@
+services:
+  # REST API Service
+  rest-api:
+    build:
+      context: .
+      dockerfile: rest-api/Dockerfile
+    container_name: chess-rest-api
+    ports:
+      - "8085:8080"
+    networks:
+      - chess-network
+    environment:
+      - JAVA_OPTS=-Xmx512m
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/chess/info"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Web Frontend Service
+  web-frontend:
+    build:
+      context: web/frontend
+      dockerfile: Dockerfile
+    container_name: chess-web-frontend
+    ports:
+      - "3005:3000"
+    networks:
+      - chess-network
+    depends_on:
+      rest-api:
+        condition: service_healthy
+    environment:
+      - REACT_APP_API_URL=http://localhost:8080
+
+  # GUI Service (with X11 forwarding for display)
+  gui:
+    build:
+      context: .
+      dockerfile: gui/Dockerfile
+    container_name: chess-gui
+    networks:
+      - chess-network
+    depends_on:
+      rest-api:
+        condition: service_healthy
+    environment:
+      - DISPLAY=host.docker.internal:0
+      - JAVA_OPTS=-Xmx256m
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # Note: For VcXsrv on Windows:
+    # 1. Launch XLaunch with "Multiple windows" mode
+    # 2. Select "Disable access control"
+    # 3. Enable OpenGL in the Extra Settings
+    # 4. Display number should be 0
+
+  # TUI Service
+  tui:
+    build:
+      context: .
+      dockerfile: tui/Dockerfile
+    container_name: chess-tui
+    networks:
+      - chess-network
+    depends_on:
+      rest-api:
+        condition: service_healthy
+    environment:
+      - JAVA_OPTS=-Xmx256m
+    stdin_open: true
+    tty: true
+
+networks:
+  chess-network:
+    driver: bridge
+
+volumes:
+  chess-data:
+    driver: local

@@ -1,3 +1,4 @@
+import React from "react";
 import { fenToBoard } from "../utils/fen";
 import { Square } from "./Squares.tsx";
 import { indexToSquare } from "../utils/coords";
