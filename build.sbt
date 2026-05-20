@@ -30,7 +30,11 @@ lazy val shared = project
 
 lazy val tui = project
   .in(file("tui"))
-  .settings(commonSettings)
+  .settings(
+    commonSettings,
+    assembly / assemblyJarName := "chess-tui.jar",
+    assembly / mainClass := Some("tui.TuiEntry")
+  )
   .dependsOn(core, shared)
 
 // --- GUI (ScalaFX) ---
@@ -46,7 +50,13 @@ lazy val gui = project
       "org.openjfx" % "javafx-controls" % "21" classifier platform,
       "org.openjfx" % "javafx-graphics" % "21" classifier platform,
 
-    )
+    ),
+    assembly / assemblyJarName := "chess-gui.jar",
+    assembly / mainClass := Some("gui.GuiEntry"),
+    assembly / assemblyMergeStrategy := {
+      case PathList("META-INF", xs @ _*) => MergeStrategy.discard
+      case x => MergeStrategy.first
+    }
   )
   .dependsOn(core, shared)
 
@@ -65,7 +75,9 @@ lazy val restApi = project
       "com.typesafe.akka" %% "akka-http" % "10.5.3",
       "com.typesafe.akka" %% "akka-stream" % "2.8.5",
       "com.lihaoyi" %% "upickle" % "3.1.0"
-    )
+    ),
+    assembly / assemblyJarName := "chess-rest-api.jar",
+    assembly / mainClass := Some("api.ChessRestServer")
   )
   .dependsOn(core, persistent, shared)
 

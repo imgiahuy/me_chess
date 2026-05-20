@@ -1,0 +1,13 @@
+.git
+.gitignore
+target/
+.scala-build/
+.idea/
+*.log
+*.tmp
+.DS_Store
+.vscode/
+node_modules/
+dist/
+**/Dockerfile*
+**/*.dockerfile
