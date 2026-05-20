@@ -76,6 +76,16 @@ object JsonCodecs {
     moveCount: Int
   )
   
+  final case class CreateGameRequest(whitePlayer: String, blackPlayer: String)
+
+  final case class ExportRequest(event: String, site: String)
+
+  final case class ExportResponse(
+    gameId: String,
+    pgnContent: String,
+    filename: String
+  )
+
   final case class ApiMetadata(
     version: String,
     endpoints: Int,
@@ -91,5 +101,8 @@ object JsonCodecs {
   given ReadWriter[ErrorResponse]       = macroRW
   given ReadWriter[GameInfos]           = macroRW
   given ReadWriter[GameStatusResponse]  = macroRW
+  given ReadWriter[CreateGameRequest]  = macroRW
+  given ReadWriter[ExportRequest]       = macroRW
+  given ReadWriter[ExportResponse]      = macroRW
   given ReadWriter[ApiMetadata]         = macroRW
 }

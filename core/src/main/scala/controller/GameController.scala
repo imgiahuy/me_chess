@@ -8,8 +8,8 @@ import java.nio.file.{Files, Paths}
 
 class GameController extends GameControllerInterface {
 
-  override def create(): PositionState = {
-    GameService.createGame()
+  override def create(whitePlayerName: String, blackPlayerName: String): PositionState = {
+    GameService.createGame(whitePlayerName, blackPlayerName)
   }
   
   override def save(state : PositionState): Unit = {
@@ -43,4 +43,11 @@ class GameController extends GameControllerInterface {
   }
 
   def isGameOver(state: PositionState): Boolean = GameService.isGameOver(state)
+
+  override def exportToPgn(state: PositionState, event: String, site: String, filename: String): Unit = {
+    val pgnData = GameService.exportToPgn(state, event, site)
+    val path = Paths.get(filename)
+    Files.write(path, pgnData.getBytes)
+    println(s"Game exported to PGN file: $path")
+  }
 }

@@ -1,6 +1,6 @@
 package service
 
-import formatter.{FenFormatter, UciFormatter}
+import formatter.{FenFormatter, UciFormatter, PgnFormatter}
 import parser.{FenParser, UciParser}
 import parser.FenParser
 import model.*
@@ -8,7 +8,7 @@ import model.*
 /** Pure game-rule functions. */
 object GameService {
 
-  def createGame(): PositionState = {
+  def createGame(whitePlayerName: String, blackPlayerName: String): PositionState = {
 
     val backRankTypes: Seq[PieceType] =
       Seq(Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook)
@@ -31,9 +31,16 @@ object GameService {
     val snap = PositionState(
       board = newBoard,
       turn = White,
-      moveHistory = List.empty
+      moveHistory = List.empty,
+      whitePlayer = Player(whitePlayerName),
+      blackPlayer = Player(blackPlayerName)
     )
     snap
+  }
+
+  // Backward compatibility method
+  def createGame(): PositionState = {
+    createGame("White", "Black")
   }
 
   // ── Move application ────────────────────────────────────────────────────────
@@ -293,6 +300,17 @@ object GameService {
   def currentPlayerHasPieces(snapshot: PositionState): Boolean =
     snapshot.board.piecesOf(snapshot.turn).nonEmpty
 
+  def exportToPgn(snapshot: PositionState, event: String, site: String): String = {
+    val tags = PgnFormatter.PgnTags(
+      event = event,
+      site = site,
+      date = snapshot.creationDate.toString,
+      white = snapshot.whitePlayer.name,
+      black = snapshot.blackPlayer.name
+    )
+    PgnFormatter.toPgn(snapshot, tags)
+  }
+
   def save(snapshot: PositionState): String = {
     val fen = FenFormatter.fenFormatter(snapshot)
     val moves = UciFormatter.uciListFormatter(snapshot.moveHistory)
@@ -318,7 +336,13 @@ object GameService {
 
     FenParser.parse(lines.head) match
       case Right(state) =>
-        PositionState(state.board, state.turn, moves )
+        PositionState(
+          board = state.board, 
+          turn = state.turn, 
+          moveHistory = moves,
+          whitePlayer = Player("White"),
+          blackPlayer = Player("Black")
+        )
 
       case Left(err) =>
         throw new Exception(err)

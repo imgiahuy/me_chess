@@ -24,6 +24,7 @@ case class GameLoop(gameController: GameControllerInterface) {
   case class  MakeMove(raw: String) extends Command
   case object SaveGame              extends Command
   case object LoadGame              extends Command
+  case object ExportPgn             extends Command
 
   /** Maps a trimmed, lower-cased input string to a Command. Pure function. */
   def parseCommand(input: String): Command = {
@@ -36,6 +37,7 @@ case class GameLoop(gameController: GameControllerInterface) {
       case "quit"  :: Nil         => Quit
       case "save"  :: Nil         => SaveGame
       case "load"  :: Nil         => LoadGame
+      case "export" :: "pgn" :: Nil => ExportPgn
       case other :: Nil           => MakeMove(other)
       case other                  => MakeMove(other.mkString(" "))
     }
@@ -100,6 +102,15 @@ case class GameLoop(gameController: GameControllerInterface) {
           case e: Exception =>
             (state, Some(ConsoleRenderer.renderError(e.getMessage)))
         }
+
+      case ExportPgn =>
+        try {
+          gameController.exportToPgn(state, "TUI Game", "Local", "game.pgn")
+          (state, Some(ConsoleRenderer.renderSuccess("Game exported to 'game.pgn'")))
+        } catch {
+          case e: Exception =>
+            (state, Some(ConsoleRenderer.renderError(e.getMessage)))
+        }
     }
   }
 
@@ -135,7 +146,24 @@ case class GameLoop(gameController: GameControllerInterface) {
   /** Wires real stdin/stdout and starts the game. Only impure function. */
   def start(): Unit = {
     val readLine: () => Option[String] = () => Option(scala.io.StdIn.readLine())
+    
+    // Prompt for player names
+    println("=== Chess Game Setup ===")
+    println("Enter player names (press Enter for defaults):")
+    
+    val whiteName = readLine() match {
+      case Some(name) if name.trim.nonEmpty => name.trim
+      case _ => "White"
+    }
+    
+    val blackName = readLine() match {
+      case Some(name) if name.trim.nonEmpty => name.trim
+      case _ => "Black"
+    }
+    
+    println(s"\nStarting game: $whiteName vs $blackName")
     println(ConsoleRenderer.renderHelp)
-    loop(gameController.create(), readLine, println)
+    
+    loop(gameController.create(whiteName, blackName), readLine, println)
   }
 }

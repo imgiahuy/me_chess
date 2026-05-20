@@ -1,6 +1,6 @@
 package parser
 
-import model.{Black, Board, Piece, PieceType, Position, PositionState, White}
+import model.{Black, Board, Piece, PieceType, Player, Position, PositionState, White}
 
 /** Enhanced FEN (Forsyth-Edwards Notation) parser with better error handling.
  *
@@ -34,7 +34,13 @@ object FenParser:
     for {
       squares <- parseBoardPart(boardPart)
       turn <- parseTurnPart(turnPart)
-    } yield PositionState(Board(squares), turn, List.empty)
+    } yield PositionState(
+      board = Board(squares), 
+      turn = turn, 
+      moveHistory = List.empty,
+      whitePlayer = Player("White"),
+      blackPlayer = Player("Black")
+    )
 
   /** Parses the board placement part of FEN.
    *

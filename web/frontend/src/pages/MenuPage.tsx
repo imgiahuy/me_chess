@@ -6,17 +6,27 @@ export function MenuPage() {
     const navigate = useNavigate();
     const [loading, setLoading] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
+    const [showSetup, setShowSetup] = React.useState(false);
+    const [playerForm, setPlayerForm] = React.useState({ white: "White", black: "Black" });
 
     async function handleCreate() {
+        setShowSetup(true);
+        setError(null);
+    }
+
+    async function handleStartGame() {
         setLoading(true);
         setError(null);
         try {
-            const res = await createGame();
+            const whitePlayer = playerForm.white.trim() || "White";
+            const blackPlayer = playerForm.black.trim() || "Black";
+            const res = await createGame(whitePlayer, blackPlayer);
             navigate(`/game/${res.gameId}`);
         } catch (e) {
             setError(e instanceof Error ? e.message : "Failed to create game");
         } finally {
             setLoading(false);
+            setShowSetup(false);
         }
     }
 
@@ -53,6 +63,77 @@ export function MenuPage() {
                     View Games
                 </button>
             </div>
+
+            {/* Player Setup Dialog */}
+            {showSetup && (
+                <div style={{
+                    position: "fixed",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: "rgba(0, 0, 0, 0.5)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    zIndex: 1000
+                }}>
+                    <div style={{
+                        background: "white",
+                        padding: "2rem",
+                        borderRadius: "8px",
+                        border: "1px solid #e0e0e0",
+                        minWidth: "300px",
+                        maxWidth: "400px"
+                    }}>
+                        <h3>New Game Setup</h3>
+                        <div style={{ marginBottom: "1rem" }}>
+                            <label style={{ display: "block", marginBottom: "0.5rem", color: "#666" }}>
+                                White Player:
+                            </label>
+                            <input
+                                type="text"
+                                value={playerForm.white}
+                                onChange={(e) => setPlayerForm({ ...playerForm, white: e.target.value })}
+                                style={{
+                                    width: "100%",
+                                    padding: "0.5rem",
+                                    border: "1px solid #ccc",
+                                    borderRadius: "4px"
+                                }}
+                            />
+                        </div>
+                        <div style={{ marginBottom: "1.5rem" }}>
+                            <label style={{ display: "block", marginBottom: "0.5rem", color: "#666" }}>
+                                Black Player:
+                            </label>
+                            <input
+                                type="text"
+                                value={playerForm.black}
+                                onChange={(e) => setPlayerForm({ ...playerForm, black: e.target.value })}
+                                style={{
+                                    width: "100%",
+                                    padding: "0.5rem",
+                                    border: "1px solid #ccc",
+                                    borderRadius: "4px"
+                                }}
+                            />
+                        </div>
+                        <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+                            <button
+                                onClick={() => setShowSetup(false)}
+                                className="secondary"
+                                style={{ marginRight: "0.5rem" }}
+                            >
+                                Cancel
+                            </button>
+                            <button onClick={handleStartGame} disabled={loading}>
+                                {loading ? "Starting..." : "Start Game"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
