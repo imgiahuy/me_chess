@@ -21,10 +21,10 @@ export function Square({
                            onClick,
                        }: SquareProps) {
     const backgroundColor = isSelected
-        ? "#ffd700"
+        ? "#FFD700"
         : isDark
-            ? "#769656"
-            : "#eeeed2";
+            ? "#B58863"
+            : "#F0D9B5";
 
     const pieceSymbol = piece ? PIECE_SYMBOLS[piece] || piece : '';
 
@@ -45,7 +45,7 @@ export function Square({
             }}
             onMouseEnter={(e) => {
                 if (!isSelected) {
-                    e.currentTarget.style.backgroundColor = isDark ? "#85a965" : "#f0f0d0";
+                    e.currentTarget.style.backgroundColor = isDark ? "#C9A86C" : "#E8C89A";
                 }
             }}
             onMouseLeave={(e) => {

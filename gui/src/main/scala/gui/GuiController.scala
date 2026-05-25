@@ -16,6 +16,8 @@ class GuiController(gameControllerInterface: GameControllerInterface) {
   private var isProcessingMove: Boolean = false
   private var validMoves: Set[(Int, Int)] = Set()
   private var showingSetup: Boolean = true
+  private var moveHistory: List[String] = List()
+  private var notification: String = "Welcome to Chess!"
 
   val root = new BorderPane()
 
@@ -41,7 +43,9 @@ class GuiController(gameControllerInterface: GameControllerInterface) {
       handleLoad,
       handleExportPgn,
       selected,
-      validMoves
+      validMoves,
+      moveHistory,
+      notification
     )
   }
 
@@ -80,8 +84,11 @@ class GuiController(gameControllerInterface: GameControllerInterface) {
               state = newState
               selected = None
               validMoves = Set()
+              moveHistory = moveHistory :+ moveStr
+              notification = s"Move: $moveStr"
             case Left(err) =>
               println(err)
+              notification = s"Invalid move: $err"
               // Invalid move: keep selection and show error
           }
 
@@ -99,10 +106,12 @@ class GuiController(gameControllerInterface: GameControllerInterface) {
   private def handleSave(): Unit = {
     try {
       gameControllerInterface.save(state)
-      println("Game saved successfully!")
+      notification = "Game saved successfully!"
+      render()
     } catch {
       case e: Exception =>
-        println(s"Error saving: ${e.getMessage}")
+        notification = s"Error saving: ${e.getMessage}"
+        render()
     }
   }
 
@@ -111,11 +120,13 @@ class GuiController(gameControllerInterface: GameControllerInterface) {
       state = gameControllerInterface.load()
       selected = None
       validMoves = Set()
+      moveHistory = List()
+      notification = "Game loaded successfully!"
       render()
-      println("Game loaded successfully!")
     } catch {
       case e: Exception =>
-        println(s"Error loading: ${e.getMessage}")
+        notification = s"Error loading: ${e.getMessage}"
+        render()
     }
   }
 
@@ -130,17 +141,20 @@ class GuiController(gameControllerInterface: GameControllerInterface) {
     val blackPlayer = if (blackName.trim.nonEmpty) blackName.trim else "Black"
     
     state = gameControllerInterface.create(whitePlayer, blackPlayer)
+    moveHistory = List()
+    notification = s"Game started: $whitePlayer vs $blackPlayer"
     render()
-    println(s"Starting game: $whitePlayer vs $blackPlayer")
   }
 
   private def handleExportPgn(): Unit = {
     try {
       gameControllerInterface.exportToPgn(state, "GUI Game", "Local", "game.pgn")
-      println("Game exported successfully to 'game.pgn'")
+      notification = "Game exported successfully to 'game.pgn'"
+      render()
     } catch {
       case e: Exception =>
-        println(s"Failed to export game: ${e.getMessage}")
+        notification = s"Failed to export game: ${e.getMessage}"
+        render()
     }
   }
 }
