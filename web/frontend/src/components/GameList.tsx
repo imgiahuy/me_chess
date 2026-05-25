@@ -43,7 +43,7 @@ export function GameList() {
     return (
         <div className="container">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem" }}>
-                <h1>Games ({games.length})</h1>
+                <h1 style={{ color: "#e0e0e0" }}>Games ({games.length})</h1>
                 <button onClick={() => navigate("/")} className="secondary">
                     Back to Menu
                 </button>
@@ -52,29 +52,29 @@ export function GameList() {
             {error && <div className="error">{error}</div>}
 
             {games.length === 0 ? (
-                <p style={{ color: "#666" }}>No active games. Create a new game to get started.</p>
+                <p style={{ color: "#b0b0b0" }}>No active games. Create a new game to get started.</p>
             ) : (
                 <div style={{ display: "grid", gap: "1rem" }}>
                     {games.map(game => (
                         <div
                             key={game.gameId}
                             style={{
-                                background: "white",
+                                background: "#1E1E1E",
                                 padding: "1.5rem",
                                 borderRadius: "8px",
-                                border: "1px solid #e0e0e0",
+                                border: "1px solid #444",
                                 display: "flex",
                                 justifyContent: "space-between",
                                 alignItems: "center"
                             }}
                         >
                             <div>
-                                <h3 style={{ marginBottom: "0.5rem" }}>
+                                <h3 style={{ marginBottom: "0.5rem", color: "#e0e0e0" }}>
                                     <Link to={`/game/${game.gameId}`}>
                                         Game {game.gameId.slice(0, 8)}...
                                     </Link>
                                 </h3>
-                                <p style={{ color: "#666", fontSize: "0.875rem" }}>
+                                <p style={{ color: "#b0b0b0", fontSize: "0.875rem" }}>
                                     Turn: {game.turn} • Moves: {game.moveCount}
                                     {game.isGameOver && " • Game Over"}
                                 </p>

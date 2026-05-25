@@ -45,9 +45,9 @@ export function MenuPage() {
 
     return (
         <div className="container">
-            <h1>ME Chess</h1>
-            <p style={{ marginBottom: "2rem", color: "#666" }}>
-                A minimalist chess interface
+            <h1 style={{ color: "#e0e0e0" }}>ME Chess</h1>
+            <p style={{ marginBottom: "2rem", color: "#b0b0b0" }}>
+                A minimalist chess game by me
             </p>
             
             {error && <div className="error">{error}</div>}
@@ -79,16 +79,16 @@ export function MenuPage() {
                     zIndex: 1000
                 }}>
                     <div style={{
-                        background: "white",
+                        background: "#1E1E1E",
                         padding: "2rem",
                         borderRadius: "8px",
-                        border: "1px solid #e0e0e0",
+                        border: "1px solid #444",
                         minWidth: "300px",
                         maxWidth: "400px"
                     }}>
-                        <h3>New Game Setup</h3>
+                        <h3 style={{ color: "#e0e0e0" }}>New Game Setup</h3>
                         <div style={{ marginBottom: "1rem" }}>
-                            <label style={{ display: "block", marginBottom: "0.5rem", color: "#666" }}>
+                            <label style={{ display: "block", marginBottom: "0.5rem", color: "#b0b0b0" }}>
                                 White Player:
                             </label>
                             <input
@@ -98,13 +98,15 @@ export function MenuPage() {
                                 style={{
                                     width: "100%",
                                     padding: "0.5rem",
-                                    border: "1px solid #ccc",
-                                    borderRadius: "4px"
+                                    border: "1px solid #555",
+                                    borderRadius: "4px",
+                                    background: "#2C2C2C",
+                                    color: "#e0e0e0"
                                 }}
                             />
                         </div>
                         <div style={{ marginBottom: "1.5rem" }}>
-                            <label style={{ display: "block", marginBottom: "0.5rem", color: "#666" }}>
+                            <label style={{ display: "block", marginBottom: "0.5rem", color: "#b0b0b0" }}>
                                 Black Player:
                             </label>
                             <input
@@ -114,8 +116,10 @@ export function MenuPage() {
                                 style={{
                                     width: "100%",
                                     padding: "0.5rem",
-                                    border: "1px solid #ccc",
-                                    borderRadius: "4px"
+                                    border: "1px solid #555",
+                                    borderRadius: "4px",
+                                    background: "#2C2C2C",
+                                    color: "#e0e0e0"
                                 }}
                             />
                         </div>

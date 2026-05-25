@@ -4,6 +4,15 @@ import { useGame } from "../hooks/useGame";
 import { Board } from "../components/Board";
 import { saveGame, exportPgn } from "../utils/apiClient";
 
+// Helper function to convert Position(x,y) to algebraic notation
+function convertPositionToAlgebraic(message: string): string {
+    return message.replace(/Position\((\d+),(\d+)\)/g, (match, x, y) => {
+        const file = String.fromCharCode(97 + parseInt(x)); // 0->a, 1->b, etc.
+        const rank = parseInt(y) + 1;
+        return `${file}${rank}`;
+    });
+}
+
 export function GamePage() {
     const { gameId } = useParams();
     const navigate = useNavigate();
@@ -11,16 +20,28 @@ export function GamePage() {
     const [moveError, setMoveError] = React.useState<string | null>(null);
     const [saveMessage, setSaveMessage] = React.useState<string | null>(null);
     const [exportMessage, setExportMessage] = React.useState<string | null>(null);
+    const [notification, setNotification] = React.useState<string>("Welcome to the game!");
     const [showExportDialog, setShowExportDialog] = React.useState(false);
     const [exportForm, setExportForm] = React.useState({ event: "Web Game", site: "Online" });
+    const moveHistoryRef = React.useRef<HTMLDivElement>(null);
 
     async function handleMove(from: string, to: string) {
         setMoveError(null);
         setSaveMessage(null);
+        setNotification(`Move: ${from} → ${to}`);
         try {
             await move(from, to);
+            setNotification(`Move successful: ${from} → ${to}`);
+            // Scroll to bottom of move history after successful move
+            setTimeout(() => {
+                if (moveHistoryRef.current) {
+                    moveHistoryRef.current.scrollTop = moveHistoryRef.current.scrollHeight;
+                }
+            }, 100);
         } catch (e) {
-            setMoveError(e instanceof Error ? e.message : "Failed to make move");
+            const errorMsg = e instanceof Error ? e.message : "Failed to make move";
+            setMoveError(errorMsg);
+            setNotification(convertPositionToAlgebraic(errorMsg));
         }
     }
 
@@ -28,6 +49,7 @@ export function GamePage() {
         setMoveError(null);
         setSaveMessage(null);
         setExportMessage(null);
+        setNotification("Exporting game to PGN...");
         try {
             const response = await exportPgn(gameId!, exportForm.event, exportForm.site);
             // Download the PGN file
@@ -41,20 +63,25 @@ export function GamePage() {
             document.body.removeChild(a);
             window.URL.revokeObjectURL(url);
             setExportMessage("Game exported successfully");
+            setNotification("Game exported successfully to " + response.filename);
             setShowExportDialog(false);
         } catch (e) {
             setMoveError(e instanceof Error ? e.message : "Failed to export game");
+            setNotification("Failed to export game");
         }
     }
 
     async function handleSave() {
         setMoveError(null);
         setSaveMessage(null);
+        setNotification("Saving game...");
         try {
             await saveGame(gameId!);
             setSaveMessage("Game saved successfully");
+            setNotification("Game saved successfully");
         } catch (e) {
             setMoveError(e instanceof Error ? e.message : "Failed to save game");
+            setNotification("Failed to save game");
         }
     }
 
@@ -70,9 +97,11 @@ export function GamePage() {
                 </button>
             </div>
 
-            {moveError && <div className="error">{moveError}</div>}
-            {saveMessage && <div className="success">{saveMessage}</div>}
-            {exportMessage && <div className="success">{exportMessage}</div>}
+            <div style={{ minHeight: "60px", marginBottom: "1rem" }}>
+                {moveError && <div className="error">{convertPositionToAlgebraic(moveError)}</div>}
+                {saveMessage && <div className="success">{saveMessage}</div>}
+                {exportMessage && <div className="success">{exportMessage}</div>}
+            </div>
 
             <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap" }}>
                 <div>
@@ -83,16 +112,16 @@ export function GamePage() {
                 </div>
 
                 <div style={{ flex: 1, minWidth: "250px" }}>
-                    <div style={{ background: "white", padding: "1.5rem", borderRadius: "8px", border: "1px solid #e0e0e0", marginBottom: "1rem" }}>
-                        <h3>Game Status</h3>
-                        <p style={{ color: "#666" }}>
+                    <div style={{ background: "#1E1E1E", padding: "1.5rem", borderRadius: "8px", border: "1px solid #444", marginBottom: "1rem" }}>
+                        <h3 style={{ color: "#e0e0e0" }}>Game Status</h3>
+                        <p style={{ color: "#b0b0b0" }}>
                             <strong>Turn:</strong> {game.turn}
                         </p>
-                        <p style={{ color: "#666" }}>
+                        <p style={{ color: "#b0b0b0" }}>
                             <strong>Moves:</strong> {game.moveHistory.length}
                         </p>
                         {game.isGameOver && (
-                            <p style={{ color: "#c33", fontWeight: "bold" }}>
+                            <p style={{ color: "#ff6b6b", fontWeight: "bold" }}>
                                 Game Over - {game.winner || "Draw"}
                             </p>
                         )}
@@ -110,16 +139,35 @@ export function GamePage() {
                         </button>
                     </div>
 
-                    {game.moveHistory.length > 0 && (
-                        <div style={{ marginTop: "1rem", background: "white", padding: "1.5rem", borderRadius: "8px", border: "1px solid #e0e0e0" }}>
-                            <h3>Move History</h3>
-                            <div style={{ maxHeight: "200px", overflowY: "auto", color: "#666", fontSize: "0.875rem" }}>
-                                {game.moveHistory.map((move, i) => (
-                                    <div key={i}>{move}</div>
-                                ))}
-                            </div>
+                    <div style={{ marginTop: "1rem", background: "#1E1E1E", padding: "1.5rem", borderRadius: "8px", border: "1px solid #444" }}>
+                        <h3 style={{ color: "#e0e0e0" }}>Move History</h3>
+                        <div 
+                            ref={moveHistoryRef}
+                            style={{ 
+                                height: "200px", 
+                                overflowY: "auto", 
+                                color: "#b0b0b0", 
+                                fontSize: "0.875rem",
+                                display: "flex",
+                                flexDirection: "column"
+                            }}
+                        >
+                            {game.moveHistory.length > 0 ? (
+                                game.moveHistory.map((move, i) => (
+                                    <div key={i} style={{ padding: "2px 0" }}>{move}</div>
+                                ))
+                            ) : (
+                                <div style={{ color: "#666", fontStyle: "italic" }}>No moves yet</div>
+                            )}
                         </div>
-                    )}
+                    </div>
+
+                    <div style={{ marginTop: "1rem", background: "#1E1E1E", padding: "1.5rem", borderRadius: "8px", border: "1px solid #444" }}>
+                        <h3 style={{ color: "#e0e0e0" }}>Notifications</h3>
+                        <div style={{ color: "#e0e0e0", fontSize: "0.875rem" }}>
+                            {notification}
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -138,16 +186,16 @@ export function GamePage() {
                     zIndex: 1000
                 }}>
                     <div style={{
-                        background: "white",
+                        background: "#1E1E1E",
                         padding: "2rem",
                         borderRadius: "8px",
-                        border: "1px solid #e0e0e0",
+                        border: "1px solid #444",
                         minWidth: "300px",
                         maxWidth: "400px"
                     }}>
-                        <h3>Export Game to PGN</h3>
+                        <h3 style={{ color: "#e0e0e0" }}>Export Game to PGN</h3>
                         <div style={{ marginBottom: "1rem" }}>
-                            <label style={{ display: "block", marginBottom: "0.5rem", color: "#666" }}>
+                            <label style={{ display: "block", marginBottom: "0.5rem", color: "#b0b0b0" }}>
                                 Event:
                             </label>
                             <input
@@ -157,13 +205,15 @@ export function GamePage() {
                                 style={{
                                     width: "100%",
                                     padding: "0.5rem",
-                                    border: "1px solid #ccc",
-                                    borderRadius: "4px"
+                                    border: "1px solid #555",
+                                    borderRadius: "4px",
+                                    background: "#2C2C2C",
+                                    color: "#e0e0e0"
                                 }}
                             />
                         </div>
                         <div style={{ marginBottom: "1.5rem" }}>
-                            <label style={{ display: "block", marginBottom: "0.5rem", color: "#666" }}>
+                            <label style={{ display: "block", marginBottom: "0.5rem", color: "#b0b0b0" }}>
                                 Site:
                             </label>
                             <input
@@ -173,8 +223,10 @@ export function GamePage() {
                                 style={{
                                     width: "100%",
                                     padding: "0.5rem",
-                                    border: "1px solid #ccc",
-                                    borderRadius: "4px"
+                                    border: "1px solid #555",
+                                    borderRadius: "4px",
+                                    background: "#2C2C2C",
+                                    color: "#e0e0e0"
                                 }}
                             />
                         </div>
