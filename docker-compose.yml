@@ -1,4 +1,42 @@
 services:
+  # PostgreSQL Database Service
+  postgres:
+    image: postgres:15
+    container_name: chess-postgres
+    ports:
+      - "5432:5432"
+    networks:
+      - chess-network
+    environment:
+      - POSTGRES_DB=chess
+      - POSTGRES_USER=chess_user
+      - POSTGRES_PASSWORD=chess_password
+    volumes:
+      - chess-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chess_user -d chess"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MongoDB Database Service
+  mongodb:
+    image: mongo:7
+    container_name: chess-mongodb
+    ports:
+      - "27017:27017"
+    networks:
+      - chess-network
+    environment:
+      - MONGO_INITDB_DATABASE=chess
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # REST API Service
   rest-api:
     build:
@@ -9,8 +47,16 @@ services:
       - "8085:8080"
     networks:
       - chess-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
     environment:
       - JAVA_OPTS=-Xmx512m
+      - MONGODB_HOST=mongodb
+      - MONGODB_PORT=27017
+      - MONGODB_DATABASE=chess
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/v1/chess/info"]
       interval: 30s
@@ -78,4 +124,6 @@ networks:
 
 volumes:
   chess-data:
+    driver: local
+  mongo-data:
     driver: local

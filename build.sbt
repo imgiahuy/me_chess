@@ -62,22 +62,43 @@ lazy val gui = project
 
 lazy val persistent = project
   .in(file("persistent"))
-  .settings(commonSettings)
+  .settings(
+    commonSettings,
+    libraryDependencies ++= Seq(
+      "com.typesafe.slick" %% "slick" % "3.5.1",
+      "com.typesafe.slick" %% "slick-hikaricp" % "3.5.1",
+      "com.h2database" % "h2" % "2.2.224",
+      "org.postgresql" % "postgresql" % "42.7.4",
+      "org.mongodb" % "mongodb-driver-sync" % "4.11.0",
+      "ch.qos.logback" % "logback-classic" % "1.4.14",
+      "com.lihaoyi" %% "upickle" % "3.1.0"
+    )
+  )
   .dependsOn(core, shared)
 
 // --- REST API (Http4s) ---
 lazy val restApi = project
   .in(file("rest-api"))
+  .enablePlugins(GatlingPlugin)
   .settings(
     commonSettings,
     libraryDependencies ++= Seq(
       "com.typesafe.akka" %% "akka-actor-typed" % "2.8.5",
       "com.typesafe.akka" %% "akka-http" % "10.5.3",
       "com.typesafe.akka" %% "akka-stream" % "2.8.5",
-      "com.lihaoyi" %% "upickle" % "3.1.0"
+      "com.typesafe.akka" %% "akka-http-testkit" % "10.5.3" % Test,
+      "com.lihaoyi" %% "upickle" % "3.1.0",
+      "io.gatling.highcharts" % "gatling-charts-highcharts" % "3.11.5" % Test,
+      "io.gatling"            % "gatling-test-framework"    % "3.11.5" % Test
     ),
     assembly / assemblyJarName := "chess-rest-api.jar",
-    assembly / mainClass := Some("api.ChessRestServer")
+    assembly / mainClass := Some("api.ChessRestServer"),
+    assembly / assemblyMergeStrategy := {
+      case PathList("META-INF", "MANIFEST.MF") => MergeStrategy.discard
+      case PathList("META-INF", xs @ _*) => MergeStrategy.discard
+      case "reference.conf" => MergeStrategy.concat
+      case _ => MergeStrategy.first
+    }
   )
   .dependsOn(core, persistent, shared)
 

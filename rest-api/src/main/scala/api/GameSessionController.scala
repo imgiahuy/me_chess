@@ -50,12 +50,12 @@ class GameSessionController(
   def listGames(): List[String] =
     repo.listGames()
 
-  /** Save a specific game */
+  /** Save a specific game to the database */
   def saveGame(gameId: String): Either[String, Unit] = {
     repo.getGame(gameId) match {
       case Some(state) =>
         try {
-          controller.save(state)
+          repo.updateGame(gameId, state)
           Right(())
         } catch {
           case e: Exception => Left(s"Failed to save game: ${e.getMessage}")
@@ -65,14 +65,27 @@ class GameSessionController(
     }
   }
 
-  /** Load a game and create a new session for it */
-  def loadGame(): Either[String, String] = {
-    try {
-      val state = controller.load()
-      Right(repo.createGame(state))
-    } catch {
-      case e: Exception => Left(s"Failed to load game: ${e.getMessage}")
+  /** Load a game from the database by ID and create a new session for it */
+  def loadGame(gameId: String): Either[String, String] = {
+    repo.getGame(gameId) match {
+      case Some(state) =>
+        state.id match {
+          case Some(existingId) => Right(existingId)
+          case None =>
+            try {
+              Right(repo.createGame(state))
+            } catch {
+              case e: Exception => Left(s"Failed to load game: ${e.getMessage}")
+            }
+        }
+      case None =>
+        Left("Game not found")
     }
+  }
+
+  /** Load the latest game from the database and create a new session for it */
+  def loadLatestGame(): Either[String, String] = {
+    repo.loadLatestGame()
   }
 
   /** Check if a game is over */

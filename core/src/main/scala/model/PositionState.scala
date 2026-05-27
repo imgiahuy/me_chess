@@ -8,5 +8,6 @@ case class PositionState(
   moveHistory: List[Move],
   whitePlayer: Player,
   blackPlayer: Player,
-  creationDate: LocalDate = LocalDate.now()
+  creationDate: LocalDate = LocalDate.now(),
+  id: Option[String] = None
 )

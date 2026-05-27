@@ -14,29 +14,29 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
 
   private def jsonResponse[T: upickle.default.Writer](obj: T): HttpEntity.Strict =
     HttpEntity(ContentTypes.`application/json`, upickle.default.write(obj))
-  
+
   private def parseJson[T: upickle.default.Reader](body: String): Either[String, T] =
     try {
       Right(upickle.default.read[T](body))
     } catch {
       case e: Exception => Left(s"Invalid JSON request body: ${e.getMessage}")
     }
-  
+
   private val apiVersion = "v1"
-  
+
   private def corsHeaders: List[HttpHeader] = List(
     headers.`Access-Control-Allow-Origin`.*,
     headers.`Access-Control-Allow-Methods`(akka.http.scaladsl.model.HttpMethods.GET, akka.http.scaladsl.model.HttpMethods.POST, akka.http.scaladsl.model.HttpMethods.DELETE, akka.http.scaladsl.model.HttpMethods.OPTIONS),
     headers.`Access-Control-Allow-Headers`("Content-Type", "Authorization"),
     headers.`Access-Control-Max-Age`(3600)
   )
-  
+
   private def withCorsHeaders: Route => Route = { route =>
     respondWithHeaders(corsHeaders) {
       route
     }
   }
-  
+
   private def validateGameId(gameId: String): Either[String, Unit] = {
     if (gameId.trim.isEmpty) Left("Game ID cannot be empty")
     else if (gameId.length > 100) Left("Game ID is too long (max 100 characters)")
@@ -195,12 +195,31 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
         ) ~(
           // ─── Load Game ────────────────────────────────────────────────────────
 
-          /** POST /v1/chess/games/load - Load a saved game */
+          /** POST /v1/chess/games/{gameId}/load - Load a saved game from database */
           post {
-            path("games" / "load") {
-              sessionController.loadGame() match {
-                case Right(gameId) =>
-                  complete(StatusCodes.Created, jsonResponse(CreatedGameResponse(gameId, "Game loaded successfully")))
+            path("games" / Segment / "load") { gameId =>
+              validateGameId(gameId) match {
+                case Right(_) =>
+                  sessionController.loadGame(gameId) match {
+                    case Right(newGameId) =>
+                      complete(StatusCodes.Created, jsonResponse(CreatedGameResponse(newGameId, "Game loaded successfully")))
+                    case Left(error) =>
+                      complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+                  }
+                case Left(error) =>
+                  complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+              }
+            }
+          }
+        ) ~(
+          // ─── Load Latest Game ─────────────────────────────────────────────────
+
+          /** POST /v1/chess/games/load-latest - Load the latest saved game from database */
+          post {
+            path("games" / "load-latest") {
+              sessionController.loadLatestGame() match {
+                case Right(newGameId) =>
+                  complete(StatusCodes.Created, jsonResponse(CreatedGameResponse(newGameId, "Latest game loaded successfully")))
                 case Left(error) =>
                   complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
               }
