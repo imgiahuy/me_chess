@@ -57,11 +57,19 @@ export async function saveGame(gameId: string) {
     return res.json();
 }
 
-export async function loadGame() {
-    const res = await fetch(`${BASE_URL}/games/load`, {
+export async function loadGame(gameId: string) {
+    const res = await fetch(`${BASE_URL}/games/${gameId}/load`, {
         method: "POST",
     });
     if (!res.ok) throw new Error(`Failed to load game: ${res.status}`);
+    return res.json();
+}
+
+export async function loadLatestGame() {
+    const res = await fetch(`${BASE_URL}/games/load-latest`, {
+        method: "POST",
+    });
+    if (!res.ok) throw new Error(`Failed to load latest game: ${res.status}`);
     return res.json();
 }
 

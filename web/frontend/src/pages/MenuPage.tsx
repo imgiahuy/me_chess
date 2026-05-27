@@ -1,6 +1,6 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { createGame, loadGame } from "../utils/apiClient";
+import { createGame, loadLatestGame } from "../utils/apiClient";
 
 export function MenuPage() {
     const navigate = useNavigate();
@@ -30,14 +30,17 @@ export function MenuPage() {
         }
     }
 
-    async function handleLoad() {
+    async function handleLoadGames() {
         setLoading(true);
         setError(null);
         try {
-            const res = await loadGame();
+            const res = await loadLatestGame();
+            if (!res?.gameId) {
+                throw new Error(res?.error || "No latest game available");
+            }
             navigate(`/game/${res.gameId}`);
         } catch (e) {
-            setError(e instanceof Error ? e.message : "Failed to load game");
+            setError(e instanceof Error ? e.message : "Failed to load latest game");
         } finally {
             setLoading(false);
         }
@@ -56,8 +59,8 @@ export function MenuPage() {
                 <button onClick={handleCreate} disabled={loading}>
                     {loading ? "Creating..." : "New Game"}
                 </button>
-                <button onClick={handleLoad} disabled={loading} className="secondary">
-                    {loading ? "Loading..." : "Load Saved Game"}
+                <button onClick={handleLoadGames} disabled={loading} className="secondary">
+                    Load Latest Game
                 </button>
                 <button onClick={() => navigate("/games")} disabled={loading} className="secondary">
                     View Games

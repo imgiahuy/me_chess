@@ -120,7 +120,7 @@ class GuiController(gameControllerInterface: GameControllerInterface) {
       state = gameControllerInterface.load()
       selected = None
       validMoves = Set()
-      moveHistory = List()
+      moveHistory = state.moveHistory.map(move => s"${toAlg(move.from.col, move.from.row)}${toAlg(move.to.col, move.to.row)}")
       notification = "Game loaded successfully!"
       render()
     } catch {

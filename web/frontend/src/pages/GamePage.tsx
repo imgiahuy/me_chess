@@ -6,7 +6,7 @@ import { saveGame, exportPgn } from "../utils/apiClient";
 
 // Helper function to convert Position(x,y) to algebraic notation
 function convertPositionToAlgebraic(message: string): string {
-    return message.replace(/Position\((\d+),(\d+)\)/g, (match, x, y) => {
+    return message.replace(/Position\((\d+),(\d+)\)/g, (_match, x, y) => {
         const file = String.fromCharCode(97 + parseInt(x)); // 0->a, 1->b, etc.
         const rank = parseInt(y) + 1;
         return `${file}${rank}`;

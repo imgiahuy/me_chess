@@ -5,12 +5,14 @@ import akka.actor.typed.scaladsl.Behaviors
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.{Directives, Route}
 import controller.GameController
+import database.DatabaseManager
+import repository.DatabaseGameRepository
+import repository.MongoGameRepository
+
 
 import scala.concurrent.ExecutionContextExecutor
-import scala.io.StdIn
 import scala.language.postfixOps
 import scala.util.{Failure, Success}
-import repository.GameRepository
 
 /** REST API server for the Chess application.
  *
@@ -23,16 +25,42 @@ object ChessRestServer {
     run()
   }
 
-  def run(host: String = "0.0.0.0", port: Int = 8080): Unit = {
+  def run(host: String = "0.0.0.0", port: Int = 8081): Unit = {
     implicit val system: ActorSystem[Unit] = ActorSystem(Behaviors.empty[Unit], "chess-api")
     implicit val ec: ExecutionContextExecutor = system.executionContext
 
     try {
       println("[INFO] Initializing Chess REST API Server...")
-      println("[INFO] Creating game controller and repository...")
+      println("[INFO] Creating game controller and database...")
       
       val controller = new GameController()
-      val gameRepository = new GameRepository
+
+      //val gameRepository = new InMemoryGameRepository()
+
+      //val dbManager = DatabaseManager.postgresql(
+        //host = "localhost",
+        //port = 5432,
+        //database = "chess",
+       // user = "chess_user",
+     //   password = "chess_password"
+      //)
+
+      // Initialize database schema
+     // println("[INFO] Initializing database schema...")
+     // dbManager.initializeSchema()
+
+      val dbManager = DatabaseManager.mongodb(
+        host = sys.env.getOrElse("MONGODB_HOST", "localhost"),
+        port = sys.env.getOrElse("MONGODB_PORT", "27017").toInt,
+        database = sys.env.getOrElse("MONGODB_DATABASE", "chess")
+      )
+
+      // Initialize database schema
+      println("[INFO] Initializing database schema...")
+      dbManager.initializeSchema()
+      
+      // Create database-backed repository
+      val gameRepository = new DatabaseGameRepository(dbManager.gameDao)
       val sessionController = new GameSessionController(controller, gameRepository)
 
       println("[INFO] Setting up API routes...")
@@ -53,6 +81,7 @@ object ChessRestServer {
           println("[INFO] Chess API: " + serverUrl + "/v1/chess/info")
           println("[INFO] Create Game: POST " + serverUrl + "/v1/chess/games")
           println("[INFO] List Games: GET " + serverUrl + "/v1/chess/games")
+          println("[INFO] Database: MongoDB (games will persist in database)")
           println("============================================================")
           println("[INFO] Server running continuously...")
           println("")
@@ -61,6 +90,8 @@ object ChessRestServer {
           sys.addShutdownHook {
             println("[INFO] Shutting down server...")
             binding.unbind().onComplete { _ =>
+              dbManager.close()
+              println("[INFO] Database closed")
               println("[INFO] Server stopped")
               system.terminate()
             }

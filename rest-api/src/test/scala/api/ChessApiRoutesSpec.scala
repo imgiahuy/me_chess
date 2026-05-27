@@ -7,14 +7,14 @@ import akka.http.scaladsl.testkit.ScalatestRouteTest
 import controller.GameController
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
-import repository.GameRepository
+import repository.InMemoryGameRepository
 import upickle.default.read
 
 class ChessApiRoutesSpec extends AnyWordSpec with Matchers with ScalatestRouteTest {
 
   implicit val system: ActorSystem[Unit] = ActorSystem(Behaviors.empty[Unit], "test-system")
 
-  val gameRepository = new GameRepository
+  val gameRepository = new InMemoryGameRepository
   val gameController = new GameController()
   val sessionController = new GameSessionController(gameController, gameRepository)
   val routes = new ChessApiRoutes(sessionController).routes
