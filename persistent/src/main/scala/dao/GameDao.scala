@@ -30,6 +30,9 @@ trait GameDao {
   /** Lists all games. */
   def findAll(): Future[List[PositionState]]
 
+  /** Lists lightweight game summaries (id, turn, moveCount, isGameOver) without full state. */
+  def listSummaries(): Future[List[(String, String, Int, Boolean)]]
+
   /** Finds the latest game by creation date. */
   def findLatest(): Future[Option[PositionState]]
 }

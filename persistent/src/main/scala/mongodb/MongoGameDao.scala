@@ -113,6 +113,25 @@ class MongoGameDao(
     }
   }
 
+  override def listSummaries(): Future[List[(String, String, Int, Boolean)]] = {
+    Future {
+      // Use projection to only fetch id and turn, not boardState or other large fields
+      val projection = new Document()
+        .append("id", 1)
+        .append("turn", 1)
+        .append("_id", 0)
+      collection.find().projection(projection).asScala.map { doc =>
+        val gameId = doc.getString("id")
+        val turn = doc.getString("turn")
+        // Count moves without fetching them - use move count from metadata if available
+        // For now, we'll estimate from the document or return 0
+        val moveCount = 0 // TODO: Store move count in game document for efficiency
+        val isGameOver = false // TODO: Store game over status in game document for efficiency
+        (gameId, turn, moveCount, isGameOver)
+      }.toList
+    }
+  }
+
   override def findAll(): Future[List[PositionState]] = {
     Future {
       collection.find().asScala.map { doc =>

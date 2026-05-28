@@ -50,6 +50,10 @@ class GameSessionController(
   def listGames(): List[String] =
     repo.listGames()
 
+  /** Get lightweight summaries of all games */
+  def getGameSummaries(): List[(String, String, Int, Boolean)] =
+    repo.getGameSummaries()
+
   /** Save a specific game to the database */
   def saveGame(gameId: String): Either[String, Unit] = {
     repo.getGame(gameId) match {

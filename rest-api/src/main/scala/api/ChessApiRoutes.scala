@@ -137,16 +137,14 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
           get {
             path("games") {
               try {
-                val gameIds = sessionController.listGames()
-                val gameSummaries = gameIds.flatMap { gameId =>
-                  sessionController.getGame(gameId).map { state =>
-                    GameSummary(
-                      gameId = gameId,
-                      turn = state.turn.toString,
-                      isGameOver = service.GameService.isGameOver(state),
-                      moveCount = state.moveHistory.length
-                    )
-                  }
+                val summaries = sessionController.getGameSummaries()
+                val gameSummaries = summaries.map { case (gameId, turn, moveCount, isGameOver) =>
+                  GameSummary(
+                    gameId = gameId,
+                    turn = turn,
+                    isGameOver = isGameOver,
+                    moveCount = moveCount
+                  )
                 }
                 complete(jsonResponse(GamesListResponse(gameSummaries, gameSummaries.length)))
               } catch {

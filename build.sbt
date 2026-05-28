@@ -1,5 +1,7 @@
 ThisBuild / version := "0.1.0-SNAPSHOT"
-ThisBuild / scalaVersion := "3.8.3"
+ThisBuild / scalaVersion := "3.3.3"
+ThisBuild / scalacOptions += "-language:postfixOps"
+import sbtassembly.AssemblyPlugin.autoImport._
 
 // --- OS detection for JavaFX ---
 val osName = System.getProperty("os.name").toLowerCase
@@ -32,8 +34,8 @@ lazy val tui = project
   .in(file("tui"))
   .settings(
     commonSettings,
-    assembly / assemblyJarName := "chess-tui.jar",
-    assembly / mainClass := Some("tui.TuiEntry")
+    sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyJarName := "chess-tui.jar",
+    sbtassembly.AssemblyPlugin.autoImport.assembly / mainClass := Some("tui.TuiEntry")
   )
   .dependsOn(core, shared)
 
@@ -51,9 +53,9 @@ lazy val gui = project
       "org.openjfx" % "javafx-graphics" % "21" classifier platform,
 
     ),
-    assembly / assemblyJarName := "chess-gui.jar",
-    assembly / mainClass := Some("gui.GuiEntry"),
-    assembly / assemblyMergeStrategy := {
+    sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyJarName := "chess-gui.jar",
+    sbtassembly.AssemblyPlugin.autoImport.assembly / mainClass := Some("gui.GuiEntry"),
+    sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyMergeStrategy := {
       case PathList("META-INF", xs @ _*) => MergeStrategy.discard
       case x => MergeStrategy.first
     }
@@ -82,18 +84,27 @@ lazy val restApi = project
   .enablePlugins(GatlingPlugin)
   .settings(
     commonSettings,
+    fork := true,
+    Test / javaOptions ++= Seq(
+      "--add-opens=java.base/java.lang=ALL-UNNAMED",
+      "--add-opens=java.base/java.util=ALL-UNNAMED"
+    ),
+    Gatling / javaOptions ++= Seq(
+      "--add-opens=java.base/java.lang=ALL-UNNAMED",
+      "--add-opens=java.base/java.util=ALL-UNNAMED"
+    ),
     libraryDependencies ++= Seq(
       "com.typesafe.akka" %% "akka-actor-typed" % "2.8.5",
       "com.typesafe.akka" %% "akka-http" % "10.5.3",
       "com.typesafe.akka" %% "akka-stream" % "2.8.5",
       "com.typesafe.akka" %% "akka-http-testkit" % "10.5.3" % Test,
       "com.lihaoyi" %% "upickle" % "3.1.0",
-      "io.gatling.highcharts" % "gatling-charts-highcharts" % "3.11.5" % Test,
-      "io.gatling"            % "gatling-test-framework"    % "3.11.5" % Test
+      "io.gatling.highcharts" % "gatling-charts-highcharts" % "3.14.0" % Test,
+      "io.gatling"            % "gatling-test-framework"    % "3.14.0" % Test
     ),
-    assembly / assemblyJarName := "chess-rest-api.jar",
-    assembly / mainClass := Some("api.ChessRestServer"),
-    assembly / assemblyMergeStrategy := {
+    sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyJarName := "chess-rest-api.jar",
+    sbtassembly.AssemblyPlugin.autoImport.assembly / mainClass := Some("api.ChessRestServer"),
+    sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyMergeStrategy := {
       case PathList("META-INF", "MANIFEST.MF") => MergeStrategy.discard
       case PathList("META-INF", xs @ _*) => MergeStrategy.discard
       case "reference.conf" => MergeStrategy.concat
