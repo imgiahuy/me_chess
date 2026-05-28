@@ -2,6 +2,9 @@
 <project version="4">
   <component name="ScalaCompilerConfiguration">
     <option name="separateProdTestSources" value="true" />
-    <profile name="sbt 1" modules="me_chess,me_chess.application,me_chess.application~1,me_chess.core,me_chess.core.main,me_chess.core.test,me_chess.domain,me_chess.gui,me_chess.gui.main,me_chess.gui.test,me_chess.infrastructure,me_chess.main,me_chess.persistent,me_chess.persistent.main,me_chess.persistent.test,me_chess.restApi,me_chess.restApi.main,me_chess.restApi.test,me_chess.shared,me_chess.shared.main,me_chess.shared.test,me_chess.test,me_chess.tui,me_chess.tui.main,me_chess.tui.test" />
+    <profile name="sbt 1" modules="me_chess,me_chess.application,me_chess.application~1,me_chess.core,me_chess.domain,me_chess.gui,me_chess.infrastructure,me_chess.persistent,me_chess.restApi,me_chess.shared,me_chess.tui" />
+    <profile name="sbt 2" modules="me_chess.core.main,me_chess.core.test,me_chess.gui.main,me_chess.gui.test,me_chess.main,me_chess.persistent.main,me_chess.persistent.test,me_chess.restApi.main,me_chess.restApi.test,me_chess.shared.main,me_chess.shared.test,me_chess.test,me_chess.tui.main,me_chess.tui.test">
+      <option name="postfixOps" value="true" />
+    </profile>
   </component>
 </project>

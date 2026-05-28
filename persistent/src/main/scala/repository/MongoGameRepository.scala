@@ -42,6 +42,11 @@ class MongoGameRepository(gameDao: GameDao)(implicit ec: ExecutionContext) exten
     Await.result(gameDao.listAll(), timeout)
   }
 
+  /** Gets lightweight summaries of all games without full state. */
+  def getGameSummaries(): List[(String, String, Int, Boolean)] = {
+    Await.result(gameDao.listSummaries(), timeout)
+  }
+
   /** Lists all games. */
   def listAllGames(): List[PositionState] = {
     Await.result(gameDao.findAll(), timeout)

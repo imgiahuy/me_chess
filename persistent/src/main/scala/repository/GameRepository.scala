@@ -21,6 +21,9 @@ trait GameRepository {
   /** Lists all active game IDs. */
   def listGames(): List[String]
 
+  /** Gets lightweight summaries of all games without full state. */
+  def getGameSummaries(): List[(String, String, Int, Boolean)]
+
   /** Loads the latest game from the database and returns its ID. */
   def loadLatestGame(): Either[String, String]
 }
@@ -61,6 +64,13 @@ class InMemoryGameRepository extends GameRepository {
 
   /** Lists all active game IDs. */
   def listGames(): List[String] = games.keys.toList
+
+  /** Gets lightweight summaries of all games without full state. */
+  def getGameSummaries(): List[(String, String, Int, Boolean)] = {
+    games.map { case (gameId, state) =>
+      (gameId, state.turn.toString, state.moveHistory.length, service.GameService.isGameOver(state))
+    }.toList
+  }
 
   /** Loads the latest game from the database and returns its ID. */
   def loadLatestGame(): Either[String, String] = Left("Not supported in in-memory repository")

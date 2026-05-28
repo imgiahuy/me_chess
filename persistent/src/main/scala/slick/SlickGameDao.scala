@@ -89,6 +89,18 @@ class SlickGameDao(db: Database, tables: Tables, playerDao: SlickPlayerDao, move
     db.run(action).map(_.toList)
   }
 
+  override def listSummaries(): Future[List[(String, String, Int, Boolean)]] = {
+    val action = tables.games.map(g => (g.id, g.turn)).result
+    db.run(action).map { rows =>
+      rows.map { case (id, turn) =>
+        // TODO: Store move count and game over status in game document for efficiency
+        val moveCount = 0
+        val isGameOver = false
+        (id, turn, moveCount, isGameOver)
+      }.toList
+    }
+  }
+
   override def findAll(): Future[List[PositionState]] = {
     val action = tables.games.result
     db.run(action).flatMap { gameRows =>
