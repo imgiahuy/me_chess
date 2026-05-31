@@ -6,9 +6,7 @@ metadata:
 type: Opaque
 stringData:
   KEYCLOAK_ADMIN: admin
-  KEYCLOAK_ADMIN_PASSWORD: admin
-  KC_DB_USERNAME: keycloak
-  KC_DB_PASSWORD: keycloak_password
+  KEYCLOAK_ADMIN_PASSWORD: admin123
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -17,24 +15,12 @@ metadata:
   namespace: chess
 data:
   KC_DB: postgres
-  KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+  KC_DB_URL: jdbc:postgresql://postgres:5432/chess
   KC_HOSTNAME: chess.local
   KC_HOSTNAME_PORT: "8081"
   KC_HOSTNAME_STRICT: "false"
   KC_HOSTNAME_STRICT_HTTPS: "false"
   KC_HTTP_ENABLED: "true"
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: keycloak-pvc
-  namespace: chess
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 2Gi
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -52,178 +38,65 @@ spec:
         app: keycloak
     spec:
       containers:
-      - name: keycloak
-        image: quay.io/keycloak/keycloak:24.0
-        ports:
-        - containerPort: 8080
-        env:
-        - name: KEYCLOAK_ADMIN
-          valueFrom:
-            secretKeyRef:
-              name: keycloak-secret
-              key: KEYCLOAK_ADMIN
-        - name: KEYCLOAK_ADMIN_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: keycloak-secret
-              key: KEYCLOAK_ADMIN_PASSWORD
-        - name: KC_DB
-          valueFrom:
-            configMapKeyRef:
-              name: keycloak-config
-              key: KC_DB
-        - name: KC_DB_URL
-          valueFrom:
-            configMapKeyRef:
-              name: keycloak-config
-              key: KC_DB_URL
-        - name: KC_DB_USERNAME
-          valueFrom:
-            secretKeyRef:
-              name: keycloak-secret
-              key: KC_DB_USERNAME
-        - name: KC_DB_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: keycloak-secret
-              key: KC_DB_PASSWORD
-        - name: KC_HOSTNAME
-          valueFrom:
-            configMapKeyRef:
-              name: keycloak-config
-              key: KC_HOSTNAME
-        - name: KC_HOSTNAME_PORT
-          valueFrom:
-            configMapKeyRef:
-              name: keycloak-config
-              key: KC_HOSTNAME_PORT
-        - name: KC_HOSTNAME_STRICT
-          valueFrom:
-            configMapKeyRef:
-              name: keycloak-config
-              key: KC_HOSTNAME_STRICT
-        - name: KC_HOSTNAME_STRICT_HTTPS
-          valueFrom:
-            configMapKeyRef:
-              name: keycloak-config
-              key: KC_HOSTNAME_STRICT_HTTPS
-        - name: KC_HTTP_ENABLED
-          valueFrom:
-            configMapKeyRef:
-              name: keycloak-config
-              key: KC_HTTP_ENABLED
-        command: ["start-dev", "--import-realm"]
-        volumeMounts:
-        - name: keycloak-storage
-          mountPath: /opt/keycloak/data
-        - name: keycloak-realm
-          mountPath: /opt/keycloak/data/import
-        resources:
-          requests:
-            memory: "512Mi"
-            cpu: "500m"
-          limits:
-            memory: "1Gi"
-            cpu: "1000m"
-        livenessProbe:
-          httpGet:
-            path: /health/ready
-            port: 8080
-          initialDelaySeconds: 60
-          periodSeconds: 30
-        readinessProbe:
-          httpGet:
-            path: /health/ready
-            port: 8080
-          initialDelaySeconds: 30
-          periodSeconds: 10
-      volumes:
-      - name: keycloak-storage
-        persistentVolumeClaim:
-          claimName: keycloak-pvc
-      - name: keycloak-realm
-        configMap:
-          name: keycloak-realm-config
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: keycloak-realm-config
-  namespace: chess
-data:
-  keycloak-realm.json: |
-    {
-      "realm": "chess",
-      "enabled": true,
-      "sslRequired": "external",
-      "registrationAllowed": true,
-      "loginWithEmailAllowed": true,
-      "duplicateEmailsAllowed": false,
-      "resetPasswordAllowed": true,
-      "editUsernameAllowed": true,
-      "bruteForceProtected": true,
-      "clients": [
-        {
-          "clientId": "chess-web",
-          "enabled": true,
-          "publicClient": true,
-          "redirectUris": ["http://chess.local/*", "http://localhost:3000/*"],
-          "webOrigins": ["chess.local", "http://localhost:3000"],
-          "bearerOnly": false,
-          "consentRequired": false,
-          "standardFlowEnabled": true,
-          "implicitFlowEnabled": false,
-          "directAccessGrantsEnabled": true,
-          "serviceAccountsEnabled": false,
-          "attributes": {
-            "access.token.lifespan": "3600"
-          }
-        },
-        {
-          "clientId": "chess-api",
-          "enabled": true,
-          "publicClient": false,
-          "secret": "chess-api-secret",
-          "redirectUris": ["http://chess.local/*"],
-          "webOrigins": ["chess.local"],
-          "bearerOnly": false,
-          "consentRequired": false,
-          "standardFlowEnabled": true,
-          "implicitFlowEnabled": false,
-          "directAccessGrantsEnabled": true,
-          "serviceAccountsEnabled": true
-        }
-      ],
-      "roles": {
-        "realm": [
-          {
-            "name": "player",
-            "description": "Regular chess player"
-          },
-          {
-            "name": "admin",
-            "description": "Chess administrator"
-          }
-        ]
-      },
-      "users": [
-        {
-          "username": "admin",
-          "enabled": true,
-          "email": "admin@chess.local",
-          "firstName": "Admin",
-          "lastName": "User",
-          "credentials": [
-            {
-              "type": "password",
-              "value": "admin123",
-              "temporary": false
-            }
-          ],
-          "realmRoles": ["admin", "player"]
-        }
-      ]
-    }
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:24.0
+          args:
+            - start-dev
+          ports:
+            - containerPort: 8080
+          env:
+            - name: KEYCLOAK_ADMIN
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-secret
+                  key: KEYCLOAK_ADMIN
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-secret
+                  key: KEYCLOAK_ADMIN_PASSWORD
+
+            - name: KC_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: keycloak-config
+                  key: KC_DB
+            - name: KC_DB_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: keycloak-config
+                  key: KC_DB_URL
+
+            - name: KC_DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_USER
+            - name: KC_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+
+            - name: KC_HEALTH_ENABLED
+              value: "true"
+
+            - name: KC_HTTP_ENABLED
+              value: "true"
+
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8080
+            initialDelaySeconds: 40
+            periodSeconds: 10
+
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8080
+            initialDelaySeconds: 80
+            periodSeconds: 20
 ---
 apiVersion: v1
 kind: Service
@@ -234,6 +107,5 @@ spec:
   selector:
     app: keycloak
   ports:
-  - port: 8080
-    targetPort: 8080
-  type: LoadBalancer
+    - port: 8080
+      targetPort: 8080

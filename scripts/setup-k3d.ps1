@@ -48,7 +48,7 @@ Write-Host "Waiting for cluster to be ready..." -ForegroundColor Green
 kubectl wait --for=condition=ready node --all --timeout=300s
 
 # Install ingress-nginx if not already installed
-$ingressNamespace = kubectl get namespace ingress-nginx -ErrorAction SilentlyContinue
+$ingressNamespace = kubectl get namespace ingress-nginx --ignore-not-found
 if (-not $ingressNamespace) {
     Write-Host "Installing ingress-nginx..." -ForegroundColor Green
     kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.0/deploy/static/provider/cloud/deploy.yaml
