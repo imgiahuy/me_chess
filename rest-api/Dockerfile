@@ -1,4 +1,5 @@
-FROM eclipse-temurin:21-jdk-alpine
+# Build stage
+FROM eclipse-temurin:21-jdk-alpine AS builder
 
 # Install necessary tools
 RUN apk add --no-cache curl wget bash git
@@ -26,13 +27,20 @@ RUN mkdir -p rest-api/src/main/scala/api
 COPY rest-api/src/main/scala/api rest-api/src/main/scala/api
 
 # Build the application
-RUN sbt "++ 3.8.3!" compile
+RUN sbt compile
 
 # Build fat JAR
-RUN sbt "++ 3.8.3!" "restApi/assembly"
+RUN sbt "restApi/assembly"
+
+# Runtime stage
+FROM eclipse-temurin:21-jre-alpine
+
+WORKDIR /app
+
+COPY --from=builder /app/rest-api/target/scala-3.3.3/chess-rest-api.jar app.jar
 
 # Expose port
 EXPOSE 8080
 
 # Run the application with java
-CMD ["java", "-jar", "rest-api/target/scala-3.8.3/chess-rest-api.jar"]
+CMD ["java", "-jar", "app.jar"]

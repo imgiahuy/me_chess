@@ -1,4 +1,37 @@
 services:
+  # Keycloak Identity Provider
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: chess-keycloak
+    ports:
+      - "8081:8080"
+    networks:
+      - chess-network
+    environment:
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
+      - KC_DB=postgres
+      - KC_DB_URL=jdbc:postgresql://postgres:5432/keycloak
+      - KC_DB_USERNAME=keycloak
+      - KC_DB_PASSWORD=keycloak_password
+      - KC_HOSTNAME=localhost
+      - KC_HOSTNAME_PORT=8081
+      - KC_HOSTNAME_STRICT=false
+      - KC_HOSTNAME_STRICT_HTTPS=false
+      - KC_HTTP_ENABLED=true
+    command: start-dev --import-realm
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    volumes:
+      - ./docker/keycloak-realm.json:/opt/keycloak/data/import/keycloak-realm.json
+
   # PostgreSQL Database Service
   postgres:
     image: postgres:15
@@ -11,8 +44,10 @@ services:
       - POSTGRES_DB=chess
       - POSTGRES_USER=chess_user
       - POSTGRES_PASSWORD=chess_password
+      - POSTGRES_MULTIPLE_DATABASES=keycloak
     volumes:
       - chess-data:/var/lib/postgresql/data
+      - ./docker/init-postgres.sh:/docker-entrypoint-initdb.d/init-postgres.sh
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U chess_user -d chess"]
       interval: 10s
@@ -78,7 +113,7 @@ services:
       rest-api:
         condition: service_healthy
     environment:
-      - REACT_APP_API_URL=http://localhost:8080
+      - REACT_APP_API_URL=http://rest-api:8080
 
   # GUI Service (with X11 forwarding for display)
   gui:
