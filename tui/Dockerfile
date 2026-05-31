@@ -25,10 +25,10 @@ COPY tui ./tui/
 RUN rm -rf tui/project
 
 # Build the application
-RUN sbt "++ 3.8.3" compile
+RUN sbt compile
 
 # Build fat JAR
-RUN sbt "++ 3.8.3" "tui/assembly"
+RUN sbt "tui/assembly"
 
 # Run the application
-CMD ["java", "-jar", "tui/target/scala-3.8.3/chess-tui.jar"]
+CMD ["java", "-jar", "tui/target/scala-3.3.3/chess-tui.jar"]

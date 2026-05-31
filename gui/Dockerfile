@@ -42,10 +42,10 @@ COPY gui ./gui/
 RUN rm -rf gui/project
 
 # Build the application
-RUN sbt "++ 3.8.3" compile
+RUN sbt compile
 
 # Build fat JAR
-RUN sbt "++ 3.8.3" "gui/assembly"
+RUN sbt "gui/assembly"
 
 # Run the application with java
-CMD ["java", "-jar", "gui/target/scala-3.8.3/chess-gui.jar"]
+CMD ["java", "-jar", "gui/target/scala-3.3.3/chess-gui.jar"]
