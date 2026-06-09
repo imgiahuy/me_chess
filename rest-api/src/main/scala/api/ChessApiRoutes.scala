@@ -5,7 +5,7 @@ import akka.actor.typed.ActorSystem
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity, HttpHeader, StatusCodes, headers}
 import akka.http.scaladsl.server.Directives.*
 import akka.http.scaladsl.server.{RejectionHandler, Route}
-import api.JsonCodecs.{ActionResponse, CreateGameRequest, CreatedGameResponse, ErrorResponse, GameInfos, GameStateResponse, GameSummary, GamesListResponse, MoveRequest}
+import api.JsonCodecs.{ActionResponse, CreateGameRequest, CreatedGameResponse, ErrorResponse, GameInfos, GameStateResponse, GameSummary, GamesListResponse, MoveRequest, ResignRequest, BotMoveRequest, AvailableBotsResponse}
 
 
 
@@ -286,20 +286,107 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
               }
             }
           }
-        ) ~(
-          // ─── Health / Info ────────────────────────────────────────────────────
+         ) ~(
+           // ─── Resign ───────────────────────────────────────────────────────────
 
-          /** GET /v1/chess/info - API information */
-          get {
-            path("info") {
-              complete(jsonResponse(GameInfos(
-                "ME Chess REST API",
-                "1.0.0",
-                "running"
-              )))
-            }
-          }
-        )
+           /** POST /v1/chess/games/{gameId}/resign - Player resigns */
+           post {
+             path("games" / Segment / "resign") { gameId =>
+               validateGameId(gameId) match {
+                 case Right(_) =>
+                   entity(as[String]) { body =>
+                     parseJson[ResignRequest](body) match {
+                       case Right(request) =>
+                         sessionController.getGame(gameId) match {
+                           case Some(state) =>
+                             try {
+                               val color = if (request.color.toLowerCase == "white") model.White else model.Black
+                               val newState = sessionController.resign(gameId, color)
+                               val response = GameStateResponse.fromPositionState(gameId, newState)
+                               complete(jsonResponse(response))
+                             } catch {
+                               case e: Exception =>
+                                 complete(StatusCodes.InternalServerError, jsonResponse(ErrorResponse(s"Failed to process resignation: ${e.getMessage}")))
+                             }
+                           case None =>
+                             complete(StatusCodes.NotFound, jsonResponse(ErrorResponse(s"Game not found: $gameId")))
+                         }
+                       case Left(error) =>
+                         complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+                     }
+                   }
+                 case Left(error) =>
+                   complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+               }
+             }
+           }
+         ) ~(
+           // ─── Bot Moves ────────────────────────────────────────────────────────
+
+           /** POST /v1/chess/games/{gameId}/bot-move - Bot plays a move */
+           post {
+             path("games" / Segment / "bot-move") { gameId =>
+               validateGameId(gameId) match {
+                 case Right(_) =>
+                   entity(as[String]) { body =>
+                     parseJson[BotMoveRequest](body) match {
+                       case Right(request) =>
+                         sessionController.getGame(gameId) match {
+                           case Some(state) =>
+                             try {
+                               val result = sessionController.playBotMove(gameId, request.botType)
+                               result match {
+                                 case Right(newState) =>
+                                   val response = GameStateResponse.fromPositionState(gameId, newState)
+                                   complete(jsonResponse(response))
+                                 case Left(error) =>
+                                   complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+                               }
+                             } catch {
+                               case e: Exception =>
+                                 complete(StatusCodes.InternalServerError, jsonResponse(ErrorResponse(s"Bot error: ${e.getMessage}")))
+                             }
+                           case None =>
+                             complete(StatusCodes.NotFound, jsonResponse(ErrorResponse(s"Game not found: $gameId")))
+                         }
+                       case Left(error) =>
+                         complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+                     }
+                   }
+                 case Left(error) =>
+                   complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+               }
+             }
+           }
+         ) ~(
+           // ─── Available Bots ───────────────────────────────────────────────────
+
+           /** GET /v1/chess/bots - Get available bot types */
+           get {
+             path("bots") {
+               try {
+                 val bots = sessionController.getAvailableBots()
+                 complete(jsonResponse(AvailableBotsResponse(bots)))
+               } catch {
+                 case e: Exception =>
+                   complete(StatusCodes.InternalServerError, jsonResponse(ErrorResponse(s"Failed to get available bots: ${e.getMessage}")))
+               }
+             }
+           }
+         ) ~(
+           // ─── Health / Info ────────────────────────────────────────────────────
+
+           /** GET /v1/chess/info - API information */
+           get {
+             path("info") {
+               complete(jsonResponse(GameInfos(
+                 "ME Chess REST API",
+                 "1.0.0",
+                 "running"
+               )))
+             }
+           }
+         )
       }
     }
 }

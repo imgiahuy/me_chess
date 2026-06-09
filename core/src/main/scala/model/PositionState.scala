@@ -9,5 +9,15 @@ case class PositionState(
   whitePlayer: Player,
   blackPlayer: Player,
   creationDate: LocalDate = LocalDate.now(),
-  id: Option[String] = None
+  id: Option[String] = None,
+  // Time control
+  whiteTime: Option[PlayerTime] = None,
+  blackTime: Option[PlayerTime] = None,
+  // Draw conditions tracking
+  halfmovesSinceLastCaptureOrPawn: Int = 0,  // For fifty-move rule
+  positionHistory: List[Board] = List.empty,  // For threefold repetition
+  // Game status
+  hasWhiteResigned: Boolean = false,
+  hasBlackResigned: Boolean = false,
+  gameResult: GameResult = Ongoing
 )

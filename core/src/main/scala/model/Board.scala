@@ -18,7 +18,7 @@ case class Board(squares: Map[Position, Piece]) {
   def piecesOf(color: Color): Seq[(Position, Piece)] =
     allPieces.filter { case (_, p) => p.color == color }
 
-  /** The set of colours that still have a king on the board. */
+  /** The set of colors that still have a king on the board. */
   def kingsAlive: Set[Color] =
     squares.values.collect { case p if p.pieceType == King => p.color }.toSet
 }

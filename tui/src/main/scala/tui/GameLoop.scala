@@ -1,8 +1,8 @@
 package tui
 
-import model.PositionState
+import model.{PositionState, Color, White, Black}
 import controller.GameControllerInterface
-import service.GameService
+import service.{GameService, BotService}
 
 /** The interactive game loop with enhanced features.
  *
@@ -11,6 +11,8 @@ import service.GameService
  * - Game status display (check, checkmate, stalemate)
  * - Move history tracking
  * - Save/load functionality
+ * - Resignation
+ * - Bot moves
  * - Real-time game state validation
  */
 case class GameLoop(gameController: GameControllerInterface) {
@@ -25,6 +27,9 @@ case class GameLoop(gameController: GameControllerInterface) {
   case object SaveGame              extends Command
   case object LoadGame              extends Command
   case object ExportPgn             extends Command
+  case object ResignWhite           extends Command
+  case object ResignBlack           extends Command
+  case class  BotMove(botType: String) extends Command
 
   /** Maps a trimmed, lower-cased input string to a Command. Pure function. */
   def parseCommand(input: String): Command = {
@@ -35,9 +40,13 @@ case class GameLoop(gameController: GameControllerInterface) {
       case "moves" :: Nil         => ShowMoves
       case "help"  :: Nil         => ShowHelp
       case "quit"  :: Nil         => Quit
+      case "resign" :: Nil        => ResignWhite  // Default to current player
+      case "resign" :: "white" :: Nil => ResignWhite
+      case "resign" :: "black" :: Nil => ResignBlack
       case "save"  :: Nil         => SaveGame
       case "load"  :: Nil         => LoadGame
       case "export" :: "pgn" :: Nil => ExportPgn
+      case "bot" :: botType :: Nil => BotMove(botType)
       case other :: Nil           => MakeMove(other)
       case other                  => MakeMove(other.mkString(" "))
     }
@@ -111,6 +120,44 @@ case class GameLoop(gameController: GameControllerInterface) {
           case e: Exception =>
             (state, Some(ConsoleRenderer.renderError(e.getMessage)))
         }
+
+      case ResignWhite =>
+        if (state.turn == White) {
+          val newState = GameService.resign(state, White)
+          (newState, Some(ConsoleRenderer.renderSuccess("White resigned - Black wins!")))
+        } else {
+          (state, Some(ConsoleRenderer.renderError("Cannot resign on opponent's turn")))
+        }
+
+      case ResignBlack =>
+        if (state.turn == Black) {
+          val newState = GameService.resign(state, Black)
+          (newState, Some(ConsoleRenderer.renderSuccess("Black resigned - White wins!")))
+        } else {
+          (state, Some(ConsoleRenderer.renderError("Cannot resign on opponent's turn")))
+        }
+
+      case BotMove(botType) =>
+        try {
+          val bot = BotService.createBot(botType)
+          BotService.playBotMove(bot, state) match {
+            case Right(newState) =>
+              val message = if GameService.isCheckmate(newState) then
+                s"Bot ($botType) moved - CHECKMATE! ${newState.turn.opposite} wins!"
+              else if GameService.isStalemate(newState) then
+                s"Bot ($botType) moved - STALEMATE! Draw."
+              else if GameService.isKingInCheck(newState.board, newState.turn) then
+                s"Bot ($botType) moved - CHECK!"
+              else
+                s"Bot ($botType) moved"
+              (newState, Some(message))
+            case Left(err) =>
+              (state, Some(ConsoleRenderer.renderError(s"Bot error: $err")))
+          }
+        } catch {
+          case e: Exception =>
+            (state, Some(ConsoleRenderer.renderError(s"Failed to create bot: ${e.getMessage}")))
+        }
     }
   }
 
@@ -150,12 +197,14 @@ case class GameLoop(gameController: GameControllerInterface) {
     // Prompt for player names
     println("=== Chess Game Setup ===")
     println("Enter player names (press Enter for defaults):")
-    
+    println("White player name:")
+
     val whiteName = readLine() match {
       case Some(name) if name.trim.nonEmpty => name.trim
       case _ => "White"
     }
     
+    println("Black player name:")
     val blackName = readLine() match {
       case Some(name) if name.trim.nonEmpty => name.trim
       case _ => "Black"
