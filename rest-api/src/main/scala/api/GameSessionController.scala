@@ -1,9 +1,9 @@
 package api
 
 import controller.GameControllerInterface
-import model.PositionState
+import model.{PositionState, Color}
 import repository.GameRepository
-import service.GameService
+import service.{GameService, BotService}
 
 class GameSessionController(
                              controller: GameControllerInterface,
@@ -33,13 +33,41 @@ class GameSessionController(
     } else {
       for {
         state    <- repo.getGame(gameId).toRight("Game not found")
-        _        <- if (GameService.isGameOver(state)) Left("Game is already over") else Right(())
         newState <- controller.makeMove(state, input)
       } yield {
         repo.updateGame(gameId, newState)
         newState
       }
     }
+  }
+
+  /** Player resigns from game */
+  def resign(gameId: String, color: Color): PositionState = {
+    repo.getGame(gameId) match {
+      case Some(state) =>
+        val newState = GameService.resign(state, color)
+        repo.updateGame(gameId, newState)
+        newState
+      case None =>
+        throw new Exception("Game not found")
+    }
+  }
+
+  /** Play a bot move */
+  def playBotMove(gameId: String, botType: String): Either[String, PositionState] = {
+    for {
+      state <- repo.getGame(gameId).toRight("Game not found")
+      bot = BotService.createBot(botType)
+      newState <- BotService.playBotMove(bot, state)
+    } yield {
+      repo.updateGame(gameId, newState)
+      newState
+    }
+  }
+
+  /** Get available bot types */
+  def getAvailableBots(): List[String] = {
+    BotService.availableBots
   }
 
   /** Delete a game session */
