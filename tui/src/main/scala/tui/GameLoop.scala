@@ -1,6 +1,6 @@
 package tui
 
-import model.{PositionState, Color, White, Black}
+import model.{PositionState, Color, White, Black, Ongoing, TimeOut}
 import controller.GameControllerInterface
 import service.{GameService, BotService}
 
@@ -16,7 +16,9 @@ import service.{GameService, BotService}
  * - Real-time game state validation
  */
 case class GameLoop(gameController: GameControllerInterface) {
-  
+
+  private var turnStartTime: Long = System.currentTimeMillis()
+
   sealed trait Command
   case object ShowBoard             extends Command
   case object ShowHelp              extends Command
@@ -56,18 +58,49 @@ case class GameLoop(gameController: GameControllerInterface) {
   def processCommand(state: PositionState)(cmd: Command): (PositionState, Option[String]) = {
 
     def applyMoveCmd(raw: String): (PositionState, Option[String]) = {
+      val elapsed = System.currentTimeMillis() - turnStartTime
+      val timeSpentMs = elapsed
+
+      // Check if this is a pawn promotion move without piece specified
+      val needsPromotion = if (raw.length == 4) {
+        val fromCol = raw.head - 'a'
+        val fromRow = raw.charAt(1).asDigit - 1
+        val toRow = raw.charAt(3).asDigit - 1
+        state.board.pieceAt(model.Position(fromCol, fromRow)).exists { piece =>
+          piece.pieceType == model.Pawn && (
+            (piece.color == White && toRow == 7) ||
+            (piece.color == Black && toRow == 0)
+          )
+        }
+      } else {
+        false
+      }
+
+      if (needsPromotion) {
+        return (state, Some("Pawn promotion required! Append piece letter: q (Queen), r (Rook), b (Bishop), n (Knight). Example: e7e8q"))
+      }
+
       gameController.makeMove(state, raw) match {
         case Right(newState) =>
+          // Update time in state
+          val increment = state.timeControl.map(_.incrementMs).getOrElse(0L)
+          val updatedState = if (state.whiteTime.isDefined && state.blackTime.isDefined) {
+            gameController.asInstanceOf[controller.GameController].updateTimeAfterMove(newState, timeSpentMs, increment)
+          } else {
+            newState
+          }
+
+          turnStartTime = System.currentTimeMillis()
           val moveNotation = s"${raw.take(2)}-${raw.drop(2)}"
-          val message = if GameService.isCheckmate(newState) then
-            s"Moved: $moveNotation - CHECKMATE! ${newState.turn.opposite} wins!"
-          else if GameService.isStalemate(newState) then
+          val message = if GameService.isCheckmate(updatedState) then
+            s"Moved: $moveNotation - CHECKMATE! ${updatedState.turn.opposite} wins!"
+          else if GameService.isStalemate(updatedState) then
             s"Moved: $moveNotation - STALEMATE! Draw."
-          else if GameService.isKingInCheck(newState.board, newState.turn) then
+          else if GameService.isKingInCheck(updatedState.board, updatedState.turn) then
             s"Moved: $moveNotation - CHECK!"
           else
             s"Moved: $moveNotation"
-          (newState, Some(message))
+          (updatedState, Some(message))
 
         case Left(err) =>
           (state, Some(ConsoleRenderer.renderError(err)))
@@ -96,7 +129,7 @@ case class GameLoop(gameController: GameControllerInterface) {
 
       case SaveGame =>
         try {
-          gameController.save(state)
+          gameController.save(state, java.nio.file.Paths.get("savegame.txt"))
           (state, Some(ConsoleRenderer.renderSuccess("Game saved to 'savegame.txt'")))
         } catch {
           case e: Exception =>
@@ -105,7 +138,7 @@ case class GameLoop(gameController: GameControllerInterface) {
 
       case LoadGame =>
         try {
-          val loadedState = gameController.load()
+          val loadedState = gameController.load(java.nio.file.Paths.get("savegame.txt"))
           (loadedState, Some(ConsoleRenderer.renderSuccess("Game loaded from 'savegame.txt'")))
         } catch {
           case e: Exception =>
@@ -172,7 +205,36 @@ case class GameLoop(gameController: GameControllerInterface) {
       writeLine(ConsoleRenderer.renderBoard(state.board))
       writeLine(ConsoleRenderer.renderOutcome(state))
     } else {
-      writeLine(ConsoleRenderer.renderGameState(state))
+      // Calculate elapsed time for current player
+      val elapsed = System.currentTimeMillis() - turnStartTime
+      val (whiteTimeMs, blackTimeMs) = state.turn match {
+        case White =>
+          val whiteTime = state.whiteTime.map(t => Math.max(0, t.getCurrentTime - elapsed))
+          val blackTime = state.blackTime.map(_.getCurrentTime)
+          (whiteTime, blackTime)
+        case Black =>
+          val blackTime = state.blackTime.map(t => Math.max(0, t.getCurrentTime - elapsed))
+          val whiteTime = state.whiteTime.map(_.getCurrentTime)
+          (whiteTime, blackTime)
+      }
+
+      // Check if current player's time has run out
+      val stateWithTimeout = if (state.gameResult == Ongoing) {
+        val currentTimeOut = state.turn match {
+          case White => whiteTimeMs.exists(_ <= 0)
+          case Black => blackTimeMs.exists(_ <= 0)
+        }
+        if (currentTimeOut) {
+          val winner = state.turn.opposite
+          state.copy(gameResult = TimeOut(winner))
+        } else {
+          state
+        }
+      } else {
+        state
+      }
+
+      writeLine(ConsoleRenderer.renderGameState(stateWithTimeout, whiteTimeMs, blackTimeMs))
       writeLine("> ")
       readLine() match {
         case None =>
@@ -182,7 +244,7 @@ case class GameLoop(gameController: GameControllerInterface) {
             case Quit =>
               writeLine("Goodbye!")
             case cmd =>
-              val (nextState, msg) = processCommand(state)(cmd)
+              val (nextState, msg) = processCommand(stateWithTimeout)(cmd)
               msg.foreach(writeLine)
               loop(nextState, readLine, writeLine)
           }
@@ -193,7 +255,7 @@ case class GameLoop(gameController: GameControllerInterface) {
   /** Wires real stdin/stdout and starts the game. Only impure function. */
   def start(): Unit = {
     val readLine: () => Option[String] = () => Option(scala.io.StdIn.readLine())
-    
+
     // Prompt for player names
     println("=== Chess Game Setup ===")
     println("Enter player names (press Enter for defaults):")
@@ -203,16 +265,38 @@ case class GameLoop(gameController: GameControllerInterface) {
       case Some(name) if name.trim.nonEmpty => name.trim
       case _ => "White"
     }
-    
+
     println("Black player name:")
     val blackName = readLine() match {
       case Some(name) if name.trim.nonEmpty => name.trim
       case _ => "Black"
     }
-    
+
+    // Prompt for time control
+    println("\nTime control (press Enter for unlimited):")
+    println("Options: bullet, blitz, rapid, classical, unlimited")
+    val timeControlInput = readLine() match {
+      case Some(tc) if tc.trim.nonEmpty => tc.trim.toLowerCase
+      case _ => ""
+    }
+
+    val timeControl = timeControlInput match {
+      case "bullet" => model.TimeControl.BULLET
+      case "blitz" => model.TimeControl.BLITZ
+      case "rapid" => model.TimeControl.RAPID
+      case "classical" => model.TimeControl.CLASSICAL
+      case "unlimited" | "" => model.TimeControl.UNLIMITED
+      case _ =>
+        println(s"Unknown time control '$timeControlInput', using unlimited")
+        model.TimeControl.UNLIMITED
+    }
+
+    val initialState = gameController.asInstanceOf[controller.GameController].createWithTimeControl(whiteName, blackName, timeControl)
+
     println(s"\nStarting game: $whiteName vs $blackName")
+    println(s"Time control: ${if (timeControlInput.isEmpty) "unlimited" else timeControlInput}")
     println(ConsoleRenderer.renderHelp)
-    
-    loop(gameController.create(whiteName, blackName), readLine, println)
+
+    loop(initialState, readLine, println)
   }
 }

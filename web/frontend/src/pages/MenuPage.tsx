@@ -2,12 +2,22 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { createGame, loadLatestGame } from "../utils/apiClient";
 
+type TimeControlOption = "unlimited" | "bullet" | "blitz" | "rapid" | "classical";
+
+const TIME_CONTROLS: { value: TimeControlOption; label: string; description: string }[] = [
+    { value: "unlimited", label: "Unlimited", description: "No time limit" },
+    { value: "bullet", label: "Bullet", description: "1 minute" },
+    { value: "blitz", label: "Blitz", description: "3+2 minutes" },
+    { value: "rapid", label: "Rapid", description: "10+5 minutes" },
+    { value: "classical", label: "Classical", description: "90+30 minutes" },
+];
+
 export function MenuPage() {
     const navigate = useNavigate();
     const [loading, setLoading] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
     const [showSetup, setShowSetup] = React.useState(false);
-    const [playerForm, setPlayerForm] = React.useState({ white: "White", black: "Black" });
+    const [playerForm, setPlayerForm] = React.useState({ white: "White", black: "Black", timeControl: "unlimited" as TimeControlOption });
 
     async function handleCreate() {
         setShowSetup(true);
@@ -20,7 +30,8 @@ export function MenuPage() {
         try {
             const whitePlayer = playerForm.white.trim() || "White";
             const blackPlayer = playerForm.black.trim() || "Black";
-            const res = await createGame(whitePlayer, blackPlayer);
+            const timeControl = playerForm.timeControl === "unlimited" ? null : playerForm.timeControl;
+            const res = await createGame(whitePlayer, blackPlayer, timeControl);
             navigate(`/game/${res.gameId}`);
         } catch (e) {
             setError(e instanceof Error ? e.message : "Failed to create game");
@@ -125,6 +136,41 @@ export function MenuPage() {
                                     color: "#e0e0e0"
                                 }}
                             />
+                        </div>
+                        <div style={{ marginBottom: "1.5rem" }}>
+                            <label style={{ display: "block", marginBottom: "0.5rem", color: "#b0b0b0" }}>
+                                Time Control:
+                            </label>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                                {TIME_CONTROLS.map((tc) => (
+                                    <label
+                                        key={tc.value}
+                                        style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: "0.5rem",
+                                            color: "#b0b0b0",
+                                            cursor: "pointer",
+                                            padding: "0.5rem",
+                                            borderRadius: "4px",
+                                            background: playerForm.timeControl === tc.value ? "#3a3a3a" : "transparent",
+                                            border: playerForm.timeControl === tc.value ? "1px solid #555" : "1px solid transparent"
+                                        }}
+                                    >
+                                        <input
+                                            type="radio"
+                                            name="timeControl"
+                                            value={tc.value}
+                                            checked={playerForm.timeControl === tc.value}
+                                            onChange={(e) => setPlayerForm({ ...playerForm, timeControl: e.target.value as TimeControlOption })}
+                                        />
+                                        <div>
+                                            <div style={{ fontWeight: "bold", color: "#e0e0e0" }}>{tc.label}</div>
+                                            <div style={{ fontSize: "0.875rem", color: "#888" }}>{tc.description}</div>
+                                        </div>
+                                    </label>
+                                ))}
+                            </div>
                         </div>
                         <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
                             <button

@@ -40,6 +40,7 @@ object GameService {
       moveHistory = List.empty,
       whitePlayer = Player(whitePlayerName),
       blackPlayer = Player(blackPlayerName),
+      timeControl = timeControl,
       whiteTime = whiteTime,
       blackTime = blackTime,
       positionHistory = List(newBoard)
@@ -74,19 +75,27 @@ object GameService {
       newBoard <- applyMoveToBoard(snapshot.board, move, piece, snapshot)
       nextTurn = if (snapshot.turn == White) Black else White
       // Track halfmoves for fifty-move rule
+      isEnPassantCapture = piece.pieceType == Pawn && 
+        (move.to.col - move.from.col).abs == 1 &&
+        snapshot.board.isEmpty(move.to) &&
+        snapshot.moveHistory.nonEmpty
       isCaptureOrPawn = piece.pieceType == Pawn ||
                         snapshot.board.pieceAt(move.to).isDefined ||
-                        move.specialMove.exists(_ == EnPassant)
+                        isEnPassantCapture
       halfmovesSinceLastCaptureOrPawn = if (isCaptureOrPawn) 0 else snapshot.halfmovesSinceLastCaptureOrPawn + 1
       // Add to position history for threefold repetition
       newPositionHistory = snapshot.positionHistory :+ newBoard
+      // Update player times
+      (newWhiteTime, newBlackTime) = updateTime(snapshot)
     } yield {
       val newState = snapshot.copy(
         board = newBoard,
         turn = nextTurn,
         moveHistory = snapshot.moveHistory :+ move,
         halfmovesSinceLastCaptureOrPawn = halfmovesSinceLastCaptureOrPawn,
-        positionHistory = newPositionHistory
+        positionHistory = newPositionHistory,
+        whiteTime = newWhiteTime,
+        blackTime = newBlackTime
       )
       // Update game result based on draw or checkmate conditions
       updateGameResult(newState)
@@ -139,12 +148,36 @@ object GameService {
   /** Validates that a move follows the piece's movement rules. */
   def isPieceMoveLegal(board: Board, move: Move, piece: Piece, snapshot: PositionState = null): Either[String, Unit] = {
     piece.pieceType match {
-      case Pawn   => isPawnMoveLegal(board, move, piece, if (snapshot != null) snapshot else PositionState(board, White, List(), Player(""), Player("")))
+      case Pawn   => isPawnMoveLegal(board, move, piece, if (snapshot != null) snapshot else PositionState(board, White, List(), Player(""), Player(""), timeControl = None))
       case Knight => isKnightMoveLegal(board, move)
       case Bishop => isBishopMoveLegal(board, move)
       case Rook   => isRookMoveLegal(board, move)
       case Queen  => isQueenMoveLegal(board, move)
       case King   => isKingMoveLegal(board, move, snapshot)
+    }
+  }
+
+  /** Simplified version for attack detection - doesn't check castling to avoid infinite recursion */
+  private def isPieceMoveLegalForAttack(board: Board, move: Move, piece: Piece): Either[String, Unit] = {
+    piece.pieceType match {
+      case Pawn   => isPawnMoveLegal(board, move, piece, PositionState(board, White, List(), Player(""), Player(""), timeControl = None))
+      case Knight => isKnightMoveLegal(board, move)
+      case Bishop => isBishopMoveLegal(board, move)
+      case Rook   => isRookMoveLegal(board, move)
+      case Queen  => isQueenMoveLegal(board, move)
+      case King   => isKingMoveLegalForAttack(board, move)
+    }
+  }
+
+  /** Simplified king move check for attack detection - only checks regular moves, not castling */
+  private def isKingMoveLegalForAttack(board: Board, move: Move): Either[String, Unit] = {
+    val deltaCol = (move.to.col - move.from.col).abs
+    val deltaRow = (move.to.row - move.from.row).abs
+
+    if (deltaCol <= 1 && deltaRow <= 1 && (deltaCol != 0 || deltaRow != 0)) {
+      Right(())
+    } else {
+      Left(s"Illegal king move from ${move.from} to ${move.to}")
     }
   }
 
@@ -159,7 +192,7 @@ object GameService {
 
     // Forward move (no capture)
     if (deltaCol == 0 && deltaRow == direction && board.isEmpty(move.to)) {
-      validatePawnPromotion(move)
+      validatePawnPromotion(move, piece.color)
     }
     // Double move from starting position
     else if (
@@ -173,13 +206,10 @@ object GameService {
       deltaCol.abs == 1 && deltaRow == direction &&
       board.pieceAt(move.to).exists(_.color != piece.color)
     ) {
-      validatePawnPromotion(move)
+      validatePawnPromotion(move, piece.color)
     }
-    // En passant
-    else if (
-      deltaCol.abs == 1 && deltaRow == direction && board.isEmpty(move.to) &&
-      move.specialMove == Some(EnPassant)
-    ) {
+    // En passant (auto-detected - no specialMove flag required)
+    else if (deltaCol.abs == 1 && deltaRow == direction && board.isEmpty(move.to)) {
       // Check if en passant is actually possible
       val capturedPawnPos = Position(move.to.col, move.from.row)
       val isValidEnPassant = for {
@@ -193,16 +223,13 @@ object GameService {
 
       isValidEnPassant.toRight(s"Invalid en passant move")
     }
-    else if (move.specialMove == Some(EnPassant)) {
-      Left(s"Invalid en passant")
-    }
     else {
       Left(s"Illegal pawn move from ${move.from} to ${move.to}")
     }
   }
 
-  private def validatePawnPromotion(move: Move): Either[String, Unit] = {
-    val promotionRow = if (move.from.row < 4) 7 else 0
+  private def validatePawnPromotion(move: Move, pieceColor: Color): Either[String, Unit] = {
+    val promotionRow = if (pieceColor == White) 7 else 0
     if (move.to.row == promotionRow) {
       move.specialMove match {
         case Some(Promotion(pt)) =>
@@ -388,7 +415,7 @@ object GameService {
         val boardWithMove = boardWithoutSource + (move.to -> promotedPiece)
         Right(Board(boardWithMove))
 
-      // Handle en passant
+      // Handle en passant (explicitly marked)
       case Some(EnPassant) =>
         val boardWithoutSource = board.squares - move.from
         val capturedPawnPos = Position(move.to.col, move.from.row)
@@ -410,11 +437,26 @@ object GameService {
           (Position(newRookCol, move.from.row) -> rook)
         Right(Board(boardWithNewPositions))
 
-      // Regular move (with possible capture)
+      // Regular move (with possible capture) - auto-detect en passant
       case None =>
-        val boardWithoutSource = board.squares - move.from
-        val boardWithMove = boardWithoutSource + (move.to -> piece)
-        Right(Board(boardWithMove))
+        // Check if this is an en passant capture (diagonal pawn move to empty square)
+        val isEnPassant = piece.pieceType == Pawn && 
+          (move.to.col - move.from.col).abs == 1 &&
+          board.isEmpty(move.to) &&
+          snapshot != null &&
+          snapshot.moveHistory.nonEmpty
+
+        if (isEnPassant) {
+          val capturedPawnPos = Position(move.to.col, move.from.row)
+          val boardWithoutSource = board.squares - move.from
+          val boardWithCapture = boardWithoutSource - capturedPawnPos
+          val boardWithMove = boardWithCapture + (move.to -> piece)
+          Right(Board(boardWithMove))
+        } else {
+          val boardWithoutSource = board.squares - move.from
+          val boardWithMove = boardWithoutSource + (move.to -> piece)
+          Right(Board(boardWithMove))
+        }
 
       case _ => Left(s"Unknown special move type")
     }
@@ -431,7 +473,7 @@ object GameService {
    /** Returns true if the given square is attacked by the opponent color. */
   private def isSquareAttackedBy(board: Board, targetPos: Position, attackerColor: Color): Boolean = {
     board.piecesOf(attackerColor).exists { case (pos, piece) =>
-      isPieceMoveLegal(board, Move(pos, targetPos), piece, null).isRight
+      isPieceMoveLegalForAttack(board, Move(pos, targetPos), piece).isRight
     }
   }
 
@@ -489,26 +531,49 @@ object GameService {
 
   /** Check if board has sufficient material for checkmate */
   private def hasSufficientMaterial(board: Board): Boolean = {
-    val whitePieces = board.piecesOf(White).map(_._2.pieceType)
-    val blackPieces = board.piecesOf(Black).map(_._2.pieceType)
+    val whitePieces = board.piecesOf(White).map(_._2.pieceType).toList
+    val blackPieces = board.piecesOf(Black).map(_._2.pieceType).toList
 
     // Both sides have only king - insufficient
-    if (whitePieces.isEmpty && blackPieces.isEmpty) return false
+    if (whitePieces == List(King) && blackPieces == List(King)) return false
 
-    // One has only king, other has only king and knight/bishop - insufficient
-    if ((whitePieces.isEmpty || whitePieces.forall(pt => pt == Knight || pt == Bishop)) &&
-        (blackPieces.isEmpty || blackPieces.forall(pt => pt == Knight || pt == Bishop))) {
-      val whiteMinorCount = whitePieces.count(pt => pt == Knight || pt == Bishop)
-      val blackMinorCount = blackPieces.count(pt => pt == Knight || pt == Bishop)
-      if (whiteMinorCount <= 1 && blackMinorCount <= 1) return false
+    // One has only king, other has only king and one minor piece (knight or bishop) - insufficient
+    val whiteNonKing = whitePieces.filter(_ != King)
+    val blackNonKing = blackPieces.filter(_ != King)
+
+    if (whiteNonKing.isEmpty && blackNonKing.nonEmpty) {
+      val blackMinors = blackNonKing.filter(pt => pt == Knight || pt == Bishop)
+      if (blackMinors.length == 1) return false
+    }
+
+    if (blackNonKing.isEmpty && whiteNonKing.nonEmpty) {
+      val whiteMinors = whiteNonKing.filter(pt => pt == Knight || pt == Bishop)
+      if (whiteMinors.length == 1) return false
+    }
+
+    // King vs King + Bishop(s) of same color - insufficient
+    val whiteBishops = whiteNonKing.count(_ == Bishop)
+    val blackBishops = blackNonKing.count(_ == Bishop)
+
+    if (whiteNonKing.forall(_ == Bishop) && blackNonKing.isEmpty && whiteBishops > 0) {
+      // Check if all bishops are on same color squares
+      val bishopSquares = board.piecesOf(White).filter(_._2.pieceType == Bishop).map(_._1)
+      val allSameColor = bishopSquares.map(pos => (pos.col + pos.row) % 2).toSet.size == 1
+      if (allSameColor) return false
+    }
+
+    if (blackNonKing.forall(_ == Bishop) && whiteNonKing.isEmpty && blackBishops > 0) {
+      val bishopSquares = board.piecesOf(Black).filter(_._2.pieceType == Bishop).map(_._1)
+      val allSameColor = bishopSquares.map(pos => (pos.col + pos.row) % 2).toSet.size == 1
+      if (allSameColor) return false
     }
 
     true
   }
 
-  /** The game is over when at least one king has been captured. */
+  /** The game is over when at least one king has been captured or game has ended by other means. */
   def isGameOver(snapshot: PositionState): Boolean =
-    snapshot.board.kingsAlive.size < 2
+    snapshot.board.kingsAlive.size < 2 || snapshot.gameResult != Ongoing
 
   /** Returns the winner if exactly one king remains; None if still ongoing
    * or if both kings were lost simultaneously (theoretical edge case).
@@ -535,13 +600,75 @@ object GameService {
       (0 until 8).exists { toCol =>
         (0 until 8).exists { toRow =>
           val move = Move(pos, Position(toCol, toRow))
-          applyMove(snapshot, move).isRight
+          applyMoveWithoutGameResultCheck(snapshot, move).isRight
         }
       }
     }
   }
 
+  /** Simplified version of applyMove that doesn't check game result - used to avoid infinite recursion in hasLegalMoves */
+  private def applyMoveWithoutGameResultCheck(snapshot: PositionState, move: Move): Either[String, PositionState] = {
+    for {
+      _ <- validate(snapshot, move)
+      piece <- snapshot.board
+        .pieceAt(move.from)
+        .toRight(s"No piece at destination square")
+      _ <- isLegalMove(snapshot, move, piece)
+      newBoard <- applyMoveToBoard(snapshot.board, move, piece, snapshot)
+      nextTurn = if (snapshot.turn == White) Black else White
+      isEnPassantCapture = piece.pieceType == Pawn && 
+        (move.to.col - move.from.col).abs == 1 &&
+        snapshot.board.isEmpty(move.to) &&
+        snapshot.moveHistory.nonEmpty
+      isCaptureOrPawn = piece.pieceType == Pawn ||
+                        snapshot.board.pieceAt(move.to).isDefined ||
+                        isEnPassantCapture
+      halfmovesSinceLastCaptureOrPawn = if (isCaptureOrPawn) 0 else snapshot.halfmovesSinceLastCaptureOrPawn + 1
+      newPositionHistory = snapshot.positionHistory :+ newBoard
+      // Update player times
+      (newWhiteTime, newBlackTime) = updateTime(snapshot)
+    } yield {
+      snapshot.copy(
+        board = newBoard,
+        turn = nextTurn,
+        moveHistory = snapshot.moveHistory :+ move,
+        halfmovesSinceLastCaptureOrPawn = halfmovesSinceLastCaptureOrPawn,
+        positionHistory = newPositionHistory,
+        whiteTime = newWhiteTime,
+        blackTime = newBlackTime
+      )
+    }
+  }
+
   // ── Helpers ──────────────────────────────────────────────────────────────────
+
+  /** Update player times after a move */
+  private def updateTime(snapshot: PositionState): (Option[PlayerTime], Option[PlayerTime]) = {
+    snapshot.timeControl match {
+      case Some(tc) =>
+        val currentTime = System.currentTimeMillis()
+        if (snapshot.turn == White) {
+          // Update white's time (current player)
+          val updatedWhiteTime = snapshot.whiteTime.map { wt =>
+            val timeUsed = currentTime - wt.lastUpdatedAt
+            val newRemaining = (wt.remainingTimeMs - timeUsed + tc.incrementMs).max(0)
+            PlayerTime(newRemaining, currentTime)
+          }
+          // Black's time remains unchanged
+          (updatedWhiteTime, snapshot.blackTime)
+        } else {
+          // Update black's time (current player)
+          val updatedBlackTime = snapshot.blackTime.map { bt =>
+            val timeUsed = currentTime - bt.lastUpdatedAt
+            val newRemaining = (bt.remainingTimeMs - timeUsed + tc.incrementMs).max(0)
+            PlayerTime(newRemaining, currentTime)
+          }
+          // White's time remains unchanged
+          (snapshot.whiteTime, updatedBlackTime)
+        }
+      case None => (snapshot.whiteTime, snapshot.blackTime)
+    }
+  }
 
   /** True when the active player still has at least one piece on the board. */
   def currentPlayerHasPieces(snapshot: PositionState): Boolean =
@@ -584,11 +711,12 @@ object GameService {
     FenParser.parse(lines.head) match
       case Right(state) =>
         PositionState(
-          board = state.board, 
-          turn = state.turn, 
+          board = state.board,
+          turn = state.turn,
           moveHistory = moves,
           whitePlayer = Player("White"),
-          blackPlayer = Player("Black")
+          blackPlayer = Player("Black"),
+          timeControl = None
         )
 
       case Left(err) =>
@@ -635,25 +763,17 @@ object GameService {
   }
 
   /** Update remaining time for both players (typically called after each move) */
-  def updateTimeAfterMove(snapshot: PositionState, timeSpentMs: Long): PositionState = {
+  def updateTimeAfterMove(snapshot: PositionState, timeSpentMs: Long, incrementMs: Long = 0): PositionState = {
     val updatedTime = snapshot.turn match {
       case White =>
         snapshot.whiteTime.map { t =>
           val used = t.useTime(timeSpentMs)
-          if (snapshot.moveHistory.length % 2 == 0 && snapshot.moveHistory.nonEmpty) {
-            used.addTime(Math.max(0, 2000)) // Example: 2 second increment
-          } else {
-            used
-          }
+          used.addTime(Math.max(0, incrementMs))
         }
       case Black =>
         snapshot.blackTime.map { t =>
           val used = t.useTime(timeSpentMs)
-          if (snapshot.moveHistory.length % 2 == 1) {
-            used.addTime(Math.max(0, 2000))
-          } else {
-            used
-          }
+          used.addTime(Math.max(0, incrementMs))
         }
     }
 
@@ -662,13 +782,13 @@ object GameService {
       case Black => snapshot.copy(blackTime = updatedTime)
     }
 
-    // Check if time is up
-    if (updated.turn == White && updated.whiteTime.exists(_.isTimeOver)) {
-      updated.copy(gameResult = TimeOut(Black))
-    } else if (updated.turn == Black && updated.blackTime.exists(_.isTimeOver)) {
-      updated.copy(gameResult = TimeOut(White))
-    } else {
-      updated
+    // Check if the current player (who just moved) ran out of time during their turn
+    snapshot.turn match {
+      case White if updated.whiteTime.exists(_.isTimeOver) =>
+        updated.copy(gameResult = TimeOut(Black))
+      case Black if updated.blackTime.exists(_.isTimeOver) =>
+        updated.copy(gameResult = TimeOut(White))
+      case _ => updated
     }
   }
 

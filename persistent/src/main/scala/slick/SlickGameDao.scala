@@ -48,7 +48,7 @@ class SlickGameDao(db: Database, tables: Tables, playerDao: SlickPlayerDao, move
             blackPlayer <- blackPlayerOpt
             board = deserializeBoard(boardJson)
             turn = parseColor(turnStr)
-          } yield PositionState(board, turn, moves, whitePlayer, blackPlayer, creationDate, Some(id))
+          } yield PositionState(board, turn, moves, whitePlayer, blackPlayer, creationDate, Some(id), timeControl = None)
         }
       case None => Future.successful(None)
     }
@@ -115,7 +115,7 @@ class SlickGameDao(db: Database, tables: Tables, playerDao: SlickPlayerDao, move
             blackPlayer <- blackPlayerOpt
             board = deserializeBoard(boardJson)
             turn = parseColor(turnStr)
-          } yield PositionState(board, turn, moves, whitePlayer, blackPlayer, creationDate, Some(id))
+          } yield PositionState(board, turn, moves, whitePlayer, blackPlayer, creationDate, Some(id), timeControl = None)
         }
       }).map(_.flatten.toList)
     }
@@ -135,7 +135,7 @@ class SlickGameDao(db: Database, tables: Tables, playerDao: SlickPlayerDao, move
             blackPlayer <- blackPlayerOpt
             board = deserializeBoard(boardJson)
             turn = parseColor(turnStr)
-          } yield PositionState(board, turn, moves, whitePlayer, blackPlayer, creationDate, Some(id))
+          } yield PositionState(board, turn, moves, whitePlayer, blackPlayer, creationDate, Some(id), timeControl = None)
         }
       case None => Future.successful(None)
     }

@@ -16,18 +16,16 @@ class GameController extends GameControllerInterface {
     GameService.createGame(whitePlayerName, blackPlayerName, Some(timeControl))
   }
   
-  override def save(state : PositionState): Unit = {
+  override def save(state : PositionState, filePath: java.nio.file.Path): Unit = {
     val data = GameService.save(state)
-    val path = Paths.get("savegame.txt")
-    Files.write(path, data.getBytes)
-    println(s"Game saved to $path")
+    Files.write(filePath, data.getBytes)
+    println(s"Game saved to $filePath")
   }
 
-  override def load(): PositionState = {
-    val path = Paths.get("savegame.txt")
-    val content = new String(Files.readAllBytes(path))
+  override def load(filePath: java.nio.file.Path): PositionState = {
+    val content = new String(Files.readAllBytes(filePath))
     val state = GameService.load(content)
-    println(s"Game loaded from $path")
+    println(s"Game loaded from $filePath")
     state
   }
 
@@ -68,8 +66,8 @@ class GameController extends GameControllerInterface {
   }
 
   /** Update time after a move */
-  def updateTimeAfterMove(state: PositionState, timeSpentMs: Long): PositionState = {
-    GameService.updateTimeAfterMove(state, timeSpentMs)
+  def updateTimeAfterMove(state: PositionState, timeSpentMs: Long, incrementMs: Long = 0): PositionState = {
+    GameService.updateTimeAfterMove(state, timeSpentMs, incrementMs)
   }
 
   /** Get all legal moves for a position */

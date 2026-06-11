@@ -43,11 +43,27 @@ object ConsoleRenderer {
   // ── Game state ───────────────────────────────────────────────────────────────
 
   /** Renders the current game state including board, turn, and game status. */
-  def renderGameState(state: PositionState): String = {
+  def renderGameState(state: PositionState, whiteTimeMs: Option[Long] = None, blackTimeMs: Option[Long] = None): String = {
     val board = renderBoard(state.board)
     val turn = s"Turn: ${state.turn}"
     val status = renderGameStatus(state)
-    Seq(board, turn, status).mkString("\n")
+    val clocks = renderClocks(state, whiteTimeMs, blackTimeMs)
+    Seq(board, turn, clocks, status).mkString("\n")
+  }
+
+  /** Renders the remaining time for both players. */
+  def renderClocks(state: PositionState, whiteTimeMs: Option[Long], blackTimeMs: Option[Long]): String = {
+    val whiteTime = whiteTimeMs.orElse(state.whiteTime.map(_.getCurrentTime)).map(formatTime).getOrElse("--:--")
+    val blackTime = blackTimeMs.orElse(state.blackTime.map(_.getCurrentTime)).map(formatTime).getOrElse("--:--")
+    s"White: $whiteTime | Black: $blackTime"
+  }
+
+  /** Formats milliseconds to MM:SS format. */
+  private def formatTime(ms: Long): String = {
+    val totalSeconds = ms / 1000
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    f"$minutes%02d:$seconds%02d"
   }
 
   /** Renders the current game status (check, checkmate, stalemate, normal). */

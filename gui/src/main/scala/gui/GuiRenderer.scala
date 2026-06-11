@@ -117,10 +117,15 @@ object GuiRenderer {
                     onSave: () => Unit,
                     onLoad: () => Unit,
                     onExportPgn: () => Unit,
+                    onResign: () => Unit,
+                    onReturnToMenu: () => Unit,
                     selected: Option[(Int, Int)],
                     validMoves: Set[(Int, Int)],
                     moveHistory: List[String],
-                    notification: String
+                    notification: String,
+                    gameResult: model.GameResult,
+                    whiteTime: Option[Long],
+                    blackTime: Option[Long]
                   ): BorderPane = {
 
     def styledButton(text: String, action: () => Unit): Button = {
@@ -160,11 +165,17 @@ object GuiRenderer {
       }
     }
 
-    val boardView = renderBoard(board, onClick, selected, validMoves)
+    val boardView = new scalafx.scene.layout.VBox {
+      alignment = scalafx.geometry.Pos.Center
+      children = List(renderBoard(board, onClick, selected, validMoves))
+      style = "-fx-background-color: #121212;"
+    }
 
     val saveButton = styledButton("Save", onSave)
     val loadButton = styledButton("Load", onLoad)
     val exportButton = styledButton("Export PGN", onExportPgn)
+    val resignButton = styledButton("Resign", onResign)
+    val returnToMenuButton = styledButton("Return to Menu", onReturnToMenu)
     val exitButton = styledButton("Exit", onExit)
 
     // Move history panel
@@ -190,7 +201,7 @@ object GuiRenderer {
     val notificationLabel = new Label("Notifications") {
       style = "-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: white;"
     }
-    
+
     val notificationArea = new TextArea {
       prefWidth = 200
       prefHeight = 80
@@ -204,11 +215,75 @@ object GuiRenderer {
         |""".stripMargin
     }
 
+    // Game result panel
+    val gameResultLabel = new Label("Game Status") {
+      style = "-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: white;"
+    }
+
+    val gameResultText = gameResult match {
+      case model.Ongoing => "Game in progress"
+      case model.Checkmate(winner) => s"CHECKMATE! $winner wins!"
+      case model.Draw(reason) => s"DRAW: $reason"
+      case model.Resignation(winner) => s"RESIGNATION: $winner wins!"
+      case model.TimeOut(winner) => s"TIME OUT: $winner wins!"
+    }
+
+    val gameResultArea = new TextArea {
+      prefWidth = 200
+      prefHeight = 60
+      editable = false
+      text = gameResultText
+      style = """
+        | -fx-font-size: 12px;
+        | -fx-background-color: #2C2C2C;
+        | -fx-text-fill: #E0E0E0;
+        | -fx-control-inner-background: #2C2C2C;
+        |""".stripMargin
+    }
+
+    // Clock display panel
+    val clockLabel = new Label("Clocks") {
+      style = "-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: white;"
+    }
+
+    def formatTime(ms: Long): String = {
+      val totalSeconds = ms / 1000
+      val minutes = totalSeconds / 60
+      val seconds = totalSeconds % 60
+      f"$minutes%02d:$seconds%02d"
+    }
+
+    val whiteClockText = whiteTime.map(formatTime).getOrElse("--:--")
+    val blackClockText = blackTime.map(formatTime).getOrElse("--:--")
+
+    val clockArea = new TextArea {
+      prefWidth = 200
+      prefHeight = 100
+      editable = false
+      text = s"White: $whiteClockText\nBlack: $blackClockText"
+      style = """
+        | -fx-font-size: 18px;
+        | -fx-font-family: monospace;
+        | -fx-background-color: #2C2C2C;
+        | -fx-text-fill: #E0E0E0;
+        | -fx-control-inner-background: #2C2C2C;
+        |""".stripMargin
+    }
+
+    // Hide clock section if time is unlimited (no time control or very large time)
+    val isUnlimited = whiteTime.isEmpty || whiteTime.exists(_ > 10000000000L)
+
+    val sidePanelChildren = if (isUnlimited) {
+      List(saveButton, loadButton, exportButton, resignButton, returnToMenuButton, exitButton, historyLabel, historyArea, notificationLabel, notificationArea, gameResultLabel, gameResultArea)
+    } else {
+      List(saveButton, loadButton, exportButton, resignButton, returnToMenuButton, exitButton, clockLabel, clockArea, historyLabel, historyArea, notificationLabel, notificationArea, gameResultLabel, gameResultArea)
+    }
+
     val sidePanel = new VBox {
       spacing = 10
       padding = Insets(10)
       style = "-fx-background-color: #1E1E1E;"
-      children = List(saveButton, loadButton, exportButton, exitButton, historyLabel, historyArea, notificationLabel, notificationArea)
+      children = sidePanelChildren
     }
 
     new BorderPane {
@@ -219,7 +294,7 @@ object GuiRenderer {
   }
 
   def renderPlayerSetup(
-    onStartGame: (String, String) => Unit,
+    onStartGame: (String, String, Option[model.TimeControl]) => Unit,
     onExit: () => Unit
   ): BorderPane = {
     
@@ -286,8 +361,63 @@ object GuiRenderer {
         |""".stripMargin
     }
 
+    import scalafx.scene.control.ComboBox
+    import scalafx.scene.control.ListCell
+    import javafx.util.Callback
+    val timeControlComboBox = new ComboBox[String]() {
+      items = scalafx.collections.ObservableBuffer("Unlimited", "Bullet", "Blitz", "Rapid", "Classical")
+      value = "Unlimited"
+      style = """
+        | -fx-font-size: 14px;
+        | -fx-padding: 10px;
+        | -fx-border-radius: 5px;
+        | -fx-border-color: #555;
+        | -fx-background-color: #2C2C2C;
+        | -fx-text-fill: white;
+        |""".stripMargin
+
+      // Style the displayed button cell
+      buttonCell = new ListCell[String]() {
+        style = """
+          | -fx-font-size: 14px;
+          | -fx-text-fill: white;
+          | -fx-background-color: #2C2C2C;
+          |""".stripMargin
+        item.onChange { (_, _, newValue) =>
+          if (newValue != null) {
+            text = newValue
+          }
+        }
+      }
+
+      // Style the dropdown items to match the dark theme
+      cellFactory = new Callback[javafx.scene.control.ListView[String], javafx.scene.control.ListCell[String]] {
+        override def call(param: javafx.scene.control.ListView[String]): javafx.scene.control.ListCell[String] = {
+          new ListCell[String]() {
+            style = """
+              | -fx-font-size: 14px;
+              | -fx-text-fill: white;
+              | -fx-background-color: #2C2C2C;
+              |""".stripMargin
+            item.onChange { (_, _, newValue) =>
+              if (newValue != null) {
+                text = newValue
+              }
+            }
+          }
+        }
+      }
+    }
+
     val startButton = styledButton("Start Game", () => {
-      onStartGame(whiteField.text.value, blackField.text.value)
+      val timeControl = timeControlComboBox.value.value match {
+        case "Bullet" => Some(model.TimeControl.BULLET)
+        case "Blitz" => Some(model.TimeControl.BLITZ)
+        case "Rapid" => Some(model.TimeControl.RAPID)
+        case "Classical" => Some(model.TimeControl.CLASSICAL)
+        case "Unlimited" | _ => Some(model.TimeControl.UNLIMITED)
+      }
+      onStartGame(whiteField.text.value, blackField.text.value, timeControl)
     })
 
     val exitButton = styledButton("Exit", onExit)
@@ -345,6 +475,18 @@ object GuiRenderer {
                 |""".stripMargin
             },
             blackField
+          )
+        },
+        new scalafx.scene.layout.VBox(10) {
+          children = Seq(
+            new scalafx.scene.text.Text("Time Control:") {
+              style = """
+                | -fx-font-size: 14px;
+                | -fx-font-weight: bold;
+                | -fx-fill: white;
+                |""".stripMargin
+            },
+            timeControlComboBox
           )
         },
         new scalafx.scene.layout.HBox(15) {

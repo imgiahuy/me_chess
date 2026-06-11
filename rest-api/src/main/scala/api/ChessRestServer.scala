@@ -25,7 +25,7 @@ object ChessRestServer {
     run()
   }
 
-  def run(host: String = "0.0.0.0", port: Int = 8081): Unit = {
+  def run(host: String = "0.0.0.0", port: Int = 8080): Unit = {
     implicit val system: ActorSystem[Unit] = ActorSystem(Behaviors.empty[Unit], "chess-api")
     implicit val ec: ExecutionContextExecutor = system.executionContext
 

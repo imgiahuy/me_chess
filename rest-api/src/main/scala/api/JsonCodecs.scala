@@ -8,17 +8,17 @@ import upickle.default.{ReadWriter, macroRW}
 
 object JsonCodecs {
 
-  final case class MoveRequest(from: String, to: String, promotion: Option[String] = None, castling: Option[String] = None) {
+  final case class MoveRequest(from: String, to: String, promotion: String = null, castling: String = null) {
     def toUci: String = {
       val fromTrimmed = from.trim.toLowerCase
       val toTrimmed = to.trim.toLowerCase
 
       // Handle castling
-      castling match {
-        case Some("kingside") | Some("0-0") | Some("short") => "00"
-        case Some("queenside") | Some("0-0-0") | Some("long") => "000"
+      Option(castling) match {
+        case Some(c) if c == "kingside" || c == "0-0" || c == "short" => "00"
+        case Some(c) if c == "queenside" || c == "0-0-0" || c == "long" => "000"
         case _ =>
-          val promoTrimmed = promotion.map(_.trim.toLowerCase).filter(_.nonEmpty)
+          val promoTrimmed = Option(promotion).map(_.trim.toLowerCase).filter(_.nonEmpty)
           promoTrimmed match {
             case Some(promo) => s"$fromTrimmed$toTrimmed$promo"
             case None        => s"$fromTrimmed$toTrimmed"
@@ -40,7 +40,8 @@ object JsonCodecs {
   final case class TimeControlInfo(
     initialTimeMs: Long,
     incrementMs: Long,
-    remainingTimeMs: Option[Long]
+    remainingTimeMs: Option[Long],
+    delayMs: Long = 0
   )
 
   final case class GameResultInfo(
@@ -72,11 +73,15 @@ object JsonCodecs {
       }
 
       val whiteTimeInfo = state.whiteTime.map { pt =>
-        TimeControlInfo(pt.remainingTimeMs, 0, Some(pt.getCurrentTime))
+        val increment = state.timeControl.map(_.incrementMs).getOrElse(0L)
+        val delay = state.timeControl.map(_.delayMs).getOrElse(0L)
+        TimeControlInfo(pt.remainingTimeMs, increment, Some(pt.getCurrentTime), delay)
       }
 
       val blackTimeInfo = state.blackTime.map { pt =>
-        TimeControlInfo(pt.remainingTimeMs, 0, Some(pt.getCurrentTime))
+        val increment = state.timeControl.map(_.incrementMs).getOrElse(0L)
+        val delay = state.timeControl.map(_.delayMs).getOrElse(0L)
+        TimeControlInfo(pt.remainingTimeMs, increment, Some(pt.getCurrentTime), delay)
       }
 
       val legalMovesStr = if (includeLegalMoves) {
@@ -124,7 +129,7 @@ object JsonCodecs {
     blackTime: Option[TimeControlInfo]
   )
   
-  final case class CreateGameRequest(whitePlayer: String, blackPlayer: String, timeControl: Option[String] = None)
+  final case class CreateGameRequest(whitePlayer: String, blackPlayer: String, timeControl: String = null)
 
   final case class ExportRequest(event: String, site: String)
 

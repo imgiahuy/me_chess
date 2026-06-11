@@ -53,16 +53,36 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
           post {
             path("games") {
               entity(as[String]) { body =>
+                println(s"[DEBUG] Received request body: $body")
                 parseJson[CreateGameRequest](body) match {
                   case Right(request) =>
                     try {
-                      val gameId = sessionController.createGame(request.whitePlayer, request.blackPlayer)
+                      // Parse time control if provided
+                      println(s"[DEBUG] Received timeControl: ${request.timeControl}")
+                      val timeControl = Option(request.timeControl) match {
+                        case Some(tcStr) =>
+                          tcStr.toLowerCase match {
+                            case "bullet" => model.TimeControl.BULLET
+                            case "blitz" => model.TimeControl.BLITZ
+                            case "rapid" => model.TimeControl.RAPID
+                            case "classical" => model.TimeControl.CLASSICAL
+                            case "unlimited" => model.TimeControl.UNLIMITED
+                            case _ => model.TimeControl.UNLIMITED
+                          }
+                        case None => model.TimeControl.UNLIMITED
+                      }
+                      println(s"[DEBUG] Creating game with timeControl: $timeControl")
+                      val gameId = sessionController.createGameWithTimeControl(request.whitePlayer, request.blackPlayer, timeControl)
+                      println(s"[DEBUG] Game created with ID: $gameId")
                       complete(StatusCodes.Created, jsonResponse(CreatedGameResponse(gameId, "Game created successfully")))
                     } catch {
                       case e: Exception =>
+                        println(s"[ERROR] Failed to create game: ${e.getMessage}")
+                        e.printStackTrace()
                         complete(StatusCodes.InternalServerError, jsonResponse(ErrorResponse(s"Failed to create game: ${e.getMessage}")))
                     }
                   case Left(error) =>
+                    println(s"[ERROR] JSON parsing failed: $error")
                     complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
                 }
               }
@@ -71,16 +91,19 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
         ) ~(
           // ─── Get Game State ───────────────────────────────────────────────────
 
-          /** GET /v1/chess/games/{gameId} - Get current game state */
+          /** GET /v1/chess/games/{gameId} - Get current game state (checks for timeout) */
           get {
             path("games" / Segment) { gameId =>
               validateGameId(gameId) match {
                 case Right(_) =>
-                  sessionController.getGame(gameId) match {
-                    case Some(state) =>
-                      val response = GameStateResponse.fromPositionState(gameId, state)
+                  // First check for timeout and update game state if needed
+                  sessionController.checkAndApplyTimeout(gameId) match {
+                    case Right(state) =>
+                      println(s"[DEBUG] State whiteTime: ${state.whiteTime}, blackTime: ${state.blackTime}, timeControl: ${state.timeControl}")
+                      val response = GameStateResponse.fromPositionState(gameId, state, includeLegalMoves = true)
+                      println(s"[DEBUG] Game state response: $response")
                       complete(jsonResponse(response))
-                    case None =>
+                    case Left(_) =>
                       complete(StatusCodes.NotFound, jsonResponse(ErrorResponse(s"Game not found: $gameId")))
                   }
                 case Left(error) =>
@@ -97,30 +120,42 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
               validateGameId(gameId) match {
                 case Right(_) =>
                   entity(as[String]) { body =>
+                    println(s"[DEBUG] Move request body: $body")
                     if (body.trim.isEmpty) {
                       complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse("Request body cannot be empty")))
                     } else {
                       parseJson[MoveRequest](body) match {
                         case Right(moveReq) =>
+                          println(s"[DEBUG] Parsed move request: $moveReq")
                           moveReq.validate match {
                             case Right(_) =>
                               sessionController.getGame(gameId) match {
                                 case Some(_) =>
                                   val input = moveReq.toUci
+                                  println(s"[DEBUG] Move UCI: $input")
                                   sessionController.makeMove(gameId, input) match {
-                                    case Right(newState) =>
-                                      val response = GameStateResponse.fromPositionState(gameId, newState)
-                                      complete(jsonResponse(response))
+                                    case Right(_) =>
+                                      // Check for timeout after move and return updated state
+                                      sessionController.checkAndApplyTimeout(gameId) match {
+                                        case Right(newState) =>
+                                          val response = GameStateResponse.fromPositionState(gameId, newState)
+                                          complete(jsonResponse(response))
+                                        case Left(error) =>
+                                          complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+                                      }
                                     case Left(reason) =>
+                                      println(s"[ERROR] Move failed: $reason")
                                       complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(reason)))
                                   }
                                 case None =>
                                   complete(StatusCodes.NotFound, jsonResponse(ErrorResponse(s"Game not found: $gameId")))
                               }
                             case Left(validationError) =>
+                              println(s"[ERROR] Validation failed: $validationError")
                               complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(validationError)))
                           }
                         case Left(error) =>
+                          println(s"[ERROR] JSON parsing failed: $error")
                           complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
                       }
                     }
@@ -139,10 +174,11 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
               try {
                 val summaries = sessionController.getGameSummaries()
                 val gameSummaries = summaries.map { case (gameId, turn, moveCount, isGameOver) =>
+                  val gameResultStr = if (isGameOver) "finished" else "ongoing"
                   GameSummary(
                     gameId = gameId,
                     turn = turn,
-                    isGameOver = isGameOver,
+                    gameResult = gameResultStr,
                     moveCount = moveCount
                   )
                 }
@@ -226,22 +262,44 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
         ) ~(
           // ─── Game Status ──────────────────────────────────────────────────────
 
-          /** GET /v1/chess/games/{gameId}/status - Get game status */
+          /** GET /v1/chess/games/{gameId}/status - Get game status (checks for timeout) */
           get {
             path("games" / Segment / "status") { gameId =>
               validateGameId(gameId) match {
                 case Right(_) =>
-                  sessionController.getGame(gameId) match {
-                    case Some(state) =>
+                  // First check for timeout and update game state if needed
+                  sessionController.checkAndApplyTimeout(gameId) match {
+                    case Right(stateAfterTimeout) =>
+                      val gameResultInfo = stateAfterTimeout.gameResult match {
+                        case model.Ongoing => JsonCodecs.GameResultInfo("ongoing", None, None)
+                        case model.Checkmate(winner) => JsonCodecs.GameResultInfo("checkmate", None, Some(winner.toString))
+                        case model.Draw(reason) => JsonCodecs.GameResultInfo("draw", Some(reason.toString), None)
+                        case model.Resignation(winner) => JsonCodecs.GameResultInfo("resignation", None, Some(winner.toString))
+                        case model.TimeOut(winner) => JsonCodecs.GameResultInfo("timeout", None, Some(winner.toString))
+                      }
+
+                      val whiteTimeInfo = stateAfterTimeout.whiteTime.map { pt =>
+                        val increment = stateAfterTimeout.timeControl.map(_.incrementMs).getOrElse(0L)
+                        val delay = stateAfterTimeout.timeControl.map(_.delayMs).getOrElse(0L)
+                        JsonCodecs.TimeControlInfo(pt.remainingTimeMs, increment, Some(pt.getCurrentTime), delay)
+                      }
+
+                      val blackTimeInfo = stateAfterTimeout.blackTime.map { pt =>
+                        val increment = stateAfterTimeout.timeControl.map(_.incrementMs).getOrElse(0L)
+                        val delay = stateAfterTimeout.timeControl.map(_.delayMs).getOrElse(0L)
+                        JsonCodecs.TimeControlInfo(pt.remainingTimeMs, increment, Some(pt.getCurrentTime), delay)
+                      }
+
                       val response = JsonCodecs.GameStatusResponse(
                         gameId = gameId,
-                        isGameOver = service.GameService.isGameOver(state),
-                        winner = service.GameService.winner(state).map(_.toString),
-                        turn = state.turn.toString,
-                        moveCount = state.moveHistory.length
+                        gameResult = gameResultInfo,
+                        turn = stateAfterTimeout.turn.toString,
+                        moveCount = stateAfterTimeout.moveHistory.length,
+                        whiteTime = whiteTimeInfo,
+                        blackTime = blackTimeInfo
                       )
-                      complete(jsonResponse(response))
-                    case None =>
+                      complete(jsonResponse[JsonCodecs.GameStatusResponse](response))
+                    case Left(_) =>
                       complete(StatusCodes.NotFound, jsonResponse(ErrorResponse(s"Game not found: $gameId")))
                   }
                 case Left(error) =>
