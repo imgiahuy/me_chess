@@ -3,8 +3,23 @@ export type GameResponse = {
     fen: string;
     turn: "White" | "Black";
     moveHistory: string[];
-    isGameOver: boolean;
+    gameResult: GameResultInfo;
+    whiteTime: TimeControlInfo | null;
+    blackTime: TimeControlInfo | null;
+    legalMoves: string[] | null;
+};
+
+export type GameResultInfo = {
+    status: string;  // "ongoing", "checkmate", "draw", "resignation", "timeout"
+    reason: string | null;  // e.g., "stalemate", "insufficient material", etc.
     winner: string | null;
+};
+
+export type TimeControlInfo = {
+    initialTimeMs: number;
+    incrementMs: number;
+    remainingTimeMs: number | null;
+    delayMs: number;
 };
 
 export type GameSummary = {
@@ -23,6 +38,7 @@ export type MoveRequest = {
     from: string;
     to: string;
     promotion?: string | null;
+    castling?: string | null;
 };
 
 export type CreateGameResponse = {
@@ -36,4 +52,14 @@ export type ActionResponse = {
 
 export type ErrorResponse = {
     error: string;
+};
+
+export type CreateGameRequest = {
+    whitePlayer: string;
+    blackPlayer: string;
+    timeControl?: string | null;
+};
+
+export type ResignRequest = {
+    color: string;
 };

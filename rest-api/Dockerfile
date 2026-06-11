@@ -35,6 +35,9 @@ RUN sbt "restApi/assembly"
 # Runtime stage
 FROM eclipse-temurin:21-jre-alpine
 
+# Install curl for healthcheck
+RUN apk add --no-cache curl
+
 WORKDIR /app
 
 COPY --from=builder /app/rest-api/target/scala-3.3.3/chess-rest-api.jar app.jar

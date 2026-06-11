@@ -22,6 +22,12 @@ class GameSessionController(
     repo.createGame(initialState)
   }
 
+  /** Create a new game session with player names and time control */
+  def createGameWithTimeControl(whitePlayer: String, blackPlayer: String, timeControl: model.TimeControl): String = {
+    val initialState = controller.createWithTimeControl(whitePlayer, blackPlayer, timeControl)
+    repo.createGame(initialState)
+  }
+
   /** Get a game by ID */
   def getGame(gameId: String): Option[PositionState] =
     repo.getGame(gameId)
@@ -174,6 +180,36 @@ class GameSessionController(
         service.GameService.exportToPgn(state, event, site)
       case None =>
         throw new Exception("Game not found")
+    }
+  }
+
+  /** Check and apply timeout if a player's time has expired */
+  def checkAndApplyTimeout(gameId: String): Either[String, PositionState] = {
+    repo.getGame(gameId) match {
+      case Some(state) =>
+        if (state.gameResult != model.Ongoing) {
+          // Game already over, just return current state
+          Right(state)
+        } else {
+          // Check if current player's time has expired
+          val currentPlayer = state.turn
+          val isTimeExpired = currentPlayer match {
+            case model.White => state.whiteTime.exists(_.isTimeOver)
+            case model.Black => state.blackTime.exists(_.isTimeOver)
+          }
+
+          if (isTimeExpired) {
+            // Apply timeout - the winner is the opposite color
+            val winner = currentPlayer.opposite
+            val newState = state.copy(gameResult = model.TimeOut(winner))
+            repo.updateGame(gameId, newState)
+            Right(newState)
+          } else {
+            Right(state)
+          }
+        }
+      case None =>
+        Left("Game not found")
     }
   }
 }

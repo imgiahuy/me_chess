@@ -2,7 +2,7 @@ import React from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useGame } from "../hooks/useGame";
 import { Board } from "../components/Board";
-import { saveGame, exportPgn } from "../utils/apiClient";
+import { saveGame, exportPgn, resign } from "../utils/apiClient";
 
 // Helper function to convert Position(x,y) to algebraic notation
 function convertPositionToAlgebraic(message: string): string {
@@ -13,24 +13,50 @@ function convertPositionToAlgebraic(message: string): string {
     });
 }
 
+// Helper function to format time in milliseconds to minutes:seconds
+function formatTime(ms: number): string {
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
+// Helper function to get game result display text
+function getGameResultText(gameResult: any): string {
+    if (gameResult.status === "ongoing") return "";
+    if (gameResult.status === "checkmate") return `Checkmate - ${gameResult.winner} wins`;
+    if (gameResult.status === "draw") return `Draw - ${gameResult.reason}`;
+    if (gameResult.status === "resignation") return `Resignation - ${gameResult.winner} wins`;
+    if (gameResult.status === "timeout") return `Time out - ${gameResult.winner} wins`;
+    return "Game Over";
+}
+
 export function GamePage() {
     const { gameId } = useParams();
     const navigate = useNavigate();
-    const { game, loading, move, refresh } = useGame(gameId!);
+    const { game, loading, move, refresh, gameEnded, clearGameEndNotification } = useGame(gameId!);
     const [moveError, setMoveError] = React.useState<string | null>(null);
     const [saveMessage, setSaveMessage] = React.useState<string | null>(null);
     const [exportMessage, setExportMessage] = React.useState<string | null>(null);
     const [notification, setNotification] = React.useState<string>("Welcome to the game!");
     const [showExportDialog, setShowExportDialog] = React.useState(false);
+    const [showGameEndDialog, setShowGameEndDialog] = React.useState(false);
     const [exportForm, setExportForm] = React.useState({ event: "Web Game", site: "Online" });
     const moveHistoryRef = React.useRef<HTMLDivElement>(null);
 
-    async function handleMove(from: string, to: string) {
+    // Show game end dialog when game ends
+    React.useEffect(() => {
+        if (gameEnded) {
+            setShowGameEndDialog(true);
+        }
+    }, [gameEnded]);
+
+    async function handleMove(from: string, to: string, promotion?: string | null) {
         setMoveError(null);
         setSaveMessage(null);
-        setNotification(`Move: ${from} → ${to}`);
+        setNotification(`Move: ${from} → ${to}${promotion ? ` (${promotion})` : ''}`);
         try {
-            await move(from, to);
+            await move(from, to, promotion);
             setNotification(`Move successful: ${from} → ${to}`);
             // Scroll to bottom of move history after successful move
             setTimeout(() => {
@@ -85,6 +111,20 @@ export function GamePage() {
         }
     }
 
+    async function handleResign(color: string) {
+        setMoveError(null);
+        setSaveMessage(null);
+        setNotification(`Resigning as ${color}...`);
+        try {
+            await resign(gameId!, color);
+            setNotification(`Resigned as ${color}`);
+            refresh();
+        } catch (e) {
+            setMoveError(e instanceof Error ? e.message : "Failed to resign");
+            setNotification("Failed to resign");
+        }
+    }
+
     if (loading) return <div className="loading">Loading game...</div>;
     if (!game) return <div className="error">No game found</div>;
 
@@ -108,6 +148,7 @@ export function GamePage() {
                     <Board
                         fen={game.fen}
                         onMove={handleMove}
+                        turn={game.turn}
                     />
                 </div>
 
@@ -120,23 +161,90 @@ export function GamePage() {
                         <p style={{ color: "#b0b0b0" }}>
                             <strong>Moves:</strong> {game.moveHistory.length}
                         </p>
-                        {game.isGameOver && (
+                        {game.gameResult.status !== "ongoing" && (
                             <p style={{ color: "#ff6b6b", fontWeight: "bold" }}>
-                                Game Over - {game.winner || "Draw"}
+                                {getGameResultText(game.gameResult)}
+                            </p>
+                        )}
+                        {game.whiteTime && game.blackTime && (
+                            <div style={{
+                                display: "flex",
+                                gap: "1rem",
+                                marginTop: "0.5rem"
+                            }}>
+                                <div style={{
+                                    flex: 1,
+                                    padding: "0.75rem",
+                                    backgroundColor: game.turn === "White" ? "#2d4a3e" : "#2C2C2C",
+                                    borderRadius: "6px",
+                                    border: game.turn === "White" ? "2px solid #4ec9b0" : "1px solid #444"
+                                }}>
+                                    <div style={{ fontSize: "0.75rem", color: "#888", marginBottom: "0.25rem" }}>White</div>
+                                    <div style={{
+                                        fontSize: "1.25rem",
+                                        fontWeight: "bold",
+                                        color: game.whiteTime.remainingTimeMs !== null && game.whiteTime.remainingTimeMs < 30000
+                                            ? "#ff6b6b"
+                                            : game.turn === "White" ? "#4ec9b0" : "#e0e0e0",
+                                        fontFamily: "monospace"
+                                    }}>
+                                        {formatTime(game.whiteTime.remainingTimeMs ?? 0)}
+                                    </div>
+                                    {game.turn === "White" && (
+                                        <div style={{ fontSize: "0.7rem", color: "#4ec9b0", marginTop: "0.25rem" }}>Your turn</div>
+                                    )}
+                                </div>
+                                <div style={{
+                                    flex: 1,
+                                    padding: "0.75rem",
+                                    backgroundColor: game.turn === "Black" ? "#2d4a3e" : "#2C2C2C",
+                                    borderRadius: "6px",
+                                    border: game.turn === "Black" ? "2px solid #4ec9b0" : "1px solid #444"
+                                }}>
+                                    <div style={{ fontSize: "0.75rem", color: "#888", marginBottom: "0.25rem" }}>Black</div>
+                                    <div style={{
+                                        fontSize: "1.25rem",
+                                        fontWeight: "bold",
+                                        color: game.blackTime.remainingTimeMs !== null && game.blackTime.remainingTimeMs < 30000
+                                            ? "#ff6b6b"
+                                            : game.turn === "Black" ? "#4ec9b0" : "#e0e0e0",
+                                        fontFamily: "monospace"
+                                    }}>
+                                        {formatTime(game.blackTime.remainingTimeMs ?? 0)}
+                                    </div>
+                                    {game.turn === "Black" && (
+                                        <div style={{ fontSize: "0.7rem", color: "#4ec9b0", marginTop: "0.25rem" }}>Your turn</div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                        {(!game.whiteTime || !game.blackTime) && (
+                            <p style={{ color: "#b0b0b0" }}>
+                                <strong>Time:</strong> Unlimited
                             </p>
                         )}
                     </div>
 
                     <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                        <button onClick={handleSave} disabled={game.isGameOver}>
+                        <button onClick={handleSave} disabled={game.gameResult.status !== "ongoing"}>
                             Save Game
                         </button>
-                        <button onClick={() => setShowExportDialog(true)} disabled={game.isGameOver}>
+                        <button onClick={() => setShowExportDialog(true)} disabled={game.gameResult.status !== "ongoing"}>
                             Export PGN
                         </button>
                         <button onClick={refresh} className="secondary">
                             Refresh
                         </button>
+                        {game.gameResult.status === "ongoing" && (
+                            <>
+                                <button onClick={() => handleResign("white")} className="secondary">
+                                    Resign (White)
+                                </button>
+                                <button onClick={() => handleResign("black")} className="secondary">
+                                    Resign (Black)
+                                </button>
+                            </>
+                        )}
                     </div>
 
                     <div style={{ marginTop: "1rem", background: "#1E1E1E", padding: "1.5rem", borderRadius: "8px", border: "1px solid #444" }}>
@@ -240,6 +348,68 @@ export function GamePage() {
                             </button>
                             <button onClick={handleExportPgn}>
                                 Export
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Game End Dialog */}
+            {showGameEndDialog && gameEnded && (
+                <div style={{
+                    position: "fixed",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: "rgba(0, 0, 0, 0.7)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    zIndex: 2000
+                }}>
+                    <div style={{
+                        background: "#1E1E1E",
+                        padding: "2.5rem",
+                        borderRadius: "12px",
+                        border: "2px solid #ff6b6b",
+                        minWidth: "350px",
+                        maxWidth: "500px",
+                        textAlign: "center"
+                    }}>
+                        <h2 style={{ color: "#ff6b6b", marginBottom: "1rem", fontSize: "1.75rem" }}>
+                            Game Over!
+                        </h2>
+                        <div style={{ marginBottom: "1.5rem", color: "#e0e0e0", fontSize: "1.1rem" }}>
+                            {gameEnded.status === "checkmate" && (
+                                <p>Checkmate! <strong style={{ color: "#4ec9b0" }}>{gameEnded.winner}</strong> wins!</p>
+                            )}
+                            {gameEnded.status === "resignation" && (
+                                <p>Resignation! <strong style={{ color: "#4ec9b0" }}>{gameEnded.winner}</strong> wins!</p>
+                            )}
+                            {gameEnded.status === "timeout" && (
+                                <p>Time out! <strong style={{ color: "#4ec9b0" }}>{gameEnded.winner}</strong> wins!</p>
+                            )}
+                            {gameEnded.status === "draw" && (
+                                <p>Draw! Reason: <strong style={{ color: "#ffd93d" }}>{gameEnded.reason}</strong></p>
+                            )}
+                        </div>
+                        <div style={{ display: "flex", gap: "1rem", justifyContent: "center" }}>
+                            <button
+                                onClick={() => {
+                                    setShowGameEndDialog(false);
+                                    clearGameEndNotification();
+                                }}
+                                style={{ minWidth: "120px" }}
+                            >
+                                Continue
+                            </button>
+                            <button
+                                onClick={() => navigate("/")}
+                                className="secondary"
+                                style={{ minWidth: "120px" }}
+                            >
+                                Back to Menu
                             </button>
                         </div>
                     </div>

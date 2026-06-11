@@ -35,11 +35,12 @@ object FenParser:
       squares <- parseBoardPart(boardPart)
       turn <- parseTurnPart(turnPart)
     } yield PositionState(
-      board = Board(squares), 
-      turn = turn, 
+      board = Board(squares),
+      turn = turn,
       moveHistory = List.empty,
       whitePlayer = Player("White"),
-      blackPlayer = Player("Black")
+      blackPlayer = Player("Black"),
+      timeControl = None
     )
 
   /** Parses the board placement part of FEN.

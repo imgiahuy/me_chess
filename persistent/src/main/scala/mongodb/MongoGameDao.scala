@@ -1,7 +1,7 @@
 package mongodb
 
 import dao.GameDao
-import _root_.model.{Board, Black, Bishop, Color, King, Knight, Move, Pawn, Piece, PieceType, Player, Position, PositionState, Queen, Rook, White}
+import _root_.model.{Board, Black, Bishop, Color, King, Knight, Move, Pawn, Piece, PieceType, Player, PlayerTime, Position, PositionState, Queen, Rook, TimeControl, White}
 import com.mongodb.client.MongoCollection
 import com.mongodb.client.model.Filters
 import com.mongodb.client.model.Updates.set
@@ -29,7 +29,7 @@ class MongoGameDao(
     } yield {
       val gameId = java.util.UUID.randomUUID().toString
       val boardJson = serializeBoard(game.board)
-      
+
       val doc = new Document()
         .append("id", gameId)
         .append("whitePlayerId", whiteId)
@@ -38,7 +38,10 @@ class MongoGameDao(
         .append("creationDate", java.util.Date.from(game.creationDate.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant))
         .append("lastModified", new java.util.Date())
         .append("boardState", boardJson)
-      
+        .append("timeControl", serializeTimeControl(game.timeControl))
+        .append("whiteTime", serializePlayerTime(game.whiteTime))
+        .append("blackTime", serializePlayerTime(game.blackTime))
+
       collection.insertOne(doc)
       gameId
     }).flatMap { gameId =>
@@ -55,20 +58,25 @@ class MongoGameDao(
       if (doc != null) {
         val whitePlayerId = doc.getInteger("whitePlayerId")
         val blackPlayerId = doc.getInteger("blackPlayerId")
-        
+
         // Note: This is a simplification - in production you'd store actual player names
         val whitePlayer = Player(s"Player$whitePlayerId")
         val blackPlayer = Player(s"Player$blackPlayerId")
-        
+
         val board = deserializeBoard(doc.getString("boardState"))
         val turn = parseColor(doc.getString("turn"))
         val creationDate = doc.getDate("creationDate").toInstant
           .atZone(java.time.ZoneId.systemDefault()).toLocalDate
-        
+
         // Get moves
         val moves = scala.concurrent.Await.result(moveDao.findByGameId(id), scala.concurrent.duration.Duration(5, "seconds"))
-        
-        Some(PositionState(board, turn, moves, whitePlayer, blackPlayer, creationDate, Some(id)))
+
+        // Deserialize time control and player times
+        val timeControl = deserializeTimeControl(doc.getString("timeControl"))
+        val whiteTime = deserializePlayerTime(doc.getString("whiteTime"))
+        val blackTime = deserializePlayerTime(doc.getString("blackTime"))
+
+        Some(PositionState(board, turn, moves, whitePlayer, blackPlayer, creationDate, Some(id), timeControl, whiteTime, blackTime))
       } else {
         None
       }
@@ -83,9 +91,12 @@ class MongoGameDao(
         new Document("$set", new Document()
           .append("turn", game.turn.toString)
           .append("boardState", boardJson)
-          .append("lastModified", new java.util.Date()))
+          .append("lastModified", new java.util.Date())
+          .append("timeControl", serializeTimeControl(game.timeControl))
+          .append("whiteTime", serializePlayerTime(game.whiteTime))
+          .append("blackTime", serializePlayerTime(game.blackTime)))
       )
-      
+
       if (result.getModifiedCount > 0) {
         // Update moves: delete old ones and insert new ones
         scala.concurrent.Await.result(moveDao.deleteByGameId(id), scala.concurrent.duration.Duration(5, "seconds"))
@@ -149,7 +160,7 @@ class MongoGameDao(
         
         val moves = scala.concurrent.Await.result(moveDao.findByGameId(gameId), scala.concurrent.duration.Duration(5, "seconds"))
         
-        PositionState(board, turn, moves, whitePlayer, blackPlayer, creationDate, Some(gameId))
+        PositionState(board, turn, moves, whitePlayer, blackPlayer, creationDate, Some(gameId), timeControl = None)
       }.toList
     }
   }
@@ -217,5 +228,35 @@ class MongoGameDao(
     case "Knight" => Knight
     case "Pawn" => Pawn
     case _ => throw new IllegalArgumentException(s"Invalid piece type: $str")
+  }
+
+  private def serializeTimeControl(tc: Option[TimeControl]): String = {
+    tc match {
+      case Some(t) => s"${t.initialTimeMs},${t.incrementMs},${t.delayMs}"
+      case None => null
+    }
+  }
+
+  private def deserializeTimeControl(str: String): Option[TimeControl] = {
+    if (str == null || str.isEmpty) None
+    else {
+      val parts = str.split(",")
+      Some(TimeControl(parts(0).toLong, parts(1).toLong, parts(2).toLong))
+    }
+  }
+
+  private def serializePlayerTime(pt: Option[PlayerTime]): String = {
+    pt match {
+      case Some(t) => s"${t.remainingTimeMs},${t.lastUpdatedAt}"
+      case None => null
+    }
+  }
+
+  private def deserializePlayerTime(str: String): Option[PlayerTime] = {
+    if (str == null || str.isEmpty) None
+    else {
+      val parts = str.split(",")
+      Some(PlayerTime(parts(0).toLong, parts(1).toLong))
+    }
   }
 }

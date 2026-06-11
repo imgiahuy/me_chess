@@ -1,10 +1,10 @@
 const BASE_URL = "/v1/chess";
 
-export async function createGame(whitePlayer: string, blackPlayer: string) {
+export async function createGame(whitePlayer: string, blackPlayer: string, timeControl?: string | null) {
     const res = await fetch(`${BASE_URL}/games`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ whitePlayer, blackPlayer }),
+        body: JSON.stringify({ whitePlayer, blackPlayer, timeControl }),
     });
     if (!res.ok) throw new Error(`Failed to create game: ${res.status}`);
     return res.json();
@@ -16,11 +16,11 @@ export async function getGame(gameId: string) {
     return res.json();
 }
 
-export async function makeMove(gameId: string, from: string, to: string) {
+export async function makeMove(gameId: string, from: string, to: string, promotion?: string | null, castling?: string | null) {
     const res = await fetch(`${BASE_URL}/games/${gameId}/moves`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ from, to }),
+        body: JSON.stringify({ from, to, promotion, castling }),
     });
     if (!res.ok) {
         const error = await res.json();
@@ -80,5 +80,18 @@ export async function exportPgn(gameId: string, event: string, site: string) {
         body: JSON.stringify({ event, site }),
     });
     if (!res.ok) throw new Error(`Failed to export PGN: ${res.status}`);
+    return res.json();
+}
+
+export async function resign(gameId: string, color: string) {
+    const res = await fetch(`${BASE_URL}/games/${gameId}/resign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ color }),
+    });
+    if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || `Failed to resign: ${res.status}`);
+    }
     return res.json();
 }
