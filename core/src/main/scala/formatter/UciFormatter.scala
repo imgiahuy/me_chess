@@ -19,8 +19,10 @@ object UciFormatter {
   def uciFormatter(move: Move): String = {
     // Handle special moves
     move.specialMove match {
-      case Some(CastlingKingSide) => "0-0"
-      case Some(CastlingQueenSide) => "0-0-0"
+      case Some(CastlingKingSide) =>
+        s"${squareToAlgebraic(move.from)}${squareToAlgebraic(move.to)}"
+      case Some(CastlingQueenSide) =>
+        s"${squareToAlgebraic(move.from)}${squareToAlgebraic(move.to)}"
       case Some(Promotion(promotion)) =>
         val from = move.from
         val to = move.to

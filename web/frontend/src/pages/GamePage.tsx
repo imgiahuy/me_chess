@@ -34,7 +34,7 @@ function getGameResultText(gameResult: any): string {
 export function GamePage() {
     const { gameId } = useParams();
     const navigate = useNavigate();
-    const { game, loading, move, refresh, gameEnded, clearGameEndNotification } = useGame(gameId!);
+    const { game, loading, move, refresh, gameEnded, clearGameEndNotification, setGameDirect } = useGame(gameId!);
     const [moveError, setMoveError] = React.useState<string | null>(null);
     const [saveMessage, setSaveMessage] = React.useState<string | null>(null);
     const [exportMessage, setExportMessage] = React.useState<string | null>(null);
@@ -51,13 +51,13 @@ export function GamePage() {
         }
     }, [gameEnded]);
 
-    async function handleMove(from: string, to: string, promotion?: string | null) {
+    async function handleMove(from: string, to: string, promotion?: string | null, castling?: string | null) {
         setMoveError(null);
         setSaveMessage(null);
-        setNotification(`Move: ${from} → ${to}${promotion ? ` (${promotion})` : ''}`);
+        setNotification(`Move: ${from} → ${to}${promotion ? ` (${promotion})` : ''}${castling ? ` [${castling} castling]` : ''}`);
         try {
-            await move(from, to, promotion);
-            setNotification(`Move successful: ${from} → ${to}`);
+            await move(from, to, promotion, castling);
+            setNotification(`Move successful: ${from} → ${to}${castling ? ` [${castling} castling]` : ''}`);
             // Scroll to bottom of move history after successful move
             setTimeout(() => {
                 if (moveHistoryRef.current) {
@@ -116,9 +116,9 @@ export function GamePage() {
         setSaveMessage(null);
         setNotification(`Resigning as ${color}...`);
         try {
-            await resign(gameId!, color);
+            const response = await resign(gameId!, color);
             setNotification(`Resigned as ${color}`);
-            refresh();
+            setGameDirect(response);
         } catch (e) {
             setMoveError(e instanceof Error ? e.message : "Failed to resign");
             setNotification("Failed to resign");
@@ -149,6 +149,7 @@ export function GamePage() {
                         fen={game.fen}
                         onMove={handleMove}
                         turn={game.turn}
+                        gameOver={game.gameResult.status !== "ongoing"}
                     />
                 </div>
 

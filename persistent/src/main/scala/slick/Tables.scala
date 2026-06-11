@@ -17,7 +17,7 @@ class Tables(val profile: JdbcProfile) {
   val players = TableQuery[Players]
 
   /** Games table - stores game state and metadata. */
-  class Games(tag: Tag) extends Table[(String, Int, Int, String, java.time.LocalDate, String, Option[String])](tag, "games") {
+  class Games(tag: Tag) extends Table[(String, Int, Int, String, java.time.LocalDate, String, Option[String], Option[String], Option[String], Option[String])](tag, "games") {
     def id = column[String]("id", O.PrimaryKey)
     def whitePlayerId = column[Int]("white_player_id")
     def blackPlayerId = column[Int]("black_player_id")
@@ -25,8 +25,11 @@ class Tables(val profile: JdbcProfile) {
     def creationDate = column[java.time.LocalDate]("creation_date")
     def boardState = column[String]("board_state") // JSON serialized Board
     def result = column[Option[String]]("result") // Optional game result
+    def timeControl = column[Option[String]]("time_control") // JSON serialized TimeControl
+    def whiteTime = column[Option[String]]("white_time") // JSON serialized PlayerTime
+    def blackTime = column[Option[String]]("black_time") // JSON serialized PlayerTime
 
-    def * = (id, whitePlayerId, blackPlayerId, turn, creationDate, boardState, result)
+    def * = (id, whitePlayerId, blackPlayerId, turn, creationDate, boardState, result, timeControl, whiteTime, blackTime)
 
     // Foreign key relationships
     def whitePlayer = foreignKey("white_player_fk", whitePlayerId, players)(_.id)

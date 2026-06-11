@@ -66,21 +66,38 @@ object GameService {
       return Left(s"Game is already over: ${snapshot.gameResult}")
     }
 
+    // Normalize castling moves: UciParser always emits row 0 for 0-0/0-0-0 shorthand.
+    // If the move is a castling special move but the from-square row doesn't match the
+    // current player's king row, remap it to the correct row.
+    val normalizedMove = move.specialMove match {
+      case Some(CastlingKingSide) | Some(CastlingQueenSide) =>
+        val kingRow = if (snapshot.turn == White) 0 else 7
+        if (move.from.row != kingRow) {
+          val isKingSide = move.specialMove == Some(CastlingKingSide)
+          Move(
+            Position(4, kingRow),
+            Position(if (isKingSide) 6 else 2, kingRow),
+            move.specialMove
+          )
+        } else move
+      case _ => move
+    }
+
     for {
-      _ <- validate(snapshot, move)
+      _ <- validate(snapshot, normalizedMove)
       piece <- snapshot.board
-        .pieceAt(move.from)
+        .pieceAt(normalizedMove.from)
         .toRight(s"No piece at destination square")
-      _ <- isLegalMove(snapshot, move, piece)
-      newBoard <- applyMoveToBoard(snapshot.board, move, piece, snapshot)
+      _ <- isLegalMove(snapshot, normalizedMove, piece)
+      newBoard <- applyMoveToBoard(snapshot.board, normalizedMove, piece, snapshot)
       nextTurn = if (snapshot.turn == White) Black else White
       // Track halfmoves for fifty-move rule
       isEnPassantCapture = piece.pieceType == Pawn && 
-        (move.to.col - move.from.col).abs == 1 &&
-        snapshot.board.isEmpty(move.to) &&
+        (normalizedMove.to.col - normalizedMove.from.col).abs == 1 &&
+        snapshot.board.isEmpty(normalizedMove.to) &&
         snapshot.moveHistory.nonEmpty
       isCaptureOrPawn = piece.pieceType == Pawn ||
-                        snapshot.board.pieceAt(move.to).isDefined ||
+                        snapshot.board.pieceAt(normalizedMove.to).isDefined ||
                         isEnPassantCapture
       halfmovesSinceLastCaptureOrPawn = if (isCaptureOrPawn) 0 else snapshot.halfmovesSinceLastCaptureOrPawn + 1
       // Add to position history for threefold repetition
@@ -91,7 +108,7 @@ object GameService {
       val newState = snapshot.copy(
         board = newBoard,
         turn = nextTurn,
-        moveHistory = snapshot.moveHistory :+ move,
+        moveHistory = snapshot.moveHistory :+ normalizedMove,
         halfmovesSinceLastCaptureOrPawn = halfmovesSinceLastCaptureOrPawn,
         positionHistory = newPositionHistory,
         whiteTime = newWhiteTime,
@@ -337,14 +354,16 @@ object GameService {
       return Left("Cannot castle while in check")
     }
 
-    // Check if king or rook has moved before (simplified: check if they're still in starting position)
+    // Check if king or rook has moved before by checking starting squares
+    val kingStartPos = Position(4, move.from.row)
+    val rookStartPos = Position(rookCol, move.from.row)
+
     val kingHasMoved = snapshot.moveHistory.exists { m =>
-      board.pieceAt(m.from).exists(p => p.color == kingColor && p.pieceType == King)
+      m.from == kingStartPos || m.to == kingStartPos
     }
 
     val rookHasMoved = snapshot.moveHistory.exists { m =>
-      board.pieceAt(m.from).exists(p => p.color == kingColor && p.pieceType == Rook &&
-        (if (isKingSide) m.from.col == 7 else m.from.col == 0))
+      m.from == rookStartPos || m.to == rookStartPos
     }
 
     if (kingHasMoved || rookHasMoved) {
@@ -596,7 +615,7 @@ object GameService {
 
   /** Returns true if the current player has at least one legal move available. */
   def hasLegalMoves(snapshot: PositionState): Boolean = {
-    snapshot.board.piecesOf(snapshot.turn).exists { case (pos, piece) =>
+    val hasRegularMove = snapshot.board.piecesOf(snapshot.turn).exists { case (pos, piece) =>
       (0 until 8).exists { toCol =>
         (0 until 8).exists { toRow =>
           val move = Move(pos, Position(toCol, toRow))
@@ -604,24 +623,41 @@ object GameService {
         }
       }
     }
+    if (hasRegularMove) return true
+    // Also check castling moves
+    val kingRow = if (snapshot.turn == White) 0 else 7
+    val castlingMoves = List(
+      Move(Position(4, kingRow), Position(6, kingRow), Some(CastlingKingSide)),
+      Move(Position(4, kingRow), Position(2, kingRow), Some(CastlingQueenSide))
+    )
+    castlingMoves.exists(m => applyMoveWithoutGameResultCheck(snapshot, m).isRight)
   }
 
   /** Simplified version of applyMove that doesn't check game result - used to avoid infinite recursion in hasLegalMoves */
   private def applyMoveWithoutGameResultCheck(snapshot: PositionState, move: Move): Either[String, PositionState] = {
+    val normalizedMove = move.specialMove match {
+      case Some(CastlingKingSide) | Some(CastlingQueenSide) =>
+        val kingRow = if (snapshot.turn == White) 0 else 7
+        if (move.from.row != kingRow) {
+          val isKingSide = move.specialMove == Some(CastlingKingSide)
+          Move(Position(4, kingRow), Position(if (isKingSide) 6 else 2, kingRow), move.specialMove)
+        } else move
+      case _ => move
+    }
     for {
-      _ <- validate(snapshot, move)
+      _ <- validate(snapshot, normalizedMove)
       piece <- snapshot.board
-        .pieceAt(move.from)
+        .pieceAt(normalizedMove.from)
         .toRight(s"No piece at destination square")
-      _ <- isLegalMove(snapshot, move, piece)
-      newBoard <- applyMoveToBoard(snapshot.board, move, piece, snapshot)
+      _ <- isLegalMove(snapshot, normalizedMove, piece)
+      newBoard <- applyMoveToBoard(snapshot.board, normalizedMove, piece, snapshot)
       nextTurn = if (snapshot.turn == White) Black else White
       isEnPassantCapture = piece.pieceType == Pawn && 
-        (move.to.col - move.from.col).abs == 1 &&
-        snapshot.board.isEmpty(move.to) &&
+        (normalizedMove.to.col - normalizedMove.from.col).abs == 1 &&
+        snapshot.board.isEmpty(normalizedMove.to) &&
         snapshot.moveHistory.nonEmpty
       isCaptureOrPawn = piece.pieceType == Pawn ||
-                        snapshot.board.pieceAt(move.to).isDefined ||
+                        snapshot.board.pieceAt(normalizedMove.to).isDefined ||
                         isEnPassantCapture
       halfmovesSinceLastCaptureOrPawn = if (isCaptureOrPawn) 0 else snapshot.halfmovesSinceLastCaptureOrPawn + 1
       newPositionHistory = snapshot.positionHistory :+ newBoard
@@ -631,7 +667,7 @@ object GameService {
       snapshot.copy(
         board = newBoard,
         turn = nextTurn,
-        moveHistory = snapshot.moveHistory :+ move,
+        moveHistory = snapshot.moveHistory :+ normalizedMove,
         halfmovesSinceLastCaptureOrPawn = halfmovesSinceLastCaptureOrPawn,
         positionHistory = newPositionHistory,
         whiteTime = newWhiteTime,
@@ -806,6 +842,17 @@ object GameService {
             legalMoves += move
           }
         }
+      }
+    }
+
+    // Also include castling moves
+    val kingRow = if (color == White) 0 else 7
+    List(
+      Move(Position(4, kingRow), Position(6, kingRow), Some(CastlingKingSide)),
+      Move(Position(4, kingRow), Position(2, kingRow), Some(CastlingQueenSide))
+    ).foreach { m =>
+      if (applyMove(snapshot, m).isRight) {
+        legalMoves += m
       }
     }
 

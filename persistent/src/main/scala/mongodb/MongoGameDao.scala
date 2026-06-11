@@ -1,7 +1,7 @@
 package mongodb
 
 import dao.GameDao
-import _root_.model.{Board, Black, Bishop, Color, King, Knight, Move, Pawn, Piece, PieceType, Player, PlayerTime, Position, PositionState, Queen, Rook, TimeControl, White}
+import _root_.model.{Board, Black, Bishop, Checkmate, Color, DeadPosition, Draw, DrawReason, FiftyMoveRule, InsufficientMaterial, King, Knight, Move, MutualAgreement, Ongoing, Pawn, Piece, PieceType, Player, PlayerTime, Position, PositionState, Queen, Resignation, Rook, Stalemate, ThreefoldRepetition, TimeControl, TimeOut, White}
 import com.mongodb.client.MongoCollection
 import com.mongodb.client.model.Filters
 import com.mongodb.client.model.Updates.set
@@ -76,7 +76,18 @@ class MongoGameDao(
         val whiteTime = deserializePlayerTime(doc.getString("whiteTime"))
         val blackTime = deserializePlayerTime(doc.getString("blackTime"))
 
-        Some(PositionState(board, turn, moves, whitePlayer, blackPlayer, creationDate, Some(id), timeControl, whiteTime, blackTime))
+        // Deserialize game result
+        val gameResult = parseGameResult(doc.getString("result"))
+
+        Some(PositionState(
+          board, turn, moves, whitePlayer, blackPlayer, creationDate, Some(id),
+          timeControl, whiteTime, blackTime,
+          halfmovesSinceLastCaptureOrPawn = 0,
+          positionHistory = List.empty,
+          hasWhiteResigned = false,
+          hasBlackResigned = false,
+          gameResult = gameResult
+        ))
       } else {
         None
       }
@@ -86,11 +97,19 @@ class MongoGameDao(
   override def update(id: String, game: PositionState): Future[Boolean] = {
     Future {
       val boardJson = serializeBoard(game.board)
+      val resultStr = game.gameResult match {
+        case Ongoing => null
+        case Checkmate(winner) => s"checkmate:$winner"
+        case Draw(reason) => s"draw:${drawReasonToString(reason)}"
+        case Resignation(winner) => s"resignation:$winner"
+        case TimeOut(winner) => s"timeout:$winner"
+      }
       val result = collection.updateOne(
         Filters.eq("id", id),
         new Document("$set", new Document()
           .append("turn", game.turn.toString)
           .append("boardState", boardJson)
+          .append("result", resultStr)
           .append("lastModified", new java.util.Date())
           .append("timeControl", serializeTimeControl(game.timeControl))
           .append("whiteTime", serializePlayerTime(game.whiteTime))
@@ -149,18 +168,28 @@ class MongoGameDao(
         val gameId = doc.getString("id")
         val whitePlayerId = doc.getInteger("whitePlayerId")
         val blackPlayerId = doc.getInteger("blackPlayerId")
-        
+
         val whitePlayer = Player(s"Player$whitePlayerId")
         val blackPlayer = Player(s"Player$blackPlayerId")
-        
+
         val board = deserializeBoard(doc.getString("boardState"))
         val turn = parseColor(doc.getString("turn"))
         val creationDate = doc.getDate("creationDate").toInstant
           .atZone(java.time.ZoneId.systemDefault()).toLocalDate
-        
+
         val moves = scala.concurrent.Await.result(moveDao.findByGameId(gameId), scala.concurrent.duration.Duration(5, "seconds"))
-        
-        PositionState(board, turn, moves, whitePlayer, blackPlayer, creationDate, Some(gameId), timeControl = None)
+
+        val gameResult = parseGameResult(doc.getString("result"))
+
+        PositionState(
+          board, turn, moves, whitePlayer, blackPlayer, creationDate, Some(gameId),
+          timeControl = None, whiteTime = None, blackTime = None,
+          halfmovesSinceLastCaptureOrPawn = 0,
+          positionHistory = List.empty,
+          hasWhiteResigned = false,
+          hasBlackResigned = false,
+          gameResult = gameResult
+        )
       }.toList
     }
   }
@@ -172,18 +201,28 @@ class MongoGameDao(
         val gameId = doc.getString("id")
         val whitePlayerId = doc.getInteger("whitePlayerId")
         val blackPlayerId = doc.getInteger("blackPlayerId")
-        
+
         val whitePlayer = Player(s"Player$whitePlayerId")
         val blackPlayer = Player(s"Player$blackPlayerId")
-        
+
         val board = deserializeBoard(doc.getString("boardState"))
         val turn = parseColor(doc.getString("turn"))
         val creationDate = doc.getDate("creationDate").toInstant
           .atZone(java.time.ZoneId.systemDefault()).toLocalDate
-        
+
         val moves = scala.concurrent.Await.result(moveDao.findByGameId(gameId), scala.concurrent.duration.Duration(5, "seconds"))
-        
-        Some(PositionState(board, turn, moves, whitePlayer, blackPlayer, creationDate, Some(gameId)))
+
+        val gameResult = parseGameResult(doc.getString("result"))
+
+        Some(PositionState(
+          board, turn, moves, whitePlayer, blackPlayer, creationDate, Some(gameId),
+          timeControl = None, whiteTime = None, blackTime = None,
+          halfmovesSinceLastCaptureOrPawn = 0,
+          positionHistory = List.empty,
+          hasWhiteResigned = false,
+          hasBlackResigned = false,
+          gameResult = gameResult
+        ))
       } else {
         None
       }
@@ -258,5 +297,40 @@ class MongoGameDao(
       val parts = str.split(",")
       Some(PlayerTime(parts(0).toLong, parts(1).toLong))
     }
+  }
+
+  private def parseGameResult(resultStr: String): model.GameResult = {
+    if (resultStr == null || resultStr.isEmpty) Ongoing
+    else if (resultStr.startsWith("checkmate:")) {
+      val winner = parseColor(resultStr.substring(10))
+      Checkmate(winner)
+    } else if (resultStr.startsWith("draw:")) {
+      val reasonStr = resultStr.substring(5)
+      val reason: DrawReason = reasonStr match {
+        case "stalemate" => Stalemate
+        case "insufficient_material" => InsufficientMaterial
+        case "threefold_repetition" => ThreefoldRepetition
+        case "fifty_move_rule" => FiftyMoveRule
+        case "mutual_agreement" => MutualAgreement
+        case "dead_position" => DeadPosition
+        case _ => Stalemate // Fallback
+      }
+      Draw(reason)
+    } else if (resultStr.startsWith("resignation:")) {
+      val winner = parseColor(resultStr.substring(12))
+      Resignation(winner)
+    } else if (resultStr.startsWith("timeout:")) {
+      val winner = parseColor(resultStr.substring(8))
+      TimeOut(winner)
+    } else Ongoing // Fallback for invalid format
+  }
+
+  private def drawReasonToString(reason: DrawReason): String = reason match {
+    case Stalemate => "stalemate"
+    case InsufficientMaterial => "insufficient_material"
+    case ThreefoldRepetition => "threefold_repetition"
+    case FiftyMoveRule => "fifty_move_rule"
+    case MutualAgreement => "mutual_agreement"
+    case DeadPosition => "dead_position"
   }
 }

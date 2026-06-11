@@ -120,6 +120,11 @@ class GuiController(gameControllerInterface: GameControllerInterface) {
           val fromPos = model.Position(fromCol, fromRow)
           val toPos = model.Position(col, row)
 
+          // Check if this is a castling move (king moves 2 squares horizontally)
+          val isCastling = state.board.pieceAt(fromPos).exists { piece =>
+            piece.pieceType == model.King && (col - fromCol).abs == 2 && row == fromRow
+          }
+
           // Check if this is a pawn promotion
           val isPromotion = state.board.pieceAt(fromPos).exists { piece =>
             piece.pieceType == model.Pawn && (
@@ -128,7 +133,10 @@ class GuiController(gameControllerInterface: GameControllerInterface) {
             )
           }
 
-          if (isPromotion) {
+          if (isCastling) {
+            val castlingType = if (col > fromCol) Some(model.CastlingKingSide) else Some(model.CastlingQueenSide)
+            executeMove(fromPos, toPos, castlingType)
+          } else if (isPromotion) {
             // Show promotion dialog
             showPromotionDialog(fromPos, toPos)
           } else {
@@ -162,16 +170,20 @@ class GuiController(gameControllerInterface: GameControllerInterface) {
   }
 
   private def executeMove(fromPos: model.Position, toPos: model.Position, specialMove: Option[model.SpecialMoveType]): Unit = {
-    val moveStr = s"${toAlg(fromPos.col, fromPos.row)}${toAlg(toPos.col, toPos.row)}${specialMove match {
-      case Some(model.Promotion(pt)) => pt match {
-        case model.Queen => "q"
-        case model.Rook => "r"
-        case model.Bishop => "b"
-        case model.Knight => "n"
-        case _ => ""
-      }
-      case _ => ""
-    }}"
+    val moveStr = specialMove match {
+      case Some(model.CastlingKingSide)  => s"${toAlg(fromPos.col, fromPos.row)}${toAlg(toPos.col, toPos.row)}"
+      case Some(model.CastlingQueenSide) => s"${toAlg(fromPos.col, fromPos.row)}${toAlg(toPos.col, toPos.row)}"
+      case Some(model.Promotion(pt)) =>
+        val promo = pt match {
+          case model.Queen  => "q"
+          case model.Rook   => "r"
+          case model.Bishop => "b"
+          case model.Knight => "n"
+          case _            => ""
+        }
+        s"${toAlg(fromPos.col, fromPos.row)}${toAlg(toPos.col, toPos.row)}$promo"
+      case _ => s"${toAlg(fromPos.col, fromPos.row)}${toAlg(toPos.col, toPos.row)}"
+    }
 
     val result = gameControllerInterface.makeMove(state, moveStr)
 
@@ -201,6 +213,7 @@ class GuiController(gameControllerInterface: GameControllerInterface) {
 
     isProcessingMove = false
     render()
+    if (state != null && state.gameResult != model.Ongoing) showGameEndDialog()
   }
 
   private def handleExit(): Unit = {
@@ -248,8 +261,12 @@ class GuiController(gameControllerInterface: GameControllerInterface) {
         selected = None
         validMoves = Set()
         moveHistory = state.moveHistory.map(move => s"${toAlg(move.from.col, move.from.row)}${toAlg(move.to.col, move.to.row)}")
-        notification = "Game loaded successfully!"
+        notification = if (state.gameResult != model.Ongoing)
+          s"Game loaded - ${state.gameResult}"
+        else
+          "Game loaded successfully!"
         render()
+        if (state.gameResult != model.Ongoing) showGameEndDialog()
       } catch {
         case e: Exception =>
           notification = s"Error loading: ${e.getMessage}"
@@ -315,11 +332,28 @@ class GuiController(gameControllerInterface: GameControllerInterface) {
       validMoves = Set()
       notification = s"${color.toString} resigned - ${color.opposite} wins!"
       render()
+      showGameEndDialog()
     } catch {
       case e: Exception =>
         notification = s"Failed to process resignation: ${e.getMessage}"
         render()
     }
+  }
+
+  private def showGameEndDialog(): Unit = {
+    import model.{Checkmate, Draw, Resignation, TimeOut, Ongoing}
+    val (dialogTitle, dialogMessage) = state.gameResult match {
+      case Checkmate(winner)   => ("Checkmate!",   s"$winner wins by checkmate!")
+      case Resignation(winner) => ("Resignation!",  s"$winner wins \u2014 opponent resigned.")
+      case TimeOut(winner)     => ("Time Out!",     s"$winner wins on time!")
+      case Draw(reason)        => ("Draw!",         s"The game is a draw.\nReason: $reason")
+      case Ongoing             => return
+    }
+    val alert = new Alert(Alert.AlertType.Information)
+    alert.setTitle("Game Over")
+    alert.setHeaderText(dialogTitle)
+    alert.setContentText(dialogMessage)
+    alert.showAndWait()
   }
 
   private def handleReturnToMenu(): Unit = {

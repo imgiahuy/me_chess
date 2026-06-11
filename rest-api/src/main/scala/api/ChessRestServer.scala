@@ -7,7 +7,6 @@ import akka.http.scaladsl.server.{Directives, Route}
 import controller.GameController
 import database.DatabaseManager
 import repository.DatabaseGameRepository
-import repository.MongoGameRepository
 
 
 import scala.concurrent.ExecutionContextExecutor

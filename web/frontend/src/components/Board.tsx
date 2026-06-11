@@ -8,15 +8,17 @@ interface Props {
     fen: string;
     onMove?: (from: string, to: string, promotion?: string | null, castling?: string | null) => void;
     turn: "White" | "Black";
+    gameOver?: boolean;
 }
 
-export function Board({ fen, onMove, turn }: Props) {
+export function Board({ fen, onMove, turn, gameOver = false }: Props) {
     const board = fenToBoard(fen);
     const [selected, setSelected] = useState<string | null>(null);
     const [showPromotionDialog, setShowPromotionDialog] = useState(false);
     const [pendingMove, setPendingMove] = useState<{ from: string; to: string } | null>(null);
 
     function handleClick(pos: string) {
+        if (gameOver) return;
         if (!selected) {
             setSelected(pos);
         } else {
@@ -31,13 +33,22 @@ export function Board({ fen, onMove, turn }: Props) {
                 const isPawn = piece?.toLowerCase() === 'p';
                 const isWhitePiece = piece === piece?.toUpperCase();
                 
+                // Check if this is a castling move (king moves 2 squares horizontally)
+                const toFile = pos.charCodeAt(0) - 97;
+                const isKing = piece?.toLowerCase() === 'k';
+                const isCastling = isKing && Math.abs(toFile - fromFile) === 2 && parseInt(pos[1]) === parseInt(selected[1]);
+
                 // Check if this is a pawn promotion
                 const isWhitePawn = isPawn && isWhitePiece && turn === "White";
                 const isBlackPawn = isPawn && !isWhitePiece && turn === "Black";
                 
                 const isPromotion = (isWhitePawn && toRank === 0) || (isBlackPawn && toRank === 7);
                 
-                if (isPromotion) {
+                if (isCastling) {
+                    const castlingType = toFile > fromFile ? "kingside" : "queenside";
+                    onMove?.(selected, pos, null, castlingType);
+                    setSelected(null);
+                } else if (isPromotion) {
                     setPendingMove({ from: selected, to: pos });
                     setShowPromotionDialog(true);
                     setSelected(null);
@@ -66,6 +77,22 @@ export function Board({ fen, onMove, turn }: Props) {
 
     return (
         <>
+            <div style={{ position: "relative", display: "inline-block" }}>
+            {gameOver && (
+                <div style={{
+                    position: "absolute",
+                    inset: 0,
+                    backgroundColor: "rgba(0, 0, 0, 0.45)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    zIndex: 10,
+                    borderRadius: "4px",
+                    pointerEvents: "none",
+                }}>
+                    <span style={{ color: "#FFD700", fontSize: "2rem", fontWeight: "bold", textShadow: "0 2px 8px #000" }}>Game Over</span>
+                </div>
+            )}
             <div
                 style={{
                     display: "grid",
@@ -73,6 +100,7 @@ export function Board({ fen, onMove, turn }: Props) {
                     border: "2px solid #1a1a1a",
                     borderRadius: "4px",
                     overflow: "hidden",
+                    cursor: gameOver ? "not-allowed" : "pointer",
                 }}
             >
                 {board.flat().map((piece, i) => {
@@ -90,6 +118,7 @@ export function Board({ fen, onMove, turn }: Props) {
                         />
                     );
                 })}
+            </div>
             </div>
 
             {/* Promotion Dialog */}
