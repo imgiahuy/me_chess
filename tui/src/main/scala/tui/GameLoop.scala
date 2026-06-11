@@ -139,7 +139,11 @@ case class GameLoop(gameController: GameControllerInterface) {
       case LoadGame =>
         try {
           val loadedState = gameController.load(java.nio.file.Paths.get("savegame.txt"))
-          (loadedState, Some(ConsoleRenderer.renderSuccess("Game loaded from 'savegame.txt'")))
+          val msg = if (gameController.isGameOver(loadedState))
+            s"Game loaded from 'savegame.txt' - ${ConsoleRenderer.renderOutcome(loadedState)}"
+          else
+            "Game loaded from 'savegame.txt'"
+          (loadedState, Some(ConsoleRenderer.renderSuccess(msg)))
         } catch {
           case e: Exception =>
             (state, Some(ConsoleRenderer.renderError(e.getMessage)))

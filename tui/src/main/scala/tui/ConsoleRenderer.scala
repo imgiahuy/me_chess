@@ -68,28 +68,32 @@ object ConsoleRenderer {
 
   /** Renders the current game status (check, checkmate, stalemate, normal). */
   def renderGameStatus(state: PositionState): String = {
-    if GameService.isCheckmate(state) then
-      s"CHECKMATE! ${state.turn.opposite} wins!"
-    else if GameService.isStalemate(state) then
-      "STALEMATE! The game is a draw."
-    else if GameService.isKingInCheck(state.board, state.turn) then
-      s"CHECK! ${state.turn} is in check."
-    else
-      "Game in progress"
+    import model.{Ongoing, Checkmate, Draw, Resignation, TimeOut}
+    state.gameResult match {
+      case Checkmate(winner)   => s"CHECKMATE! $winner wins!"
+      case Draw(reason)        => s"DRAW: $reason"
+      case Resignation(winner) => s"RESIGNATION! $winner wins!"
+      case TimeOut(winner)     => s"TIME OUT! $winner wins!"
+      case Ongoing =>
+        if GameService.isKingInCheck(state.board, state.turn) then
+          s"CHECK! ${state.turn} is in check."
+        else
+          "Game in progress"
+    }
   }
 
   // ── Outcome messages ─────────────────────────────────────────────────────────
 
   /** Formats the outcome of the current game state. */
   def renderOutcome(state: PositionState): String = {
-    if GameService.isCheckmate(state) then
-      s"CHECKMATE! ${state.turn.opposite} wins!"
-    else if GameService.isStalemate(state) then
-      "STALEMATE! The game is a draw."
-    else
-      GameService.winner(state)
-        .map(color => s"Game over! $color wins!")
-        .getOrElse("Game over!")
+    import model.{Ongoing, Checkmate, Draw, Resignation, TimeOut}
+    state.gameResult match {
+      case Checkmate(winner)   => s"CHECKMATE! $winner wins!"
+      case Draw(reason)        => s"DRAW: $reason"
+      case Resignation(winner) => s"RESIGNATION! $winner wins!"
+      case TimeOut(winner)     => s"TIME OUT! $winner wins!"
+      case Ongoing             => "Game over!"
+    }
   }
 
   def renderError(msg: String): String = s"[ERROR] $msg"
@@ -120,6 +124,7 @@ object ConsoleRenderer {
        || COMMANDS:                                                 |
        ||   <move>    Make a move (UCI notation)                   |
        ||             Examples: e2e4, g1f3, e7e8q (promotion)     |
+       ||             Castling: 0-0 (kingside), 0-0-0 (queenside) |
        ||   board     Redisplay the board                         |
        ||   moves     Show move history                           |
        ||   status    Show game status (check, checkmate, etc.)   |

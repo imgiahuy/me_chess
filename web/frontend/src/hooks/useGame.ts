@@ -25,8 +25,9 @@ export function useGame(gameId: string) {
         try {
             const data = await getGame(gameId);
 
-            // Detect game end
-            if (data.gameResult.status !== "ongoing" && lastGameResultRef.current === "ongoing") {
+            // Detect game end: either transition from ongoing, or first load of a finished game
+            const wasOngoingOrFirstLoad = lastGameResultRef.current === "ongoing" || lastGameResultRef.current === null;
+            if (data.gameResult.status !== "ongoing" && wasOngoingOrFirstLoad) {
                 setGameEnded({
                     status: data.gameResult.status,
                     winner: data.gameResult.winner,
@@ -145,5 +146,20 @@ export function useGame(gameId: string) {
         setGameEnded(null);
     }, []);
 
-    return { game, loading, error, move, refresh, gameEnded, clearGameEndNotification };
+    // Set game state directly (used by external updates like resign)
+    const setGameDirect = useCallback((newGame: GameResponse) => {
+        setGame(newGame);
+        // Sync the result ref so game-end detection works correctly
+        lastGameResultRef.current = newGame.gameResult.status;
+        // Trigger game-end dialog if the game is now over
+        if (newGame.gameResult.status !== "ongoing") {
+            setGameEnded({
+                status: newGame.gameResult.status,
+                winner: newGame.gameResult.winner,
+                reason: newGame.gameResult.reason
+            });
+        }
+    }, []);
+
+    return { game, loading, error, move, refresh, gameEnded, clearGameEndNotification, setGameDirect };
 }

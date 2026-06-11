@@ -24,12 +24,18 @@ object UciParser {
   def parse(str: String): Either[String, Move] = {
     val cleaned = str.trim.toLowerCase.replaceAll("[\\s\\-]+", "")
 
-    // Handle castling
+    // Handle castling shorthand (0-0 / 0-0-0) - color-agnostic, row resolved in GameService
     if (cleaned == "00" || cleaned == "000") {
       val isKingSide = cleaned.length == 2
       val castlingType = if (isKingSide) CastlingKingSide else CastlingQueenSide
+      // Row 0 = White default; GameService will also match the Black king on row 7 via specialMove
       Right(Move(Position(4, 0), if (isKingSide) Position(6, 0) else Position(2, 0), Some(castlingType)))
     }
+    // Handle castling written as king squares: e1g1, e1c1, e8g8, e8c8
+    else if (cleaned == "e1g1") Right(Move(Position(4, 0), Position(6, 0), Some(CastlingKingSide)))
+    else if (cleaned == "e1c1") Right(Move(Position(4, 0), Position(2, 0), Some(CastlingQueenSide)))
+    else if (cleaned == "e8g8") Right(Move(Position(4, 7), Position(6, 7), Some(CastlingKingSide)))
+    else if (cleaned == "e8c8") Right(Move(Position(4, 7), Position(2, 7), Some(CastlingQueenSide)))
     else if (cleaned.length < 4)
       return Left(s"UCI move must be at least 4 characters long, got '$str'")
     else {

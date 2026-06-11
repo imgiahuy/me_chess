@@ -13,10 +13,13 @@ object JsonCodecs {
       val fromTrimmed = from.trim.toLowerCase
       val toTrimmed = to.trim.toLowerCase
 
-      // Handle castling
+      // Handle castling: use explicit king-square form so UciParser picks the correct row
+      // for both White (e1g1/e1c1) and Black (e8g8/e8c8)
       Option(castling) match {
-        case Some(c) if c == "kingside" || c == "0-0" || c == "short" => "00"
-        case Some(c) if c == "queenside" || c == "0-0-0" || c == "long" => "000"
+        case Some(c) if c == "kingside" || c == "0-0" || c == "short" =>
+          s"${fromTrimmed}${toTrimmed}"
+        case Some(c) if c == "queenside" || c == "0-0-0" || c == "long" =>
+          s"${fromTrimmed}${toTrimmed}"
         case _ =>
           val promoTrimmed = Option(promotion).map(_.trim.toLowerCase).filter(_.nonEmpty)
           promoTrimmed match {
