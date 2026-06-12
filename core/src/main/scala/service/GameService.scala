@@ -87,7 +87,7 @@ object GameService {
       _ <- validate(snapshot, normalizedMove)
       piece <- snapshot.board
         .pieceAt(normalizedMove.from)
-        .toRight(s"No piece at destination square")
+        .toRight(s"No piece at source square")
       _ <- isLegalMove(snapshot, normalizedMove, piece)
       newBoard <- applyMoveToBoard(snapshot.board, normalizedMove, piece, snapshot)
       nextTurn = if (snapshot.turn == White) Black else White
@@ -648,7 +648,7 @@ object GameService {
       _ <- validate(snapshot, normalizedMove)
       piece <- snapshot.board
         .pieceAt(normalizedMove.from)
-        .toRight(s"No piece at destination square")
+        .toRight(s"No piece at source square")
       _ <- isLegalMove(snapshot, normalizedMove, piece)
       newBoard <- applyMoveToBoard(snapshot.board, normalizedMove, piece, snapshot)
       nextTurn = if (snapshot.turn == White) Black else White
@@ -684,23 +684,25 @@ object GameService {
       case Some(tc) =>
         val currentTime = System.currentTimeMillis()
         if (snapshot.turn == White) {
-          // Update white's time (current player)
+          // Deduct time used by white (the player who just moved)
           val updatedWhiteTime = snapshot.whiteTime.map { wt =>
             val timeUsed = currentTime - wt.lastUpdatedAt
             val newRemaining = (wt.remainingTimeMs - timeUsed + tc.incrementMs).max(0)
             PlayerTime(newRemaining, currentTime)
           }
-          // Black's time remains unchanged
-          (updatedWhiteTime, snapshot.blackTime)
+          // Reset black's lastUpdatedAt so their clock starts from now
+          val resetBlackTime = snapshot.blackTime.map(bt => bt.copy(lastUpdatedAt = currentTime))
+          (updatedWhiteTime, resetBlackTime)
         } else {
-          // Update black's time (current player)
+          // Deduct time used by black (the player who just moved)
           val updatedBlackTime = snapshot.blackTime.map { bt =>
             val timeUsed = currentTime - bt.lastUpdatedAt
             val newRemaining = (bt.remainingTimeMs - timeUsed + tc.incrementMs).max(0)
             PlayerTime(newRemaining, currentTime)
           }
-          // White's time remains unchanged
-          (snapshot.whiteTime, updatedBlackTime)
+          // Reset white's lastUpdatedAt so their clock starts from now
+          val resetWhiteTime = snapshot.whiteTime.map(wt => wt.copy(lastUpdatedAt = currentTime))
+          (resetWhiteTime, updatedBlackTime)
         }
       case None => (snapshot.whiteTime, snapshot.blackTime)
     }

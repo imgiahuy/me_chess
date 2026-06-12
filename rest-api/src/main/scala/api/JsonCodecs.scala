@@ -4,7 +4,8 @@ import api.JsonCodecs.GameResultInfo
 import model.{PositionState, TimeControl, PlayerTime, GameResult}
 import service.GameService
 import formatter.UciFormatter
-import upickle.default.{ReadWriter, macroRW}
+import upickle.default.{ReadWriter, macroRW, readwriter}
+import ujson.Value
 
 object JsonCodecs {
 
@@ -13,13 +14,21 @@ object JsonCodecs {
       val fromTrimmed = from.trim.toLowerCase
       val toTrimmed = to.trim.toLowerCase
 
-      // Handle castling: use explicit king-square form so UciParser picks the correct row
-      // for both White (e1g1/e1c1) and Black (e8g8/e8c8)
+      // Handle castling: emit king-square notation that UciParser recognises as castling
+      // (e1g1/e1c1 for White, e8g8/e8c8 for Black)
       Option(castling) match {
         case Some(c) if c == "kingside" || c == "0-0" || c == "short" =>
-          s"${fromTrimmed}${toTrimmed}"
+          // If the from/to already form a recognised castling pair, use them directly;
+          // otherwise fall back to the known king-square patterns based on rank.
+          val pair = s"${fromTrimmed}${toTrimmed}"
+          if (pair == "e1g1" || pair == "e8g8") pair
+          else if (fromTrimmed.startsWith("e") && fromTrimmed.endsWith("1")) "e1g1"
+          else "e8g8"
         case Some(c) if c == "queenside" || c == "0-0-0" || c == "long" =>
-          s"${fromTrimmed}${toTrimmed}"
+          val pair = s"${fromTrimmed}${toTrimmed}"
+          if (pair == "e1c1" || pair == "e8c8") pair
+          else if (fromTrimmed.startsWith("e") && fromTrimmed.endsWith("1")) "e1c1"
+          else "e8c8"
         case _ =>
           val promoTrimmed = Option(promotion).map(_.trim.toLowerCase).filter(_.nonEmpty)
           promoTrimmed match {
@@ -43,7 +52,7 @@ object JsonCodecs {
   final case class TimeControlInfo(
     initialTimeMs: Long,
     incrementMs: Long,
-    remainingTimeMs: Option[Long],
+    remainingTimeMs: Long,
     delayMs: Long = 0
   )
 
@@ -75,16 +84,20 @@ object JsonCodecs {
         case model.TimeOut(winner) => GameResultInfo("timeout", None, Some(winner.toString))
       }
 
-      val whiteTimeInfo = state.whiteTime.map { pt =>
+      val isUnlimited = state.timeControl.isEmpty || state.timeControl.exists(_.initialTimeMs == Long.MaxValue)
+
+      val whiteTimeInfo = if (isUnlimited) None else state.whiteTime.map { pt =>
+        val initial = state.timeControl.map(_.initialTimeMs).getOrElse(0L)
         val increment = state.timeControl.map(_.incrementMs).getOrElse(0L)
         val delay = state.timeControl.map(_.delayMs).getOrElse(0L)
-        TimeControlInfo(pt.remainingTimeMs, increment, Some(pt.getCurrentTime), delay)
+        TimeControlInfo(initial, increment, pt.getCurrentTime, delay)
       }
 
-      val blackTimeInfo = state.blackTime.map { pt =>
+      val blackTimeInfo = if (isUnlimited) None else state.blackTime.map { pt =>
+        val initial = state.timeControl.map(_.initialTimeMs).getOrElse(0L)
         val increment = state.timeControl.map(_.incrementMs).getOrElse(0L)
         val delay = state.timeControl.map(_.delayMs).getOrElse(0L)
-        TimeControlInfo(pt.remainingTimeMs, increment, Some(pt.getCurrentTime), delay)
+        TimeControlInfo(initial, increment, pt.getCurrentTime, delay)
       }
 
       val legalMovesStr = if (includeLegalMoves) {
@@ -154,9 +167,46 @@ object JsonCodecs {
 
   final case class AvailableBotsResponse(bots: List[String])
 
+  given ReadWriter[TimeControlInfo]  = macroRW
+
+  given optionTimeControlInfoRW: ReadWriter[Option[TimeControlInfo]] = readwriter[Value].bimap(
+    opt => opt match {
+      case Some(t) => upickle.default.writeJs(t)
+      case None    => ujson.Null
+    },
+    json => json match {
+      case ujson.Null => None
+      case obj        => Some(upickle.default.read[TimeControlInfo](obj))
+    }
+  )
+
+  given optionStringRW: ReadWriter[Option[String]] = readwriter[Value].bimap(
+    opt => opt match {
+      case Some(s) => ujson.Str(s)
+      case None    => ujson.Null
+    },
+    json => json match {
+      case ujson.Null    => None
+      case ujson.Str(s)  => Some(s)
+      case ujson.Arr(_)  => None
+      case other         => Some(other.str)
+    }
+  )
+
+  given optionListStringRW: ReadWriter[Option[List[String]]] = readwriter[Value].bimap(
+    opt => opt match {
+      case Some(lst) => ujson.Arr(lst.map(ujson.Str(_))*)
+      case None      => ujson.Null
+    },
+    json => json match {
+      case ujson.Null    => None
+      case ujson.Arr(vs) => Some(vs.map(_.str).toList)
+      case _             => None
+    }
+  )
+
   given ReadWriter[MoveRequest]      = macroRW
   given ReadWriter[CreatedGameResponse] = macroRW
-  given ReadWriter[TimeControlInfo]  = macroRW
   given ReadWriter[GameResultInfo]   = macroRW
   given ReadWriter[GameStateResponse]   = macroRW
   given ReadWriter[GameSummary]         = macroRW
