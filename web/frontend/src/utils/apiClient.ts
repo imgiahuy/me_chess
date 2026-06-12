@@ -95,3 +95,22 @@ export async function resign(gameId: string, color: string) {
     }
     return res.json();
 }
+
+export async function getAvailableBots() {
+    const res = await fetch(`${BASE_URL}/bots`);
+    if (!res.ok) throw new Error(`Failed to get bots: ${res.status}`);
+    return res.json();
+}
+
+export async function playBotMove(gameId: string, botType: string) {
+    const res = await fetch(`${BASE_URL}/games/${gameId}/bot-move`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ botType }),
+    });
+    if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || `Failed to play bot move: ${res.status}`);
+    }
+    return res.json();
+}

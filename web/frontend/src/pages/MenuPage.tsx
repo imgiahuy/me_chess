@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { createGame, loadLatestGame } from "../utils/apiClient";
+import { createGame, loadLatestGame, getAvailableBots } from "../utils/apiClient";
+import type { BotInfo } from "../types/chess";
 
 type TimeControlOption = "unlimited" | "bullet" | "blitz" | "rapid" | "classical";
 
@@ -12,27 +13,59 @@ const TIME_CONTROLS: { value: TimeControlOption; label: string; description: str
     { value: "classical", label: "Classical", description: "90+30 minutes" },
 ];
 
+type PlayerType = "human" | "bot";
+
 export function MenuPage() {
     const navigate = useNavigate();
     const [loading, setLoading] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
     const [showSetup, setShowSetup] = React.useState(false);
-    const [playerForm, setPlayerForm] = React.useState({ white: "White", black: "Black", timeControl: "unlimited" as TimeControlOption });
+    const [playerForm, setPlayerForm] = React.useState({
+        white: "White",
+        black: "Black",
+        timeControl: "unlimited" as TimeControlOption,
+        whiteType: "human" as PlayerType,
+        blackType: "human" as PlayerType,
+        whiteBot: "random",
+        blackBot: "random",
+    });
+    const [availableBots, setAvailableBots] = React.useState<BotInfo[]>([]);
+    const [loadingBots, setLoadingBots] = React.useState(false);
 
     async function handleCreate() {
         setShowSetup(true);
         setError(null);
+        // Load available bots
+        setLoadingBots(true);
+        try {
+            const res = await getAvailableBots();
+            setAvailableBots(res.bots || []);
+        } catch (e) {
+            console.error("Failed to load bots:", e);
+            setAvailableBots([]);
+        } finally {
+            setLoadingBots(false);
+        }
     }
 
     async function handleStartGame() {
         setLoading(true);
         setError(null);
         try {
-            const whitePlayer = playerForm.white.trim() || "White";
-            const blackPlayer = playerForm.black.trim() || "Black";
+            const whitePlayer = playerForm.whiteType === "bot"
+                ? `Bot (${playerForm.whiteBot})`
+                : (playerForm.white.trim() || "White");
+            const blackPlayer = playerForm.blackType === "bot"
+                ? `Bot (${playerForm.blackBot})`
+                : (playerForm.black.trim() || "Black");
             const timeControl = playerForm.timeControl === "unlimited" ? null : playerForm.timeControl;
             const res = await createGame(whitePlayer, blackPlayer, timeControl);
-            navigate(`/game/${res.gameId}`);
+            // Pass bot configuration in URL for the game page to handle
+            const searchParams = new URLSearchParams();
+            if (playerForm.whiteType === "bot") searchParams.set("whiteBot", playerForm.whiteBot);
+            if (playerForm.blackType === "bot") searchParams.set("blackBot", playerForm.blackBot);
+            const query = searchParams.toString() ? `?${searchParams.toString()}` : "";
+            navigate(`/game/${res.gameId}${query}`);
         } catch (e) {
             setError(e instanceof Error ? e.message : "Failed to create game");
         } finally {
@@ -101,41 +134,165 @@ export function MenuPage() {
                         maxWidth: "400px"
                     }}>
                         <h3 style={{ color: "#e0e0e0" }}>New Game Setup</h3>
+
+                        {/* White Player Section */}
                         <div style={{ marginBottom: "1rem" }}>
-                            <label style={{ display: "block", marginBottom: "0.5rem", color: "#b0b0b0" }}>
+                            <label style={{ display: "block", marginBottom: "0.5rem", color: "#b0b0b0", fontWeight: "bold" }}>
                                 White Player:
                             </label>
-                            <input
-                                type="text"
-                                value={playerForm.white}
-                                onChange={(e) => setPlayerForm({ ...playerForm, white: e.target.value })}
-                                style={{
-                                    width: "100%",
-                                    padding: "0.5rem",
-                                    border: "1px solid #555",
-                                    borderRadius: "4px",
-                                    background: "#2C2C2C",
-                                    color: "#e0e0e0"
-                                }}
-                            />
+                            <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                                <button
+                                    type="button"
+                                    onClick={() => setPlayerForm({ ...playerForm, whiteType: "human" })}
+                                    style={{
+                                        flex: 1,
+                                        padding: "0.5rem",
+                                        border: "1px solid #555",
+                                        borderRadius: "4px",
+                                        background: playerForm.whiteType === "human" ? "#2196F3" : "#2C2C2C",
+                                        color: "#e0e0e0",
+                                        cursor: "pointer"
+                                    }}
+                                >
+                                    Human
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setPlayerForm({ ...playerForm, whiteType: "bot" })}
+                                    style={{
+                                        flex: 1,
+                                        padding: "0.5rem",
+                                        border: "1px solid #555",
+                                        borderRadius: "4px",
+                                        background: playerForm.whiteType === "bot" ? "#2196F3" : "#2C2C2C",
+                                        color: "#e0e0e0",
+                                        cursor: "pointer"
+                                    }}
+                                >
+                                    Bot
+                                </button>
+                            </div>
+                            {playerForm.whiteType === "human" ? (
+                                <input
+                                    type="text"
+                                    value={playerForm.white}
+                                    onChange={(e) => setPlayerForm({ ...playerForm, white: e.target.value })}
+                                    placeholder="Player name"
+                                    style={{
+                                        width: "100%",
+                                        padding: "0.5rem",
+                                        border: "1px solid #555",
+                                        borderRadius: "4px",
+                                        background: "#2C2C2C",
+                                        color: "#e0e0e0"
+                                    }}
+                                />
+                            ) : (
+                                <select
+                                    value={playerForm.whiteBot}
+                                    onChange={(e) => setPlayerForm({ ...playerForm, whiteBot: e.target.value })}
+                                    disabled={loadingBots}
+                                    style={{
+                                        width: "100%",
+                                        padding: "0.5rem",
+                                        border: "1px solid #555",
+                                        borderRadius: "4px",
+                                        background: "#2C2C2C",
+                                        color: "#e0e0e0"
+                                    }}
+                                >
+                                    {availableBots.map((bot) => (
+                                        <option key={bot.id} value={bot.id}>
+                                            {bot.name} - {bot.difficulty}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
+                            {playerForm.whiteType === "bot" && playerForm.whiteBot && (
+                                <div style={{ fontSize: "0.8rem", color: "#888", marginTop: "0.25rem" }}>
+                                    {availableBots.find(b => b.id === playerForm.whiteBot)?.description}
+                                </div>
+                            )}
                         </div>
+
+                        {/* Black Player Section */}
                         <div style={{ marginBottom: "1.5rem" }}>
-                            <label style={{ display: "block", marginBottom: "0.5rem", color: "#b0b0b0" }}>
+                            <label style={{ display: "block", marginBottom: "0.5rem", color: "#b0b0b0", fontWeight: "bold" }}>
                                 Black Player:
                             </label>
-                            <input
-                                type="text"
-                                value={playerForm.black}
-                                onChange={(e) => setPlayerForm({ ...playerForm, black: e.target.value })}
-                                style={{
-                                    width: "100%",
-                                    padding: "0.5rem",
-                                    border: "1px solid #555",
-                                    borderRadius: "4px",
-                                    background: "#2C2C2C",
-                                    color: "#e0e0e0"
-                                }}
-                            />
+                            <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                                <button
+                                    type="button"
+                                    onClick={() => setPlayerForm({ ...playerForm, blackType: "human" })}
+                                    style={{
+                                        flex: 1,
+                                        padding: "0.5rem",
+                                        border: "1px solid #555",
+                                        borderRadius: "4px",
+                                        background: playerForm.blackType === "human" ? "#2196F3" : "#2C2C2C",
+                                        color: "#e0e0e0",
+                                        cursor: "pointer"
+                                    }}
+                                >
+                                    Human
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setPlayerForm({ ...playerForm, blackType: "bot" })}
+                                    style={{
+                                        flex: 1,
+                                        padding: "0.5rem",
+                                        border: "1px solid #555",
+                                        borderRadius: "4px",
+                                        background: playerForm.blackType === "bot" ? "#2196F3" : "#2C2C2C",
+                                        color: "#e0e0e0",
+                                        cursor: "pointer"
+                                    }}
+                                >
+                                    Bot
+                                </button>
+                            </div>
+                            {playerForm.blackType === "human" ? (
+                                <input
+                                    type="text"
+                                    value={playerForm.black}
+                                    onChange={(e) => setPlayerForm({ ...playerForm, black: e.target.value })}
+                                    placeholder="Player name"
+                                    style={{
+                                        width: "100%",
+                                        padding: "0.5rem",
+                                        border: "1px solid #555",
+                                        borderRadius: "4px",
+                                        background: "#2C2C2C",
+                                        color: "#e0e0e0"
+                                    }}
+                                />
+                            ) : (
+                                <select
+                                    value={playerForm.blackBot}
+                                    onChange={(e) => setPlayerForm({ ...playerForm, blackBot: e.target.value })}
+                                    disabled={loadingBots}
+                                    style={{
+                                        width: "100%",
+                                        padding: "0.5rem",
+                                        border: "1px solid #555",
+                                        borderRadius: "4px",
+                                        background: "#2C2C2C",
+                                        color: "#e0e0e0"
+                                    }}
+                                >
+                                    {availableBots.map((bot) => (
+                                        <option key={bot.id} value={bot.id}>
+                                            {bot.name} - {bot.difficulty}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
+                            {playerForm.blackType === "bot" && playerForm.blackBot && (
+                                <div style={{ fontSize: "0.8rem", color: "#888", marginTop: "0.25rem" }}>
+                                    {availableBots.find(b => b.id === playerForm.blackBot)?.description}
+                                </div>
+                            )}
                         </div>
                         <div style={{ marginBottom: "1.5rem" }}>
                             <label style={{ display: "block", marginBottom: "0.5rem", color: "#b0b0b0" }}>

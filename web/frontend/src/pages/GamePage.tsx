@@ -1,8 +1,9 @@
 import React from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useGame } from "../hooks/useGame";
 import { Board } from "../components/Board";
-import { saveGame, exportPgn, resign } from "../utils/apiClient";
+import { saveGame, exportPgn, resign, getAvailableBots } from "../utils/apiClient";
+import type { BotInfo } from "../types/chess";
 
 // Helper function to convert Position(x,y) to algebraic notation
 function convertPositionToAlgebraic(message: string): string {
@@ -35,7 +36,8 @@ function getGameResultText(gameResult: any): string {
 export function GamePage() {
     const { gameId } = useParams();
     const navigate = useNavigate();
-    const { game, loading, move, refresh, gameEnded, clearGameEndNotification, setGameDirect } = useGame(gameId!);
+    const [searchParams] = useSearchParams();
+    const { game, loading, move, botMove, refresh, gameEnded, clearGameEndNotification, setGameDirect } = useGame(gameId!);
     const [moveError, setMoveError] = React.useState<string | null>(null);
     const [saveMessage, setSaveMessage] = React.useState<string | null>(null);
     const [exportMessage, setExportMessage] = React.useState<string | null>(null);
@@ -44,6 +46,26 @@ export function GamePage() {
     const [showGameEndDialog, setShowGameEndDialog] = React.useState(false);
     const [exportForm, setExportForm] = React.useState({ event: "Web Game", site: "Online" });
     const moveHistoryRef = React.useRef<HTMLDivElement>(null);
+
+    // Bot configuration from URL params
+    const whiteBotType = searchParams.get("whiteBot");
+    const blackBotType = searchParams.get("blackBot");
+    const [availableBots, setAvailableBots] = React.useState<BotInfo[]>([]);
+    const [selectedBot, setSelectedBot] = React.useState<string>("random");
+    const [isBotMoving, setIsBotMoving] = React.useState(false);
+
+    // Load available bots
+    React.useEffect(() => {
+        getAvailableBots().then(res => setAvailableBots(res.bots || [])).catch(() => setAvailableBots([]));
+    }, []);
+
+    // Set default bot from URL param
+    React.useEffect(() => {
+        const currentTurnBot = game?.turn === "White" ? whiteBotType : blackBotType;
+        if (currentTurnBot) {
+            setSelectedBot(currentTurnBot);
+        }
+    }, [game?.turn, whiteBotType, blackBotType]);
 
     // Show game end dialog when game ends
     React.useEffect(() => {
@@ -125,6 +147,39 @@ export function GamePage() {
             setNotification("Failed to resign");
         }
     }
+
+    async function handleBotMove(botType?: string) {
+        const botToUse = botType || selectedBot;
+        if (!botToUse || isBotMoving) return;
+
+        setIsBotMoving(true);
+        setMoveError(null);
+        setSaveMessage(null);
+        setNotification(`Bot (${botToUse}) is thinking...`);
+        try {
+            await botMove(botToUse);
+            setNotification(`Bot (${botToUse}) made a move`);
+        } catch (e) {
+            const errorMsg = e instanceof Error ? e.message : "Bot move failed";
+            setMoveError(errorMsg);
+            setNotification(`Bot error: ${errorMsg}`);
+        } finally {
+            setIsBotMoving(false);
+        }
+    }
+
+    // Auto-trigger bot move when it's bot's turn
+    React.useEffect(() => {
+        if (!game || game.gameResult.status !== "ongoing" || isBotMoving) return;
+
+        const currentTurnBot = game.turn === "White" ? whiteBotType : blackBotType;
+        if (currentTurnBot) {
+            const timer = setTimeout(() => {
+                handleBotMove(currentTurnBot);
+            }, 500); // Small delay for better UX
+            return () => clearTimeout(timer);
+        }
+    }, [game?.turn, game?.gameResult.status, whiteBotType, blackBotType]);
 
     if (loading) return <div className="loading">Loading game...</div>;
     if (!game) return <div className="error">No game found</div>;
@@ -248,6 +303,48 @@ export function GamePage() {
                             </>
                         )}
                     </div>
+
+                    {/* Bot Control Section */}
+                    {game.gameResult.status === "ongoing" && (
+                        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginTop: "0.5rem", padding: "0.75rem", background: "#2C2C2C", borderRadius: "6px", border: "1px solid #444" }}>
+                            <span style={{ color: "#b0b0b0", fontSize: "0.875rem", alignSelf: "center" }}>Bot:</span>
+                            <select
+                                value={selectedBot}
+                                onChange={(e) => setSelectedBot(e.target.value)}
+                                disabled={isBotMoving}
+                                style={{
+                                    flex: 1,
+                                    padding: "0.5rem",
+                                    border: "1px solid #555",
+                                    borderRadius: "4px",
+                                    background: "#1E1E1E",
+                                    color: "#e0e0e0",
+                                    fontSize: "0.875rem"
+                                }}
+                            >
+                                {availableBots.map((bot) => (
+                                    <option key={bot.id} value={bot.id}>
+                                        {bot.name} ({bot.difficulty})
+                                    </option>
+                                ))}
+                            </select>
+                            <button
+                                onClick={() => handleBotMove()}
+                                disabled={isBotMoving}
+                                style={{
+                                    padding: "0.5rem 1rem",
+                                    background: isBotMoving ? "#666" : "#9C27B0",
+                                    color: "white",
+                                    border: "none",
+                                    borderRadius: "4px",
+                                    cursor: isBotMoving ? "not-allowed" : "pointer",
+                                    fontSize: "0.875rem"
+                                }}
+                            >
+                                {isBotMoving ? "Thinking..." : "Play Bot Move"}
+                            </button>
+                        </div>
+                    )}
 
                     <div style={{ marginTop: "1rem", background: "#1E1E1E", padding: "1.5rem", borderRadius: "8px", border: "1px solid #444" }}>
                         <h3 style={{ color: "#e0e0e0" }}>Move History</h3>

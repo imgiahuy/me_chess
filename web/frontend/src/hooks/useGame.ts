@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from "react";
-import { getGame, makeMove, getGameStatus } from "../utils/apiClient";
+import { getGame, makeMove, getGameStatus, playBotMove } from "../utils/apiClient";
 import type { GameResponse } from "../types/chess";
 
 export function useGame(gameId: string) {
@@ -50,6 +50,19 @@ export function useGame(gameId: string) {
             setGame(data);
         } catch (e) {
             setError(e instanceof Error ? e.message : "Failed to make move");
+            throw e;
+        }
+    }
+
+    async function botMove(botType: string) {
+        setError(null);
+        try {
+            const data = await playBotMove(gameId, botType);
+            serverTimestampRef.current = Date.now();
+            detectGameEnd(data);
+            setGame(data);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : "Failed to play bot move");
             throw e;
         }
     }
@@ -148,5 +161,5 @@ export function useGame(gameId: string) {
         }
     }, []);
 
-    return { game: displayGame, loading, error, move, refresh, gameEnded, clearGameEndNotification, setGameDirect };
+    return { game: displayGame, loading, error, move, botMove, refresh, gameEnded, clearGameEndNotification, setGameDirect };
 }

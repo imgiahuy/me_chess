@@ -76,6 +76,11 @@ class GameSessionController(
     BotService.availableBots
   }
 
+  /** Get available bot types with metadata */
+  def getAvailableBotInfos(): List[model.BotInfo] = {
+    model.BotFactory.availableBotInfo
+  }
+
   /** Delete a game session */
   def deleteGame(gameId: String): Boolean =
     repo.deleteGame(gameId)

@@ -5,7 +5,7 @@ import akka.actor.typed.ActorSystem
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity, HttpHeader, StatusCodes, headers}
 import akka.http.scaladsl.server.Directives.*
 import akka.http.scaladsl.server.{RejectionHandler, Route}
-import api.JsonCodecs.{ActionResponse, CreateGameRequest, CreatedGameResponse, ErrorResponse, GameInfos, GameStateResponse, GameSummary, GamesListResponse, MoveRequest, ResignRequest, BotMoveRequest, AvailableBotsResponse}
+import api.JsonCodecs.{ActionResponse, CreateGameRequest, CreatedGameResponse, ErrorResponse, GameInfos, GameStateResponse, GameSummary, GamesListResponse, MoveRequest, ResignRequest, BotMoveRequest, BotInfoResponse, AvailableBotsResponse}
 
 
 
@@ -423,12 +423,15 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
          ) ~(
            // ─── Available Bots ───────────────────────────────────────────────────
 
-           /** GET /v1/chess/bots - Get available bot types */
+           /** GET /v1/chess/bots - Get available bot types with metadata */
            get {
              path("bots") {
                try {
-                 val bots = sessionController.getAvailableBots()
-                 complete(jsonResponse(AvailableBotsResponse(bots)))
+                 val botInfos = sessionController.getAvailableBotInfos()
+                 val response = botInfos.map { info =>
+                   BotInfoResponse(info.id, info.name, info.difficulty, info.description)
+                 }
+                 complete(jsonResponse(AvailableBotsResponse(response)))
                } catch {
                  case e: Exception =>
                    complete(StatusCodes.InternalServerError, jsonResponse(ErrorResponse(s"Failed to get available bots: ${e.getMessage}")))

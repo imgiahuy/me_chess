@@ -63,3 +63,18 @@ export type CreateGameRequest = {
 export type ResignRequest = {
     color: string;
 };
+
+export type BotInfo = {
+    id: string;
+    name: string;
+    difficulty: string;
+    description: string;
+};
+
+export type AvailableBotsResponse = {
+    bots: BotInfo[];
+};
+
+export type BotMoveRequest = {
+    botType: string;
+};
