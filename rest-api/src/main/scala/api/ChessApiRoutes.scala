@@ -278,16 +278,20 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
                         case model.TimeOut(winner) => JsonCodecs.GameResultInfo("timeout", None, Some(winner.toString))
                       }
 
-                      val whiteTimeInfo = stateAfterTimeout.whiteTime.map { pt =>
+                      val isUnlimitedStatus = stateAfterTimeout.timeControl.isEmpty || stateAfterTimeout.timeControl.exists(_.initialTimeMs == Long.MaxValue)
+
+                      val whiteTimeInfo = if (isUnlimitedStatus) None else stateAfterTimeout.whiteTime.map { pt =>
+                        val initial = stateAfterTimeout.timeControl.map(_.initialTimeMs).getOrElse(0L)
                         val increment = stateAfterTimeout.timeControl.map(_.incrementMs).getOrElse(0L)
                         val delay = stateAfterTimeout.timeControl.map(_.delayMs).getOrElse(0L)
-                        JsonCodecs.TimeControlInfo(pt.remainingTimeMs, increment, Some(pt.getCurrentTime), delay)
+                        JsonCodecs.TimeControlInfo(initial, increment, pt.getCurrentTime, delay)
                       }
 
-                      val blackTimeInfo = stateAfterTimeout.blackTime.map { pt =>
+                      val blackTimeInfo = if (isUnlimitedStatus) None else stateAfterTimeout.blackTime.map { pt =>
+                        val initial = stateAfterTimeout.timeControl.map(_.initialTimeMs).getOrElse(0L)
                         val increment = stateAfterTimeout.timeControl.map(_.incrementMs).getOrElse(0L)
                         val delay = stateAfterTimeout.timeControl.map(_.delayMs).getOrElse(0L)
-                        JsonCodecs.TimeControlInfo(pt.remainingTimeMs, increment, Some(pt.getCurrentTime), delay)
+                        JsonCodecs.TimeControlInfo(initial, increment, pt.getCurrentTime, delay)
                       }
 
                       val response = JsonCodecs.GameStatusResponse(

@@ -1,16 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { getGame, makeMove, getGameStatus } from "../utils/apiClient";
-import type { GameResponse, TimeControlInfo } from "../types/chess";
-
-// Helper to get current remaining time from a TimeControlInfo with local countdown
-function getCurrentRemainingTime(timeInfo: TimeControlInfo | null, isCurrentTurn: boolean): number | null {
-    if (!timeInfo || timeInfo.remainingTimeMs === null) return null;
-    if (!isCurrentTurn) return timeInfo.remainingTimeMs;
-
-    // For the current player, count down locally between server updates
-    // Subtract 1000ms (1 second) to approximate real-time countdown
-    return Math.max(0, timeInfo.remainingTimeMs - 1000);
-}
+import type { GameResponse } from "../types/chess";
 
 export function useGame(gameId: string) {
     const [game, setGame] = useState<GameResponse | null>(null);
@@ -18,27 +8,36 @@ export function useGame(gameId: string) {
     const [error, setError] = useState<string | null>(null);
     const [gameEnded, setGameEnded] = useState<{ status: string; winner: string | null; reason: string | null } | null>(null);
     const lastGameResultRef = useRef<string | null>(null);
-    const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    // Track when server data was received so we can compute local countdown offset
+    const serverTimestampRef = useRef<number>(Date.now());
+    // Guard against concurrent fetches
+    const fetchingRef = useRef(false);
+
+    function detectGameEnd(data: { gameResult: { status: string; winner: string | null; reason: string | null } }) {
+        const wasOngoingOrFirstLoad = lastGameResultRef.current === "ongoing" || lastGameResultRef.current === null;
+        if (data.gameResult.status !== "ongoing" && wasOngoingOrFirstLoad) {
+            setGameEnded({
+                status: data.gameResult.status,
+                winner: data.gameResult.winner,
+                reason: data.gameResult.reason
+            });
+        }
+        lastGameResultRef.current = data.gameResult.status;
+    }
 
     async function refresh() {
+        if (fetchingRef.current) return;
+        fetchingRef.current = true;
         setError(null);
         try {
             const data = await getGame(gameId);
-
-            // Detect game end: either transition from ongoing, or first load of a finished game
-            const wasOngoingOrFirstLoad = lastGameResultRef.current === "ongoing" || lastGameResultRef.current === null;
-            if (data.gameResult.status !== "ongoing" && wasOngoingOrFirstLoad) {
-                setGameEnded({
-                    status: data.gameResult.status,
-                    winner: data.gameResult.winner,
-                    reason: data.gameResult.reason
-                });
-            }
-            lastGameResultRef.current = data.gameResult.status;
-
+            serverTimestampRef.current = Date.now();
+            detectGameEnd(data);
             setGame(data);
         } catch (e) {
             setError(e instanceof Error ? e.message : "Failed to load game");
+        } finally {
+            fetchingRef.current = false;
         }
     }
 
@@ -46,17 +45,8 @@ export function useGame(gameId: string) {
         setError(null);
         try {
             const data = await makeMove(gameId, from, to, promotion, castling);
-
-            // Detect game end after move
-            if (data.gameResult.status !== "ongoing" && lastGameResultRef.current === "ongoing") {
-                setGameEnded({
-                    status: data.gameResult.status,
-                    winner: data.gameResult.winner,
-                    reason: data.gameResult.reason
-                });
-            }
-            lastGameResultRef.current = data.gameResult.status;
-
+            serverTimestampRef.current = Date.now();
+            detectGameEnd(data);
             setGame(data);
         } catch (e) {
             setError(e instanceof Error ? e.message : "Failed to make move");
@@ -64,14 +54,15 @@ export function useGame(gameId: string) {
         }
     }
 
-    // Check for timeout on the server
+    // Check for timeout on the server (uses status endpoint which is lighter)
     const checkTimeout = useCallback(async () => {
         if (!game || game.gameResult.status !== "ongoing") return;
+        if (fetchingRef.current) return;
+        fetchingRef.current = true;
 
         try {
             const status = await getGameStatus(gameId);
             if (status.gameResult.status !== "ongoing") {
-                // Game ended due to timeout or other reason
                 if (lastGameResultRef.current === "ongoing") {
                     setGameEnded({
                         status: status.gameResult.status,
@@ -80,11 +71,15 @@ export function useGame(gameId: string) {
                     });
                 }
                 lastGameResultRef.current = status.gameResult.status;
-                // Refresh full game data to get updated state
-                refresh();
+                // Fetch full state after timeout detected
+                fetchingRef.current = false;
+                await refresh();
+                return;
             }
         } catch (e) {
             // Ignore timeout check errors
+        } finally {
+            fetchingRef.current = false;
         }
     }, [game, gameId]);
 
@@ -92,55 +87,48 @@ export function useGame(gameId: string) {
         refresh().finally(() => setLoading(false));
     }, [gameId]);
 
-    // Poll for game state updates every 2 seconds and check for timeouts
-    useEffect(() => {
-        if (!game || game.gameResult.status !== "ongoing") {
-            if (countdownIntervalRef.current) {
-                clearInterval(countdownIntervalRef.current);
-                countdownIntervalRef.current = null;
-            }
-            return;
-        }
-
-        const interval = setInterval(() => {
-            refresh();
-            checkTimeout();
-        }, 2000);
-
-        countdownIntervalRef.current = interval;
-
-        return () => {
-            clearInterval(interval);
-            countdownIntervalRef.current = null;
-        };
-    }, [game, gameId, checkTimeout]);
-
-    // Local countdown effect to make clocks appear to tick
+    // Poll for game state updates every 2 seconds
     useEffect(() => {
         if (!game || game.gameResult.status !== "ongoing") return;
 
+        const interval = setInterval(() => {
+            checkTimeout();
+        }, 2000);
+
+        return () => clearInterval(interval);
+    }, [game?.gameResult.status, gameId, checkTimeout]);
+
+    // Local countdown effect: computes display time without mutating the server-sourced game state.
+    // Instead we store a separate "display game" derived from the server game + elapsed offset.
+    const [displayGame, setDisplayGame] = useState<GameResponse | null>(null);
+
+    useEffect(() => {
+        setDisplayGame(game);
+    }, [game]);
+
+    useEffect(() => {
+        if (!game || game.gameResult.status !== "ongoing") return;
+        if (!game.whiteTime || !game.blackTime) return;
+
         const countdown = setInterval(() => {
-            setGame(currentGame => {
-                if (!currentGame || currentGame.gameResult.status !== "ongoing") return currentGame;
+            const elapsed = Date.now() - serverTimestampRef.current;
+            const isWhiteTurn = game.turn === "White";
 
-                const isWhiteTurn = currentGame.turn === "White";
-
-                return {
-                    ...currentGame,
-                    whiteTime: currentGame.whiteTime ? {
-                        ...currentGame.whiteTime,
-                        remainingTimeMs: getCurrentRemainingTime(currentGame.whiteTime, isWhiteTurn)
-                    } : null,
-                    blackTime: currentGame.blackTime ? {
-                        ...currentGame.blackTime,
-                        remainingTimeMs: getCurrentRemainingTime(currentGame.blackTime, !isWhiteTurn)
-                    } : null
-                };
+            setDisplayGame({
+                ...game,
+                whiteTime: game.whiteTime ? {
+                    ...game.whiteTime,
+                    remainingTimeMs: Math.max(0, game.whiteTime.remainingTimeMs - (isWhiteTurn ? elapsed : 0))
+                } : null,
+                blackTime: game.blackTime ? {
+                    ...game.blackTime,
+                    remainingTimeMs: Math.max(0, game.blackTime.remainingTimeMs - (!isWhiteTurn ? elapsed : 0))
+                } : null
             });
-        }, 1000);
+        }, 200);
 
         return () => clearInterval(countdown);
-    }, [game?.turn, game?.gameResult.status]);
+    }, [game]);
 
     const clearGameEndNotification = useCallback(() => {
         setGameEnded(null);
@@ -148,10 +136,9 @@ export function useGame(gameId: string) {
 
     // Set game state directly (used by external updates like resign)
     const setGameDirect = useCallback((newGame: GameResponse) => {
+        serverTimestampRef.current = Date.now();
         setGame(newGame);
-        // Sync the result ref so game-end detection works correctly
         lastGameResultRef.current = newGame.gameResult.status;
-        // Trigger game-end dialog if the game is now over
         if (newGame.gameResult.status !== "ongoing") {
             setGameEnded({
                 status: newGame.gameResult.status,
@@ -161,5 +148,5 @@ export function useGame(gameId: string) {
         }
     }, []);
 
-    return { game, loading, error, move, refresh, gameEnded, clearGameEndNotification, setGameDirect };
+    return { game: displayGame, loading, error, move, refresh, gameEnded, clearGameEndNotification, setGameDirect };
 }

@@ -191,7 +191,7 @@ class GameSessionController(
           // Game already over, just return current state
           Right(state)
         } else {
-          // Check if current player's time has expired
+          // Check if current player's time has expired using real-time calculation
           val currentPlayer = state.turn
           val isTimeExpired = currentPlayer match {
             case model.White => state.whiteTime.exists(_.isTimeOver)
@@ -199,7 +199,6 @@ class GameSessionController(
           }
 
           if (isTimeExpired) {
-            // Apply timeout - the winner is the opposite color
             val winner = currentPlayer.opposite
             val newState = state.copy(gameResult = model.TimeOut(winner))
             repo.updateGame(gameId, newState)

@@ -18,7 +18,7 @@ export type GameResultInfo = {
 export type TimeControlInfo = {
     initialTimeMs: number;
     incrementMs: number;
-    remainingTimeMs: number | null;
+    remainingTimeMs: number;
     delayMs: number;
 };
 

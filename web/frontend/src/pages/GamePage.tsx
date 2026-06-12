@@ -14,7 +14,8 @@ function convertPositionToAlgebraic(message: string): string {
 }
 
 // Helper function to format time in milliseconds to minutes:seconds
-function formatTime(ms: number): string {
+function formatTime(ms: number | undefined | null): string {
+    if (ms == null || isNaN(ms) || ms < 0) return "0:00";
     const totalSeconds = Math.floor(ms / 1000);
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
@@ -184,12 +185,12 @@ export function GamePage() {
                                     <div style={{
                                         fontSize: "1.25rem",
                                         fontWeight: "bold",
-                                        color: game.whiteTime.remainingTimeMs !== null && game.whiteTime.remainingTimeMs < 30000
+                                        color: game.whiteTime.remainingTimeMs < 30000
                                             ? "#ff6b6b"
                                             : game.turn === "White" ? "#4ec9b0" : "#e0e0e0",
                                         fontFamily: "monospace"
                                     }}>
-                                        {formatTime(game.whiteTime.remainingTimeMs ?? 0)}
+                                        {formatTime(game.whiteTime.remainingTimeMs)}
                                     </div>
                                     {game.turn === "White" && (
                                         <div style={{ fontSize: "0.7rem", color: "#4ec9b0", marginTop: "0.25rem" }}>Your turn</div>
@@ -206,12 +207,12 @@ export function GamePage() {
                                     <div style={{
                                         fontSize: "1.25rem",
                                         fontWeight: "bold",
-                                        color: game.blackTime.remainingTimeMs !== null && game.blackTime.remainingTimeMs < 30000
+                                        color: game.blackTime.remainingTimeMs < 30000
                                             ? "#ff6b6b"
                                             : game.turn === "Black" ? "#4ec9b0" : "#e0e0e0",
                                         fontFamily: "monospace"
                                     }}>
-                                        {formatTime(game.blackTime.remainingTimeMs ?? 0)}
+                                        {formatTime(game.blackTime.remainingTimeMs)}
                                     </div>
                                     {game.turn === "Black" && (
                                         <div style={{ fontSize: "0.7rem", color: "#4ec9b0", marginTop: "0.25rem" }}>Your turn</div>

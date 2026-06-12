@@ -179,11 +179,14 @@ class MongoGameDao(
 
         val moves = scala.concurrent.Await.result(moveDao.findByGameId(gameId), scala.concurrent.duration.Duration(5, "seconds"))
 
+        val timeControl = deserializeTimeControl(doc.getString("timeControl"))
+        val whiteTime = deserializePlayerTime(doc.getString("whiteTime"))
+        val blackTime = deserializePlayerTime(doc.getString("blackTime"))
         val gameResult = parseGameResult(doc.getString("result"))
 
         PositionState(
           board, turn, moves, whitePlayer, blackPlayer, creationDate, Some(gameId),
-          timeControl = None, whiteTime = None, blackTime = None,
+          timeControl = timeControl, whiteTime = whiteTime, blackTime = blackTime,
           halfmovesSinceLastCaptureOrPawn = 0,
           positionHistory = List.empty,
           hasWhiteResigned = false,
@@ -212,11 +215,14 @@ class MongoGameDao(
 
         val moves = scala.concurrent.Await.result(moveDao.findByGameId(gameId), scala.concurrent.duration.Duration(5, "seconds"))
 
+        val timeControl = deserializeTimeControl(doc.getString("timeControl"))
+        val whiteTime = deserializePlayerTime(doc.getString("whiteTime"))
+        val blackTime = deserializePlayerTime(doc.getString("blackTime"))
         val gameResult = parseGameResult(doc.getString("result"))
 
         Some(PositionState(
           board, turn, moves, whitePlayer, blackPlayer, creationDate, Some(gameId),
-          timeControl = None, whiteTime = None, blackTime = None,
+          timeControl = timeControl, whiteTime = whiteTime, blackTime = blackTime,
           halfmovesSinceLastCaptureOrPawn = 0,
           positionHistory = List.empty,
           hasWhiteResigned = false,
