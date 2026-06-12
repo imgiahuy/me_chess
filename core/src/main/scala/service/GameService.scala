@@ -371,9 +371,10 @@ object GameService {
     }
 
     // Check if rook is at the corner
-    board.pieceAt(Position(rookCol, move.from.row))
+    val rookAtCorner = board.pieceAt(Position(rookCol, move.from.row))
       .filter(_.pieceType == Rook)
-      .toRight("No rook at corner")
+      .isDefined
+    if (!rookAtCorner) return Left("No rook at corner")
 
     // Check if path is clear
     val pathClear = for {
@@ -450,7 +451,10 @@ object GameService {
 
         val boardWithoutPieces = board.squares - move.from - Position(rookCol, move.from.row)
         val king = Piece(piece.color, King)
-        val rook = board.pieceAt(Position(rookCol, move.from.row)).get
+        val rook = board.pieceAt(Position(rookCol, move.from.row)) match {
+          case Some(r) => r
+          case None => return Left("No rook at corner for castling")
+        }
         val boardWithNewPositions = boardWithoutPieces +
           (move.to -> king) +
           (Position(newRookCol, move.from.row) -> rook)
@@ -615,11 +619,16 @@ object GameService {
 
   /** Returns true if the current player has at least one legal move available. */
   def hasLegalMoves(snapshot: PositionState): Boolean = {
+    val promotionRow = if (snapshot.turn == White) 7 else 0
     val hasRegularMove = snapshot.board.piecesOf(snapshot.turn).exists { case (pos, piece) =>
       (0 until 8).exists { toCol =>
         (0 until 8).exists { toRow =>
-          val move = Move(pos, Position(toCol, toRow))
-          applyMoveWithoutGameResultCheck(snapshot, move).isRight
+          val toPos = Position(toCol, toRow)
+          if (piece.pieceType == Pawn && toRow == promotionRow) {
+            applyMoveWithoutGameResultCheck(snapshot, Move(pos, toPos, Some(Promotion(Queen)))).isRight
+          } else {
+            applyMoveWithoutGameResultCheck(snapshot, Move(pos, toPos)).isRight
+          }
         }
       }
     }
@@ -835,13 +844,25 @@ object GameService {
   /** Get all legal moves for a color in a position */
   def getLegalMoves(snapshot: PositionState, color: Color): List[Move] = {
     val legalMoves = scala.collection.mutable.ListBuffer[Move]()
+    val promotionRow = if (color == White) 7 else 0
+    val promotionPieces = List(Queen, Rook, Bishop, Knight)
 
     snapshot.board.piecesOf(color).foreach { case (pos, piece) =>
       (0 until 8).foreach { toCol =>
         (0 until 8).foreach { toRow =>
-          val move = Move(pos, Position(toCol, toRow))
-          if (applyMove(snapshot, move).isRight) {
-            legalMoves += move
+          val toPos = Position(toCol, toRow)
+          if (piece.pieceType == Pawn && toRow == promotionRow) {
+            promotionPieces.foreach { pt =>
+              val move = Move(pos, toPos, Some(Promotion(pt)))
+              if (applyMove(snapshot, move).isRight) {
+                legalMoves += move
+              }
+            }
+          } else {
+            val move = Move(pos, toPos)
+            if (applyMove(snapshot, move).isRight) {
+              legalMoves += move
+            }
           }
         }
       }

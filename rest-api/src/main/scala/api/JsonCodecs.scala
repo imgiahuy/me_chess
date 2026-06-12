@@ -165,7 +165,9 @@ object JsonCodecs {
 
   final case class BotMoveRequest(botType: String)
 
-  final case class AvailableBotsResponse(bots: List[String])
+  final case class BotInfoResponse(id: String, name: String, difficulty: String, description: String)
+
+  final case class AvailableBotsResponse(bots: List[BotInfoResponse])
 
   given ReadWriter[TimeControlInfo]  = macroRW
 
@@ -221,5 +223,6 @@ object JsonCodecs {
   given ReadWriter[ApiMetadata]         = macroRW
   given ReadWriter[ResignRequest]       = macroRW
   given ReadWriter[BotMoveRequest]      = macroRW
+  given ReadWriter[BotInfoResponse]     = macroRW
   given ReadWriter[AvailableBotsResponse] = macroRW
 }
