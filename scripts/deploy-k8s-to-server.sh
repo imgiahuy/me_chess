@@ -2,9 +2,9 @@
 set -e
 
 # Configuration
-SERVER="root@141.37.74.144"
+SERVER="root@141.37.123.124"
 PROJECT_DIR="/opt/chess-k8s"
-REGISTRY="141.37.74.144:5000"
+REGISTRY="141.37.123.124:5000"
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -12,7 +12,7 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${GREEN}=== Deploying Chess Application with Kubernetes to 141.37.74.144 ===${NC}"
+echo -e "${GREEN}=== Deploying Chess Application with Kubernetes to 141.37.123.124 ===${NC}"
 
 # Check if SSH connection works
 echo -e "${GREEN}Testing SSH connection...${NC}"
@@ -47,7 +47,7 @@ EOF
 # Copy kubeconfig to local machine
 echo -e "${GREEN}Copying kubeconfig from server...${NC}"
 scp $SERVER:/etc/rancher/k3s/k3s.yaml ./kubeconfig-chess-server
-sed -i 's/127.0.0.1/141.37.74.144/g' ./kubeconfig-chess-server
+sed -i 's/127.0.0.1/141.37.123.124/g' ./kubeconfig-chess-server
 export KUBECONFIG=./kubeconfig-chess-server
 
 # Create project directory on server
@@ -78,11 +78,11 @@ fi
 mkdir -p /etc/rancher/k3s
 cat > /etc/rancher/k3s/registries.yaml << 'REGISTRY'
 mirrors:
-  "141.37.74.144:5000":
+  "141.37.123.124:5000":
     endpoint:
-      - "http://141.37.74.144:5000"
+      - "http://141.37.123.124:5000"
 configs:
-  "141.37.74.144:5000":
+  "141.37.123.124:5000":
     tls:
       insecure_skip_verify: true
 REGISTRY
@@ -184,8 +184,8 @@ EOF
 
 echo -e "${GREEN}=== Kubernetes deployment complete! ===${NC}"
 echo -e "${GREEN}Access the application at:${NC}"
-echo -e "  - Web Frontend: http://141.37.74.144"
-echo -e "  - REST API: http://141.37.74.144/v1"
-echo -e "  - Keycloak: http://141.37.74.144/auth"
+echo -e "  - Web Frontend: http://141.37.123.124"
+echo -e "  - REST API: http://141.37.123.124/v1"
+echo -e "  - Keycloak: http://141.37.123.124/auth"
 echo -e "${YELLOW}To view logs: ssh $SERVER 'kubectl logs -n chess -f deployment/<deployment-name>'${NC}"
 echo -e "${YELLOW}To manage cluster: ssh $SERVER 'kubectl get nodes -n chess'${NC}"

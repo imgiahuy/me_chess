@@ -7,7 +7,7 @@ This guide covers deploying the Chess application using Docker Compose, Kubernet
 - Docker and Docker Compose installed
 - For Kubernetes: kubectl installed
 - For k3d: k3d installed (https://k3d.io/)
-- SSH access to 141.37.74.144 for production deployment
+- SSH access to 141.37.123.124 for production deployment
 
 ## Local Development with Docker Compose
 
@@ -79,7 +79,7 @@ kubectl logs -n chess -f deployment/web-frontend
 k3d cluster delete chess-cluster
 ```
 
-## Production Deployment (141.37.74.144)
+## Production Deployment (141.37.123.124)
 
 ### Option 1: Docker Compose Deployment
 
@@ -110,14 +110,14 @@ This will:
 
 ### Access the production application
 
-- **Web Frontend**: http://141.37.74.144
-- **REST API**: http://141.37.74.144/v1
-- **Keycloak**: http://141.37.74.144/auth
+- **Web Frontend**: http://141.37.123.124:3005
+- **REST API**: http://141.37.123.124:8085
+- **Keycloak**: http://141.37.123.124:8081
 
 ### SSH to server for management
 
 ```bash
-ssh root@141.37.74.144
+ssh chess@141.37.123.124
 ```
 
 ### View logs on server
@@ -146,8 +146,8 @@ docker build -t chess-web-frontend:latest -f web/frontend/Dockerfile web/fronten
 ### Push to registry
 
 ```bash
-docker tag chess-rest-api:latest 141.37.74.144:5000/chess-rest-api:latest
-docker push 141.37.74.144:5000/chess-rest-api:latest
+docker tag chess-rest-api:latest 141.37.123.124:5000/chess-rest-api:latest
+docker push 141.37.123.124:5000/chess-rest-api:latest
 ```
 
 ## Troubleshooting

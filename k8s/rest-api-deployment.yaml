@@ -28,7 +28,7 @@ spec:
         image: chess-rest-api:latest
         imagePullPolicy: IfNotPresent
         ports:
-        - containerPort: 8081
+        - containerPort: 8080
         env:
         - name: JAVA_OPTS
           value: "-Xmx512m"
@@ -57,14 +57,14 @@ spec:
         livenessProbe:
           httpGet:
             path: /v1/chess/info
-            port: 8081
+            port: 8080
           initialDelaySeconds: 60
           periodSeconds: 30
           timeoutSeconds: 10
         readinessProbe:
           httpGet:
             path: /v1/chess/info
-            port: 8081
+            port: 8080
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
@@ -79,5 +79,5 @@ spec:
     app: rest-api
   ports:
   - port: 8080
-    targetPort: 8081
+    targetPort: 8080
   type: ClusterIP
