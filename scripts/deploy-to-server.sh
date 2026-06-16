@@ -18,6 +18,18 @@ NC='\033[0m'
 
 echo -e "${GREEN}=== Deploying Chess Application to 141.37.123.124 ===${NC}"
 
+# If kind cluster is running, tear it down first to free ports 80/443
+echo -e "${GREEN}Checking for existing kind cluster...${NC}"
+sshpass -e ssh -o StrictHostKeyChecking=no $SERVER << 'ENDSSH' 2>/dev/null || true
+export PATH="$HOME/.local/bin:$PATH"
+if command -v kind &>/dev/null && kind get clusters 2>/dev/null | grep -q "^chess$"; then
+    echo "Tearing down kind cluster 'chess' to free ports..."
+    kind delete cluster --name chess
+    docker stop kind-registry 2>/dev/null || true
+    sleep 3
+fi
+ENDSSH
+
 # Check if sshpass is installed
 if ! command -v sshpass &> /dev/null; then
     echo -e "${YELLOW}sshpass not found. Installing...${NC}"
@@ -100,44 +112,38 @@ WEB_FRONTEND_EXISTS=$(sshpass -e ssh -o StrictHostKeyChecking=no $SERVER "docker
 
 FORCE_BUILD=${1:-false}
 
-if [ "$FORCE_BUILD" = "force" ] || [ -z "$REST_API_EXISTS" ] || [ -z "$WEB_FRONTEND_EXISTS" ]; then
-    if [ "$FORCE_BUILD" = "force" ]; then
-        echo -e "${YELLOW}Force rebuild requested${NC}"
-    else
-        echo -e "${YELLOW}Images not found on server, building...${NC}"
-    fi
-
-    # Build images locally
-    echo -e "${GREEN}Building Docker images locally...${NC}"
-    docker build -t chess-rest-api:latest -f rest-api/Dockerfile .
-    docker build -t chess-web-frontend:latest -f web/frontend/Dockerfile web/frontend
-
-    # Save images as tar files
-    echo -e "${GREEN}Saving Docker images as tar files...${NC}"
-    docker save chess-rest-api:latest -o chess-rest-api.tar
-    docker save chess-web-frontend:latest -o chess-web-frontend.tar
-
-    # Transfer tar files to server
-    echo -e "${GREEN}Transferring Docker images to server...${NC}"
-    sshpass -e rsync -avz --progress -e "ssh -o StrictHostKeyChecking=no" chess-rest-api.tar $SERVER:$PROJECT_DIR/
-    sshpass -e rsync -avz --progress -e "ssh -o StrictHostKeyChecking=no" chess-web-frontend.tar $SERVER:$PROJECT_DIR/
-
-    # Load images on server
-    echo -e "${GREEN}Loading Docker images on server...${NC}"
-    sshpass -e ssh -o StrictHostKeyChecking=no $SERVER "cd $PROJECT_DIR && docker load -i chess-rest-api.tar"
-    sshpass -e ssh -o StrictHostKeyChecking=no $SERVER "cd $PROJECT_DIR && docker load -i chess-web-frontend.tar"
-
-    # Clean up local tar files
-    echo -e "${GREEN}Cleaning up local tar files...${NC}"
-    rm chess-rest-api.tar chess-web-frontend.tar
-
-    # Clean up old images on server
-    echo -e "${GREEN}Cleaning up old images on server...${NC}"
-    sshpass -e ssh -o StrictHostKeyChecking=no $SERVER "docker image prune -f"
-else
-    echo -e "${GREEN}Images already exist on server, skipping build${NC}"
-    echo -e "${YELLOW}Use '$0 force' to force rebuild${NC}"
+# Delete existing images if they exist, then always rebuild
+if [ -n "$REST_API_EXISTS" ] || [ -n "$WEB_FRONTEND_EXISTS" ]; then
+    echo -e "${YELLOW}Images exist on server, deleting them...${NC}"
+    sshpass -e ssh -o StrictHostKeyChecking=no $SERVER "docker rmi chess-rest-api:latest chess-web-frontend:latest 2>/dev/null || true"
 fi
+
+echo -e "${GREEN}Building Docker images locally...${NC}"
+docker build -t chess-rest-api:latest -f rest-api/Dockerfile .
+docker build -t chess-web-frontend:latest -f web/frontend/Dockerfile web/frontend
+
+# Save images as tar files
+echo -e "${GREEN}Saving Docker images as tar files...${NC}"
+docker save chess-rest-api:latest -o chess-rest-api.tar
+docker save chess-web-frontend:latest -o chess-web-frontend.tar
+
+# Transfer tar files to server
+echo -e "${GREEN}Transferring Docker images to server...${NC}"
+sshpass -e rsync -avz --progress -e "ssh -o StrictHostKeyChecking=no" chess-rest-api.tar $SERVER:$PROJECT_DIR/
+sshpass -e rsync -avz --progress -e "ssh -o StrictHostKeyChecking=no" chess-web-frontend.tar $SERVER:$PROJECT_DIR/
+
+# Load images on server
+echo -e "${GREEN}Loading Docker images on server...${NC}"
+sshpass -e ssh -o StrictHostKeyChecking=no $SERVER "cd $PROJECT_DIR && docker load -i chess-rest-api.tar"
+sshpass -e ssh -o StrictHostKeyChecking=no $SERVER "cd $PROJECT_DIR && docker load -i chess-web-frontend.tar"
+
+# Clean up local tar files
+echo -e "${GREEN}Cleaning up local tar files...${NC}"
+rm chess-rest-api.tar chess-web-frontend.tar
+
+# Clean up old images on server
+echo -e "${GREEN}Cleaning up old images on server...${NC}"
+sshpass -e ssh -o StrictHostKeyChecking=no $SERVER "docker image prune -f"
 
 # Create production docker-compose file locally
 echo -e "${GREEN}Creating production docker-compose file...${NC}"
@@ -148,7 +154,7 @@ services:
     container_name: chess-nginx-keycloak
     ports:
       - "8081:80"
-      - "8443:443"
+      - "443:443"
     networks:
       - chess-network
     volumes:
@@ -171,12 +177,13 @@ services:
       - KC_DB_URL=jdbc:postgresql://postgres:5432/keycloak
       - KC_DB_USERNAME=chess_user
       - KC_DB_PASSWORD=chess_password
-      - KC_HOSTNAME=141.37.123.124
-      - KC_HOSTNAME_PORT=8443
+      - KC_HOSTNAME_URL=https://141.37.123.124
+      - KC_HOSTNAME_ADMIN_URL=https://141.37.123.124
+      - KC_HOSTNAME_PORT=443
       - KC_HOSTNAME_STRICT=false
       - KC_HOSTNAME_STRICT_HTTPS=false
       - KC_HTTP_ENABLED=true
-      - KC_PROXY=edge
+      - KC_PROXY_HEADERS=xforwarded
     command: start-dev --import-realm
     depends_on:
       postgres:
@@ -308,7 +315,7 @@ echo -e "${GREEN}=== Deployment complete! ===${NC}"
 echo -e "${GREEN}Access the application at:${NC}"
 echo -e "  - Web Frontend: http://141.37.123.124:3005"
 echo -e "  - REST API: http://141.37.123.124:8085"
-echo -e "  - Keycloak (HTTPS): https://141.37.123.124:8443"
-echo -e "  - Keycloak Admin: https://141.37.123.124:8443/admin"
+echo -e "  - Keycloak (HTTPS): https://141.37.123.124"
+echo -e "  - Keycloak Admin: https://141.37.123.124/admin"
 echo -e "${YELLOW}Note: SSL certificate is self-signed. Your browser will show a security warning.${NC}"
 echo -e "${YELLOW}To view logs: ssh $SERVER 'cd $PROJECT_DIR && docker compose -f docker-compose.prod.yml logs -f'${NC}"

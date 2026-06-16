@@ -20,11 +20,11 @@ FROM nginx:alpine
 # Copy built application to nginx
 COPY --from=0 /app/dist /usr/share/nginx/html
 
-# Copy nginx configuration
-COPY nginx.conf /etc/nginx/nginx.conf
+# Copy nginx configuration template
+COPY nginx.conf /etc/nginx/templates/nginx.conf.template
 
 # Expose port
 EXPOSE 3000
 
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"]
+# Start nginx with envsubst to substitute environment variables
+CMD ["/bin/sh", "-c", "envsubst '$$API_UPSTREAM' < /etc/nginx/templates/nginx.conf.template > /etc/nginx/nginx.conf && nginx -g 'daemon off;'"]

@@ -87,11 +87,15 @@ services:
         condition: service_healthy
       mongodb:
         condition: service_healthy
+      kafka:
+        condition: service_healthy
     environment:
       - JAVA_OPTS=-Xmx512m
       - MONGODB_HOST=mongodb
       - MONGODB_PORT=27017
       - MONGODB_DATABASE=chess
+      - KAFKA_ENABLED=true
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/v1/chess/info"]
       interval: 30s
@@ -114,6 +118,7 @@ services:
         condition: service_healthy
     environment:
       - REACT_APP_API_URL=http://rest-api:8080
+      - API_UPSTREAM=rest-api:8080
 
   # GUI Service (with X11 forwarding for display)
   gui:

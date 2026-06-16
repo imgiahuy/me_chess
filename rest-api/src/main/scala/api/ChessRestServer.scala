@@ -7,7 +7,7 @@ import akka.http.scaladsl.server.{Directives, Route}
 import controller.GameController
 import database.DatabaseManager
 import repository.DatabaseGameRepository
-
+import kafka.{KafkaGameEventService, KafkaApiRoutes}
 
 import scala.concurrent.ExecutionContextExecutor
 import scala.language.postfixOps
@@ -57,14 +57,40 @@ object ChessRestServer {
       // Initialize database schema
       println("[INFO] Initializing database schema...")
       dbManager.initializeSchema()
-      
+
+      // Initialize Kafka service (optional, enabled via environment)
+      val kafkaEnabled = sys.env.getOrElse("KAFKA_ENABLED", "false").toBoolean
+      val kafkaService: Option[KafkaGameEventService] = if (kafkaEnabled) {
+        println("[INFO] Initializing Kafka event service...")
+        try {
+          val service = KafkaGameEventService.forPublishing()
+          println("[INFO] Kafka publishing enabled - events will be streamed to Kafka")
+          Some(service)
+        } catch {
+          case e: Exception =>
+            println(s"[WARN] Failed to initialize Kafka: ${e.getMessage}")
+            None
+        }
+      } else {
+        println("[INFO] Kafka is disabled (set KAFKA_ENABLED=true to enable)")
+        None
+      }
+
       // Create database-backed repository
       val gameRepository = new DatabaseGameRepository(dbManager.gameDao)
-      val sessionController = new GameSessionController(controller, gameRepository)
+      val sessionController = new GameSessionController(controller, gameRepository, kafkaService)
 
       println("[INFO] Setting up API routes...")
       val chessRoutes = new ChessApiRoutes(sessionController).routes
-      val allRoutes: Route = Directives.concat(chessRoutes)
+
+      // Add Kafka API routes if enabled
+      val allRoutes: Route = kafkaService match {
+        case Some(service) =>
+          val kafkaRoutes = new KafkaApiRoutes(service).routes
+          Directives.concat(chessRoutes, kafkaRoutes)
+        case None =>
+          chessRoutes
+      }
 
       println("[INFO] Starting HTTP server on $host:$port...")
       val bindingFuture = Http().newServerAt(host, port).bind(allRoutes)
@@ -81,6 +107,10 @@ object ChessRestServer {
           println("[INFO] Create Game: POST " + serverUrl + "/v1/chess/games")
           println("[INFO] List Games: GET " + serverUrl + "/v1/chess/games")
           println("[INFO] Database: MongoDB (games will persist in database)")
+          if (kafkaEnabled) {
+            println("[INFO] Kafka Events: Enabled - streaming to " + sys.env.getOrElse("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"))
+            println("[INFO] Kafka Health: GET " + serverUrl + "/v1/kafka/health")
+          }
           println("============================================================")
           println("[INFO] Server running continuously...")
           println("")
@@ -89,6 +119,10 @@ object ChessRestServer {
           sys.addShutdownHook {
             println("[INFO] Shutting down server...")
             binding.unbind().onComplete { _ =>
+              kafkaService.foreach { service =>
+                println("[INFO] Shutting down Kafka service...")
+                service.shutdown()
+              }
               dbManager.close()
               println("[INFO] Database closed")
               println("[INFO] Server stopped")

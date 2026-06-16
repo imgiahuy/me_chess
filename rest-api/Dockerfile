@@ -23,8 +23,9 @@ COPY shared ./shared/
 COPY persistent ./persistent/
 
 # Copy rest-api source files without project config
-RUN mkdir -p rest-api/src/main/scala/api
+RUN mkdir -p rest-api/src/main/scala/api rest-api/src/main/scala/kafka
 COPY rest-api/src/main/scala/api rest-api/src/main/scala/api
+COPY rest-api/src/main/scala/kafka rest-api/src/main/scala/kafka
 
 # Build the application
 RUN sbt compile

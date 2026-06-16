@@ -4,7 +4,7 @@ services:
     container_name: chess-nginx-keycloak
     ports:
       - "8081:80"
-      - "8443:443"
+      - "443:443"
     networks:
       - chess-network
     volumes:
@@ -27,12 +27,13 @@ services:
       - KC_DB_URL=jdbc:postgresql://postgres:5432/keycloak
       - KC_DB_USERNAME=chess_user
       - KC_DB_PASSWORD=chess_password
-      - KC_HOSTNAME=141.37.123.124
-      - KC_HOSTNAME_PORT=8443
+      - KC_HOSTNAME_URL=https://141.37.123.124
+      - KC_HOSTNAME_ADMIN_URL=https://141.37.123.124
+      - KC_HOSTNAME_PORT=443
       - KC_HOSTNAME_STRICT=false
       - KC_HOSTNAME_STRICT_HTTPS=false
       - KC_HTTP_ENABLED=true
-      - KC_PROXY=edge
+      - KC_PROXY_HEADERS=xforwarded
     command: start-dev --import-realm
     depends_on:
       postgres:

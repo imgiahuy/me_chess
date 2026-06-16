@@ -1,0 +1,131 @@
+# Docker Compose configuration for Kafka and Zookeeper
+# This enables the chess microservices to communicate via Kafka event streaming
+
+version: '3.8'
+
+services:
+  # Zookeeper - Required for Kafka coordination
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    hostname: zookeeper
+    container_name: chess-zookeeper
+    ports:
+      - "2181:2181"
+    networks:
+      - chess-network
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo 'ruok' | nc localhost 2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Kafka Broker - Event streaming platform
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    hostname: kafka
+    container_name: chess-kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "9092:9092"      # External access
+      - "29092:29092"    # Internal Docker access
+    networks:
+      - chess-network
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 4
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Kafka UI - Web interface for managing Kafka
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: chess-kafka-ui
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8082:8080"
+    networks:
+      - chess-network
+    environment:
+      KAFKA_CLUSTERS_0_NAME: chess-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+
+  # Kafka Topics Initializer - Creates required topics on startup
+  kafka-init:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: chess-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - chess-network
+    entrypoint: |
+      bash -c '
+        echo "Creating Kafka topics for chess events..."
+        
+        # Create chess event topics with appropriate settings
+        kafka-topics --create --if-not-exists \
+          --bootstrap-server kafka:29092 \
+          --topic chess-events \
+          --partitions 4 \
+          --replication-factor 1
+          
+        kafka-topics --create --if-not-exists \
+          --bootstrap-server kafka:29092 \
+          --topic chess-game-created \
+          --partitions 4 \
+          --replication-factor 1
+          
+        kafka-topics --create --if-not-exists \
+          --bootstrap-server kafka:29092 \
+          --topic chess-move-made \
+          --partitions 8 \
+          --replication-factor 1
+          
+        kafka-topics --create --if-not-exists \
+          --bootstrap-server kafka:29092 \
+          --topic chess-game-ended \
+          --partitions 4 \
+          --replication-factor 1
+          
+        kafka-topics --create --if-not-exists \
+          --bootstrap-server kafka:29092 \
+          --topic chess-player-resigned \
+          --partitions 4 \
+          --replication-factor 1
+          
+        kafka-topics --create --if-not-exists \
+          --bootstrap-server kafka:29092 \
+          --topic chess-time-events \
+          --partitions 4 \
+          --replication-factor 1
+          
+        kafka-topics --create --if-not-exists \
+          --bootstrap-server kafka:29092 \
+          --topic chess-state-updates \
+          --partitions 4 \
+          --replication-factor 1
+        
+        echo "All topics created successfully!"
+        echo "Listing all topics:"
+        kafka-topics --list --bootstrap-server kafka:29092
+      '
+

@@ -89,14 +89,17 @@ object PgnStreamExample {
       println("Running reactive stream pipeline...")
       println("-" * 60)
 
+      val startTime = System.currentTimeMillis()
       val statsFuture = PgnProcessingStream.processPgnFile(tempFile)
 
       // Wait for completion
       val stats = Await.result(statsFuture, 30.seconds)
+      val elapsed = System.currentTimeMillis() - startTime
 
       println("-" * 60)
       println()
       println("STREAM PROCESSING COMPLETE")
+      println(s"Processing time: ${elapsed}ms")
       println()
       println("FINAL STATISTICS:")
       println(s"  Total Games Processed: ${stats.totalGames}")
@@ -121,6 +124,18 @@ object PgnStreamExample {
 
       // Demo 3: In-memory source from iterator
       runInMemoryStream()
+
+      // Demo 4: Custom GraphStage - Sliding Window
+      runSlidingWindowDemo(tempFile)
+
+      // Demo 5: Complex GraphDSL topology
+      runComplexTopologyDemo(tempFile)
+
+      // Demo 6: Parallel processing with async boundaries
+      runParallelProcessingDemo(tempFile)
+
+      // Demo 7: Partitioned stream
+      runPartitionedStreamDemo(tempFile)
 
       // Cleanup
       Files.deleteIfExists(tempFile)
@@ -209,14 +224,85 @@ object PgnStreamExample {
       }
     }
 
-    val savedFuture = PgnProcessingStream.fileSource(filePath)
-      .via(PgnProcessingStream.pgnFramingFlow)
+    val savedFuture = PgnProcessingStream.fileSourceWithSplitting(filePath)
       .via(PgnProcessingStream.pgnParsingFlow)
       .via(PgnProcessingStream.gameAnalysisFlow)
       .runWith(PgnProcessingStream.databaseSink(mockSave))
 
     val count = Await.result(savedFuture, 30.seconds)
     println(s"Total games saved to database: $count")
+    println()
+  }
+
+  /** Demonstrates custom GraphStage operator - sliding window average. */
+  private def runSlidingWindowDemo(filePath: java.nio.file.Path)(implicit system: ActorSystem[_]): Unit = {
+    import akka.stream.scaladsl.Sink
+    implicit val ec: ExecutionContext = system.executionContext
+
+    println("Demo 4: Custom GraphStage - Sliding Window Average")
+    println("-" * 60)
+
+    val averagesFuture = PgnProcessingStream.fileSourceWithSplitting(filePath)
+      .via(PgnProcessingStream.pgnParsingFlow)
+      .via(PgnProcessingStream.gameAnalysisFlow)
+      .via(PgnProcessingStream.slidingWindowAverageFlow(windowSize = 2))
+      .runWith(Sink.seq)
+
+    val averages = Await.result(averagesFuture, 30.seconds)
+    println(s"Running averages (window size 2):")
+    averages.zipWithIndex.foreach { case (avg, idx) =>
+      println(s"  Game ${idx + 1}: Average moves = ${f"$avg%.1f"}")
+    }
+    println()
+  }
+
+  /** Demonstrates complex GraphDSL topology with broadcast and merge. */
+  private def runComplexTopologyDemo(filePath: java.nio.file.Path)(implicit system: ActorSystem[_]): Unit = {
+    import akka.stream.scaladsl.Sink
+    implicit val ec: ExecutionContext = system.executionContext
+
+    println("Demo 5: Complex GraphDSL Topology (Broadcast + Merge)")
+    println("-" * 60)
+
+    val resultsFuture = PgnProcessingStream.complexStreamTopology(filePath)
+      .runWith(Sink.seq)
+
+    val results = Await.result(resultsFuture, 30.seconds)
+    println(s"Complex topology results (${results.size} outputs):")
+    results.take(10).foreach(println)
+    println()
+  }
+
+  /** Demonstrates parallel processing with async boundaries. */
+  private def runParallelProcessingDemo(filePath: java.nio.file.Path)(implicit system: ActorSystem[_]): Unit = {
+    implicit val ec: ExecutionContext = system.executionContext
+
+    println("Demo 6: Parallel Processing with Async Boundaries")
+    println("-" * 60)
+
+    val startTime = System.currentTimeMillis()
+    val statsFuture = PgnProcessingStream.parallelProcessingStream(filePath)
+    val stats = Await.result(statsFuture, 30.seconds)
+    val elapsed = System.currentTimeMillis() - startTime
+
+    println(s"Parallel processing completed in ${elapsed}ms")
+    println(s"Processed ${stats.totalGames} games with ${stats.totalMoves} total moves")
+    println()
+  }
+
+  /** Demonstrates partitioned stream based on game length. */
+  private def runPartitionedStreamDemo(filePath: java.nio.file.Path)(implicit system: ActorSystem[_]): Unit = {
+    implicit val ec: ExecutionContext = system.executionContext
+
+    println("Demo 7: Partitioned Stream (by game length)")
+    println("-" * 60)
+
+    val partitionsFuture = PgnProcessingStream.partitionedStream(filePath)
+    val (short, medium, long) = Await.result(partitionsFuture, 30.seconds)
+
+    println(s"Short games (< 10 moves): ${short.size}")
+    println(s"Medium games (10-30 moves): ${medium.size}")
+    println(s"Long games (> 30 moves): ${long.size}")
     println()
   }
 }

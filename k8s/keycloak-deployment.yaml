@@ -15,12 +15,14 @@ metadata:
   namespace: chess
 data:
   KC_DB: postgres
-  KC_DB_URL: jdbc:postgresql://postgres:5432/chess
-  KC_HOSTNAME: chess.local
-  KC_HOSTNAME_PORT: "8081"
+  KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+  KC_HOSTNAME: "141.37.123.124"
+  KC_HOSTNAME_PORT: "80"
   KC_HOSTNAME_STRICT: "false"
   KC_HOSTNAME_STRICT_HTTPS: "false"
   KC_HTTP_ENABLED: "true"
+  KC_PROXY_HEADERS: xforwarded
+  KC_HTTP_RELATIVE_PATH: /auth
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -42,6 +44,7 @@ spec:
           image: quay.io/keycloak/keycloak:24.0
           args:
             - start-dev
+            - --import-realm
           ports:
             - containerPort: 8080
           env:
@@ -66,6 +69,36 @@ spec:
                 configMapKeyRef:
                   name: keycloak-config
                   key: KC_DB_URL
+            - name: KC_HOSTNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: keycloak-config
+                  key: KC_HOSTNAME
+            - name: KC_HOSTNAME_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: keycloak-config
+                  key: KC_HOSTNAME_PORT
+            - name: KC_HOSTNAME_STRICT
+              valueFrom:
+                configMapKeyRef:
+                  name: keycloak-config
+                  key: KC_HOSTNAME_STRICT
+            - name: KC_HOSTNAME_STRICT_HTTPS
+              valueFrom:
+                configMapKeyRef:
+                  name: keycloak-config
+                  key: KC_HOSTNAME_STRICT_HTTPS
+            - name: KC_PROXY_HEADERS
+              valueFrom:
+                configMapKeyRef:
+                  name: keycloak-config
+                  key: KC_PROXY_HEADERS
+            - name: KC_HTTP_RELATIVE_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: keycloak-config
+                  key: KC_HTTP_RELATIVE_PATH
 
             - name: KC_DB_USERNAME
               valueFrom:
@@ -84,19 +117,28 @@ spec:
             - name: KC_HTTP_ENABLED
               value: "true"
 
+          volumeMounts:
+            - name: keycloak-realm
+              mountPath: /opt/keycloak/data/import
+              readOnly: true
+
           readinessProbe:
             httpGet:
-              path: /health/ready
+              path: /auth/health/ready
               port: 8080
             initialDelaySeconds: 40
             periodSeconds: 10
 
           livenessProbe:
             httpGet:
-              path: /health/live
+              path: /auth/health/live
               port: 8080
             initialDelaySeconds: 80
             periodSeconds: 20
+      volumes:
+        - name: keycloak-realm
+          configMap:
+            name: keycloak-realm-config
 ---
 apiVersion: v1
 kind: Service

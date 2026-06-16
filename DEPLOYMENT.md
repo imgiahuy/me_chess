@@ -110,9 +110,15 @@ This will:
 
 ### Access the production application
 
+**Docker Compose:**
 - **Web Frontend**: http://141.37.123.124:3005
 - **REST API**: http://141.37.123.124:8085
 - **Keycloak**: http://141.37.123.124:8081
+
+**Kubernetes (via ingress on port 80):**
+- **Web Frontend**: http://141.37.123.124
+- **REST API**: http://141.37.123.124/v1
+- **Keycloak**: http://141.37.123.124/auth
 
 ### SSH to server for management
 
@@ -133,6 +139,29 @@ docker-compose logs -f
 kubectl logs -n chess -f deployment/rest-api
 kubectl get all -n chess
 ```
+
+## Switching Between Docker and Kubernetes
+
+The two deployments share the same server but compete for ports 80 and 443. Use these scripts to switch cleanly:
+
+### Switch to Docker Compose (from Kubernetes)
+
+```bash
+chmod +x scripts/switch-to-docker.sh
+./scripts/switch-to-docker.sh
+```
+
+This stops and deletes the kind cluster, then restarts the Docker Compose stack. Data volumes are preserved.
+
+### Switch to Kubernetes (from Docker Compose)
+
+```bash
+./scripts/deploy-k8s-to-server.sh
+```
+
+This automatically stops the Docker Compose stack before creating the kind cluster.
+
+---
 
 ## Docker Images
 

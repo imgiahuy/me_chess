@@ -4,7 +4,7 @@ metadata:
   name: web-frontend-config
   namespace: chess
 data:
-  REACT_APP_API_URL: http://rest-api:8080
+  REACT_APP_API_URL: http://141.37.123.124/v1
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -64,7 +64,7 @@ spec:
   ports:
   - port: 3000
     targetPort: 3000
-  type: LoadBalancer
+  type: ClusterIP
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -72,20 +72,14 @@ metadata:
   name: chess-ingress
   namespace: chess
   annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
 spec:
   ingressClassName: nginx
   rules:
-  - host: chess.local
-    http:
+  - http:
       paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: web-frontend
-            port:
-              number: 3000
       - path: /v1
         pathType: Prefix
         backend:
@@ -100,3 +94,10 @@ spec:
             name: keycloak
             port:
               number: 8080
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: web-frontend
+            port:
+              number: 3000

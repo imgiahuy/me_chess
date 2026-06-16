@@ -1,6 +1,7 @@
 ThisBuild / version := "0.1.0-SNAPSHOT"
 ThisBuild / scalaVersion := "3.3.3"
 ThisBuild / scalacOptions += "-language:postfixOps"
+import sbt._
 import sbtassembly.AssemblyPlugin.autoImport._
 
 // --- OS detection for JavaFX ---
@@ -94,13 +95,34 @@ lazy val restApi = project
       "--add-opens=java.base/java.util=ALL-UNNAMED"
     ),
     libraryDependencies ++= Seq(
-      "com.typesafe.akka" %% "akka-actor-typed" % "2.8.5",
-      "com.typesafe.akka" %% "akka-http" % "10.5.3",
-      "com.typesafe.akka" %% "akka-stream" % "2.8.5",
-      "com.typesafe.akka" %% "akka-http-testkit" % "10.5.3" % Test,
+      // Use 2.13 versions with scala-java8-compat exclusion for Scala 3 compatibility
+      ("com.typesafe.akka" % "akka-actor-typed_3" % "2.8.5")
+        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
+      ("com.typesafe.akka" % "akka-http_3" % "10.5.3")
+        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
+      ("com.typesafe.akka" % "akka-stream_3" % "2.8.5")
+        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
+      ("com.typesafe.akka" % "akka-http-testkit_3" % "10.5.3" % Test)
+        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
       "com.lihaoyi" %% "upickle" % "3.1.0",
       "io.gatling.highcharts" % "gatling-charts-highcharts" % "3.14.0" % Test,
-      "io.gatling"            % "gatling-test-framework"    % "3.14.0" % Test
+      "io.gatling"            % "gatling-test-framework"    % "3.14.0" % Test,
+      // Kafka and Alpakka Kafka - use 2.13 version with all Akka exclusions
+      ("com.typesafe.akka" % "akka-stream-kafka_2.13" % "4.0.2")
+        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13")
+        .exclude("com.typesafe.akka", "akka-actor_2.13")
+        .exclude("com.typesafe.akka", "akka-stream_2.13")
+        .exclude("com.typesafe.akka", "akka-protobuf-v3_2.13")
+        .exclude("com.typesafe", "ssl-config-core_2.13"),
+      "org.apache.kafka" % "kafka-clients" % "3.5.1",
+      ("io.github.embeddedkafka" % "embedded-kafka_2.13" % "3.5.1" % Test)
+        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13")
+        .exclude("com.typesafe.akka", "akka-actor_2.13")
+        .exclude("com.typesafe.akka", "akka-stream_2.13")
+        .exclude("com.typesafe.akka", "akka-protobuf-v3_2.13")
+        .exclude("com.typesafe", "ssl-config-core_2.13"),
+      // Scala 3 compatible scala-java8-compat
+      "org.scala-lang.modules" % "scala-java8-compat_3" % "1.0.2"
     ),
     sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyJarName := "chess-rest-api.jar",
     sbtassembly.AssemblyPlugin.autoImport.assembly / mainClass := Some("api.ChessRestServer"),

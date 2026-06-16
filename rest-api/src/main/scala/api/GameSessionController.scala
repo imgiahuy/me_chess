@@ -4,11 +4,15 @@ import controller.GameControllerInterface
 import model.{PositionState, Color}
 import repository.GameRepository
 import service.{GameService, BotService}
+import kafka.{KafkaGameEventService, GameEvent}
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration._
 
 class GameSessionController(
                              controller: GameControllerInterface,
-                             repo: GameRepository
-                           ) {
+                             repo: GameRepository,
+                             kafkaService: Option[KafkaGameEventService] = None
+                           )(implicit ec: ExecutionContext) {
 
   /** Create a new game session and return its ID */
   def createGame(): String = {
@@ -25,7 +29,15 @@ class GameSessionController(
   /** Create a new game session with player names and time control */
   def createGameWithTimeControl(whitePlayer: String, blackPlayer: String, timeControl: model.TimeControl): String = {
     val initialState = controller.createWithTimeControl(whitePlayer, blackPlayer, timeControl)
-    repo.createGame(initialState)
+    val gameId = repo.createGame(initialState)
+
+    // Publish GameCreated event to Kafka
+    kafkaService.foreach { service =>
+      service.publishGameCreated(gameId, whitePlayer, blackPlayer, initialState)
+        .recover { case ex => println(s"[Kafka] Failed to publish game created: ${ex.getMessage}") }
+    }
+
+    gameId
   }
 
   /** Get a game by ID */
@@ -42,6 +54,20 @@ class GameSessionController(
         newState <- controller.makeMove(state, input)
       } yield {
         repo.updateGame(gameId, newState)
+
+        // Publish MoveMade event to Kafka
+        kafkaService.foreach { service =>
+          val moveNumber = newState.moveHistory.length
+          service.publishMoveMade(gameId, newState, input, moveNumber)
+            .recover { case ex => println(s"[Kafka] Failed to publish move: ${ex.getMessage}") }
+
+          // If game ended, publish GameEnded event
+          if (newState.gameResult != model.Ongoing) {
+            service.publishGameEnded(gameId, newState)
+              .recover { case ex => println(s"[Kafka] Failed to publish game ended: ${ex.getMessage}") }
+          }
+        }
+
         newState
       }
     }
@@ -53,6 +79,17 @@ class GameSessionController(
       case Some(state) =>
         val newState = GameService.resign(state, color)
         repo.updateGame(gameId, newState)
+
+        // Publish PlayerResigned and GameEnded events to Kafka
+        kafkaService.foreach { service =>
+          val colorStr = color.toString.toLowerCase
+          service.publishPlayerResigned(gameId, colorStr)
+            .recover { case ex => println(s"[Kafka] Failed to publish resignation: ${ex.getMessage}") }
+
+          service.publishGameEnded(gameId, newState)
+            .recover { case ex => println(s"[Kafka] Failed to publish game ended: ${ex.getMessage}") }
+        }
+
         newState
       case None =>
         throw new Exception("Game not found")
@@ -67,6 +104,23 @@ class GameSessionController(
       newState <- BotService.playBotMove(bot, state)
     } yield {
       repo.updateGame(gameId, newState)
+
+      // Publish bot move event to Kafka
+      kafkaService.foreach { service =>
+        val lastMove = newState.moveHistory.lastOption
+        val moveUci = lastMove.map(formatter.UciFormatter.moveToUci).getOrElse("")
+        val moveNumber = newState.moveHistory.length
+
+        service.publishMoveMade(gameId, newState, moveUci, moveNumber)
+          .recover { case ex => println(s"[Kafka] Failed to publish bot move: ${ex.getMessage}") }
+
+        // If game ended, publish GameEnded event
+        if (newState.gameResult != model.Ongoing) {
+          service.publishGameEnded(gameId, newState)
+            .recover { case ex => println(s"[Kafka] Failed to publish game ended: ${ex.getMessage}") }
+        }
+      }
+
       newState
     }
   }
@@ -207,6 +261,17 @@ class GameSessionController(
             val winner = currentPlayer.opposite
             val newState = state.copy(gameResult = model.TimeOut(winner))
             repo.updateGame(gameId, newState)
+
+            // Publish timeout and game ended events to Kafka
+            kafkaService.foreach { service =>
+              val remainingTime = 0L
+              service.publishTimeWarning(gameId, currentPlayer.toString.toLowerCase, remainingTime, isTimeout = true)
+                .recover { case ex => println(s"[Kafka] Failed to publish timeout: ${ex.getMessage}") }
+
+              service.publishGameEnded(gameId, newState)
+                .recover { case ex => println(s"[Kafka] Failed to publish game ended: ${ex.getMessage}") }
+            }
+
             Right(newState)
           } else {
             Right(state)
