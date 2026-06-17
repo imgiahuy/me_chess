@@ -1,0 +1,154 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: keycloak-secret
+  namespace: chess
+type: Opaque
+stringData:
+  KEYCLOAK_ADMIN: admin
+  KEYCLOAK_ADMIN_PASSWORD: admin123
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-config
+  namespace: chess
+data:
+  KC_DB: postgres
+  KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+  KC_HOSTNAME: "localhost"
+  KC_HOSTNAME_PORT: "80"
+  KC_HOSTNAME_STRICT: "false"
+  KC_HOSTNAME_STRICT_HTTPS: "false"
+  KC_HTTP_ENABLED: "true"
+  KC_PROXY_HEADERS: xforwarded
+  KC_HTTP_RELATIVE_PATH: /auth
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: chess
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:24.0
+          args:
+            - start-dev
+            - --import-realm
+          ports:
+            - containerPort: 8080
+          env:
+            - name: KEYCLOAK_ADMIN
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-secret
+                  key: KEYCLOAK_ADMIN
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-secret
+                  key: KEYCLOAK_ADMIN_PASSWORD
+
+            - name: KC_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: keycloak-config
+                  key: KC_DB
+            - name: KC_DB_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: keycloak-config
+                  key: KC_DB_URL
+            - name: KC_HOSTNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: keycloak-config
+                  key: KC_HOSTNAME
+            - name: KC_HOSTNAME_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: keycloak-config
+                  key: KC_HOSTNAME_PORT
+            - name: KC_HOSTNAME_STRICT
+              valueFrom:
+                configMapKeyRef:
+                  name: keycloak-config
+                  key: KC_HOSTNAME_STRICT
+            - name: KC_HOSTNAME_STRICT_HTTPS
+              valueFrom:
+                configMapKeyRef:
+                  name: keycloak-config
+                  key: KC_HOSTNAME_STRICT_HTTPS
+            - name: KC_PROXY_HEADERS
+              valueFrom:
+                configMapKeyRef:
+                  name: keycloak-config
+                  key: KC_PROXY_HEADERS
+            - name: KC_HTTP_RELATIVE_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: keycloak-config
+                  key: KC_HTTP_RELATIVE_PATH
+
+            - name: KC_DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_USER
+            - name: KC_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+
+            - name: KC_HEALTH_ENABLED
+              value: "true"
+
+            - name: KC_HTTP_ENABLED
+              value: "true"
+
+          volumeMounts:
+            - name: keycloak-realm
+              mountPath: /opt/keycloak/data/import
+              readOnly: true
+
+          readinessProbe:
+            httpGet:
+              path: /auth/health/ready
+              port: 8080
+            initialDelaySeconds: 40
+            periodSeconds: 10
+
+          livenessProbe:
+            httpGet:
+              path: /auth/health/live
+              port: 8080
+            initialDelaySeconds: 80
+            periodSeconds: 20
+      volumes:
+        - name: keycloak-realm
+          configMap:
+            name: keycloak-realm-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  namespace: chess
+spec:
+  selector:
+    app: keycloak
+  ports:
+    - port: 8080
+      targetPort: 8080
+  type: ClusterIP

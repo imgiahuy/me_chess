@@ -162,22 +162,15 @@ echo "Cluster nodes:"
 kubectl get nodes
 ENDSSH
 
-# Create project directory on server (in home dir, no sudo needed)
-echo -e "${GREEN}Creating project directory on server...${NC}"
-sshpass -e ssh -o StrictHostKeyChecking=no $SERVER "mkdir -p ~/chess-k8s"
-
-# Copy Kubernetes manifests to server
+# Copy Kubernetes manifests to server (full tree for kustomize overlays)
 echo -e "${GREEN}Copying Kubernetes manifests to server...${NC}"
-sshpass -e scp -o StrictHostKeyChecking=no k8s/*.yaml $SERVER:~/chess-k8s/
+sshpass -e ssh -o StrictHostKeyChecking=no $SERVER "mkdir -p ~/chess-k8s"
+sshpass -e rsync -avz --progress -e "ssh -o StrictHostKeyChecking=no" \
+    k8s/ $SERVER:~/chess-k8s/
 
 # Copy source to server and build natively (avoids Windows cross-platform issues)
 echo -e "${GREEN}Copying source to server for native build...${NC}"
 sshpass -e ssh -o StrictHostKeyChecking=no $SERVER "mkdir -p ~/chess-src"
-
-# Copy only what the Dockerfiles need
-sshpass -e scp -o StrictHostKeyChecking=no -r \
-    rest-api/Dockerfile \
-    $SERVER:~/chess-src/
 
 # For the rest-api we need the full build context (sbt project)
 # Use tar to stream the project excluding heavy dirs
@@ -195,7 +188,7 @@ set -e
 export PATH="$HOME/.local/bin:$PATH"
 
 echo "  Removing old images to force clean rebuild..."
-docker rmi chess-rest-api:latest chess-web-frontend:latest 2>/dev/null || true
+docker rmi chess-rest-api:latest chess-web-frontend:latest chess-spark:latest 2>/dev/null || true
 
 echo "  Building chess-rest-api..."
 docker build --no-cache -t chess-rest-api:latest \
@@ -207,25 +200,56 @@ docker build --no-cache -t chess-web-frontend:latest \
     -f ~/chess-src/project/web/frontend/Dockerfile \
     ~/chess-src/project/web/frontend
 
+echo "  Building chess-spark (multi-stage Dockerfile assembles JAR internally)..."
+docker build --no-cache -t chess-spark:latest \
+    -f ~/chess-src/project/spark/Dockerfile \
+    ~/chess-src/project
+
 echo "  Removing images from kind node to force re-load..."
-# Delete the image from containerd inside the kind node so kind load always replaces it
 docker exec chess-control-plane crictl rmi docker.io/library/chess-rest-api:latest 2>/dev/null || true
 docker exec chess-control-plane crictl rmi docker.io/library/chess-web-frontend:latest 2>/dev/null || true
+docker exec chess-control-plane crictl rmi docker.io/library/chess-spark:latest 2>/dev/null || true
 
 echo "  Loading fresh images into kind cluster..."
 kind load docker-image chess-rest-api:latest --name chess
 kind load docker-image chess-web-frontend:latest --name chess
+kind load docker-image chess-spark:latest --name chess
 
 echo "Images loaded into kind successfully."
 ENDSSH
 
-# Update Kubernetes manifests — use Never since images are pre-loaded into kind nodes
-echo -e "${GREEN}Updating Kubernetes manifests...${NC}"
+# Patch imagePullPolicy to Never in the production overlay (images loaded directly into kind)
+echo -e "${GREEN}Patching imagePullPolicy to Never for kind...${NC}"
 sshpass -e ssh -o StrictHostKeyChecking=no $SERVER << 'ENDSSH'
 set -e
-cd ~/chess-k8s
-sed -i 's|imagePullPolicy: IfNotPresent|imagePullPolicy: Never|g' rest-api-deployment.yaml
-sed -i 's|imagePullPolicy: IfNotPresent|imagePullPolicy: Never|g' web-frontend-deployment.yaml
+cd ~/chess-k8s/overlays/production
+
+# Add imagePullPolicy patch if not already present
+if ! grep -q 'imagePullPolicy' image-pull-patch.yaml 2>/dev/null; then
+    cat > image-pull-patch.yaml << 'EOF'
+- op: replace
+  path: /spec/template/spec/containers/0/imagePullPolicy
+  value: Never
+EOF
+
+    # Add it to kustomization.yaml if not already there
+    if ! grep -q 'image-pull-patch.yaml' kustomization.yaml; then
+        cat >> kustomization.yaml << 'EOF'
+  - path: image-pull-patch.yaml
+    target:
+      kind: Deployment
+      name: rest-api
+  - path: image-pull-patch.yaml
+    target:
+      kind: Deployment
+      name: web-frontend
+  - path: image-pull-patch.yaml
+    target:
+      kind: Job
+      name: chess-spark-batch
+EOF
+    fi
+fi
 ENDSSH
 
 # Install ingress-nginx for kind
@@ -247,35 +271,35 @@ else
 fi
 ENDSSH
 
-# Deploy Kubernetes manifests
-echo -e "${GREEN}Deploying Kubernetes manifests...${NC}"
+# Deploy Kubernetes manifests using production overlay
+echo -e "${GREEN}Deploying Kubernetes manifests (production overlay)...${NC}"
 sshpass -e ssh -o StrictHostKeyChecking=no $SERVER << 'ENDSSH'
 set -e
 export PATH="$HOME/.local/bin:$PATH"
 export KUBECONFIG="$HOME/.kube/kind-config"
-cd ~/chess-k8s
 
-kubectl apply -f namespace.yaml
+# Apply namespace first so subsequent waits work
+kubectl apply -f ~/chess-k8s/base/namespace.yaml
 
-kubectl apply -f postgres-deployment.yaml
-kubectl apply -f mongodb-deployment.yaml
+# Apply databases first
+kubectl apply -k ~/chess-k8s/overlays/production
 
 echo "Waiting for databases..."
 kubectl wait --for=condition=available deployment/postgres -n chess --timeout=300s
 kubectl wait --for=condition=available deployment/mongodb -n chess --timeout=300s
 
-kubectl apply -f keycloak-realm-config.yaml
-
 echo "Wiping keycloak DB so realm is re-imported fresh..."
 kubectl delete deployment keycloak -n chess 2>/dev/null || true
-kubectl exec -n chess deployment/postgres -- psql -U chess -c "DROP DATABASE IF EXISTS keycloak;" 2>/dev/null || true
-kubectl exec -n chess deployment/postgres -- psql -U chess -c "CREATE DATABASE keycloak;" 2>/dev/null || true
+kubectl exec -n chess deployment/postgres -- psql -U chess_user -d chess -c "DROP DATABASE IF EXISTS keycloak;" 2>/dev/null || true
+kubectl exec -n chess deployment/postgres -- psql -U chess_user -d chess -c "CREATE DATABASE keycloak;" 2>/dev/null || true
 
-kubectl apply -f keycloak-deployment.yaml
+# Re-apply full overlay so keycloak deployment is recreated
+kubectl apply -k ~/chess-k8s/overlays/production
+
 echo "Waiting for Keycloak..."
 kubectl wait --for=condition=available deployment/keycloak -n chess --timeout=300s
 
-echo "Disabling SSL requirement on master and chess realms..."
+echo "Disabling SSL requirement on Keycloak realms..."
 KC_POD=$(kubectl get pod -n chess -l app=keycloak -o jsonpath='{.items[0].metadata.name}')
 kubectl exec -n chess $KC_POD -- /opt/keycloak/bin/kcadm.sh config credentials \
     --server http://localhost:8080/auth \
@@ -286,16 +310,16 @@ kubectl exec -n chess $KC_POD -- /opt/keycloak/bin/kcadm.sh update realms/master
 kubectl exec -n chess $KC_POD -- /opt/keycloak/bin/kcadm.sh update realms/chess  -s sslRequired=none 2>/dev/null || true
 echo "SSL disabled on Keycloak realms."
 
-kubectl apply -f rest-api-deployment.yaml
-kubectl apply -f web-frontend-deployment.yaml
-
 echo "Forcing rollout restart to pick up fresh images..."
 kubectl rollout restart deployment/rest-api -n chess
 kubectl rollout restart deployment/web-frontend -n chess
 
-echo "Waiting for application..."
-kubectl wait --for=condition=available deployment/rest-api -n chess --timeout=300s
+echo "Waiting for all deployments..."
+kubectl wait --for=condition=available deployment/zookeeper    -n chess --timeout=300s
+kubectl wait --for=condition=available deployment/kafka        -n chess --timeout=300s
+kubectl wait --for=condition=available deployment/rest-api     -n chess --timeout=300s
 kubectl wait --for=condition=available deployment/web-frontend -n chess --timeout=300s
+kubectl wait --for=condition=available deployment/kafka-ui     -n chess --timeout=300s
 ENDSSH
 
 # Verify deployment
@@ -312,5 +336,6 @@ echo -e "${GREEN}Access the application at:${NC}"
 echo -e "  - Web Frontend: http://141.37.123.124"
 echo -e "  - REST API:     http://141.37.123.124/v1"
 echo -e "  - Keycloak:     http://141.37.123.124/auth"
+echo -e "  - Kafka UI:     http://141.37.123.124/kafka-ui"
 echo -e "${YELLOW}To view logs:    ssh $SERVER 'export PATH=\$HOME/.local/bin:\$PATH KUBECONFIG=\$HOME/.kube/kind-config; kubectl logs -n chess -f deployment/<name>'${NC}"
 echo -e "${YELLOW}To check status: ssh $SERVER 'export PATH=\$HOME/.local/bin:\$PATH KUBECONFIG=\$HOME/.kube/kind-config; kubectl get all -n chess'${NC}"

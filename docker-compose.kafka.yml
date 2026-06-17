@@ -1,8 +1,6 @@
 # Docker Compose configuration for Kafka and Zookeeper
 # This enables the chess microservices to communicate via Kafka event streaming
 
-version: '3.8'
-
 services:
   # Zookeeper - Required for Kafka coordination
   zookeeper:
@@ -80,52 +78,55 @@ services:
     entrypoint: |
       bash -c '
         echo "Creating Kafka topics for chess events..."
-        
+
         # Create chess event topics with appropriate settings
         kafka-topics --create --if-not-exists \
           --bootstrap-server kafka:29092 \
           --topic chess-events \
           --partitions 4 \
           --replication-factor 1
-          
+
         kafka-topics --create --if-not-exists \
           --bootstrap-server kafka:29092 \
           --topic chess-game-created \
           --partitions 4 \
           --replication-factor 1
-          
+
         kafka-topics --create --if-not-exists \
           --bootstrap-server kafka:29092 \
           --topic chess-move-made \
           --partitions 8 \
           --replication-factor 1
-          
+
         kafka-topics --create --if-not-exists \
           --bootstrap-server kafka:29092 \
           --topic chess-game-ended \
           --partitions 4 \
           --replication-factor 1
-          
+
         kafka-topics --create --if-not-exists \
           --bootstrap-server kafka:29092 \
           --topic chess-player-resigned \
           --partitions 4 \
           --replication-factor 1
-          
+
         kafka-topics --create --if-not-exists \
           --bootstrap-server kafka:29092 \
           --topic chess-time-events \
           --partitions 4 \
           --replication-factor 1
-          
+
         kafka-topics --create --if-not-exists \
           --bootstrap-server kafka:29092 \
           --topic chess-state-updates \
           --partitions 4 \
           --replication-factor 1
-        
+
         echo "All topics created successfully!"
         echo "Listing all topics:"
         kafka-topics --list --bootstrap-server kafka:29092
       '
 
+networks:
+  chess-network:
+    external: false

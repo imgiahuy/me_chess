@@ -27,11 +27,7 @@ if ($existingCluster) {
 Write-Host "Creating k3d cluster..." -ForegroundColor Green
 k3d cluster create chess-cluster `
     --api-port 127.0.0.1:60332 `
-    --port "8080:80@loadbalancer" `
-    --port "3000:3000@loadbalancer" `
-    --port "8081:8081@loadbalancer" `
-    --port "5432:5432@loadbalancer" `
-    --port "27017:27017@loadbalancer" `
+    --port "80:80@loadbalancer" `
     --agents 2 `
     --wait
 
@@ -47,16 +43,8 @@ kubectl get nodes
 Write-Host "Waiting for cluster to be ready..." -ForegroundColor Green
 kubectl wait --for=condition=ready node --all --timeout=300s
 
-# Install ingress-nginx if not already installed
-$ingressNamespace = kubectl get namespace ingress-nginx --ignore-not-found
-if (-not $ingressNamespace) {
-    Write-Host "Installing ingress-nginx..." -ForegroundColor Green
-    kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.0/deploy/static/provider/cloud/deploy.yaml
-    kubectl wait --namespace ingress-nginx `
-        --for=condition=ready pod `
-        --selector=app.kubernetes.io/component=controller `
-        --timeout=300s
-}
+# Note: k3d includes Traefik as the built-in ingress controller on port 80.
+# No separate ingress-nginx installation needed.
 
 # Create namespace
 Write-Host "Creating chess namespace..." -ForegroundColor Green
@@ -67,23 +55,26 @@ Write-Host "Building Docker images for k3d..." -ForegroundColor Green
 docker build -t chess-rest-api:latest -f rest-api/Dockerfile .
 docker build -t chess-web-frontend:latest -f web/frontend/Dockerfile web/frontend
 
+# Build Spark analytics image (multi-stage Dockerfile assembles JAR internally)
+Write-Host "Building Spark analytics image..." -ForegroundColor Green
+docker build -t chess-spark:latest -f spark/Dockerfile .
+
 # Import images into k3d
 Write-Host "Importing images into k3d..." -ForegroundColor Green
 k3d image import chess-rest-api:latest -c chess-cluster
 k3d image import chess-web-frontend:latest -c chess-cluster
+k3d image import chess-spark:latest -c chess-cluster
 
-# Deploy Kubernetes manifests
-Write-Host "Deploying Kubernetes manifests..." -ForegroundColor Green
-kubectl apply -f k8s/postgres-deployment.yaml
-kubectl apply -f k8s/mongodb-deployment.yaml
-kubectl apply -f k8s/keycloak-deployment.yaml
-kubectl apply -f k8s/rest-api-deployment.yaml
-kubectl apply -f k8s/web-frontend-deployment.yaml
+# Deploy Kubernetes manifests (local overlay with chess.local hostnames)
+Write-Host "Deploying Kubernetes manifests (local overlay)..." -ForegroundColor Green
+kubectl apply -k k8s/overlays/local
 
 # Wait for deployments to be ready
 Write-Host "Waiting for deployments to be ready..." -ForegroundColor Green
 kubectl wait --for=condition=available deployment/postgres -n chess --timeout=300s
 kubectl wait --for=condition=available deployment/mongodb -n chess --timeout=300s
+kubectl wait --for=condition=available deployment/zookeeper -n chess --timeout=300s
+kubectl wait --for=condition=available deployment/kafka -n chess --timeout=300s
 kubectl wait --for=condition=available deployment/keycloak -n chess --timeout=300s
 kubectl wait --for=condition=available deployment/rest-api -n chess --timeout=300s
 kubectl wait --for=condition=available deployment/web-frontend -n chess --timeout=300s
@@ -114,8 +105,9 @@ try {
 
 Write-Host "=== Cluster setup complete! ===" -ForegroundColor Green
 Write-Host "Access the application at:" -ForegroundColor Green
-Write-Host "  - Web Frontend: http://chess.local:3000"
-Write-Host "  - REST API: http://chess.local:8080"
-Write-Host "  - Keycloak: http://chess.local:8081"
+Write-Host "  - Web Frontend: http://chess.local"
+Write-Host "  - REST API:     http://chess.local/v1"
+Write-Host "  - Keycloak:     http://chess.local/auth"
+Write-Host "  - Kafka UI:     http://chess.local/kafka-ui"
 Write-Host "To view logs: kubectl logs -n chess -f deployment/<deployment-name>" -ForegroundColor Yellow
 Write-Host "To delete cluster: k3d cluster delete chess-cluster" -ForegroundColor Yellow

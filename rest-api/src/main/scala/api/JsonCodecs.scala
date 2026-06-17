@@ -169,6 +169,22 @@ object JsonCodecs {
 
   final case class AvailableBotsResponse(bots: List[BotInfoResponse])
 
+  final case class LeaderboardEntry(
+    rank: Int,
+    player: String,
+    totalGames: Long,
+    victories: Long,
+    defeats: Long,
+    draws: Long,
+    winRate: Double
+  )
+
+  final case class LeaderboardResponse(
+    entries: List[LeaderboardEntry],
+    generatedAt: String,
+    source: String
+  )
+
   given ReadWriter[TimeControlInfo]  = macroRW
 
   given optionTimeControlInfoRW: ReadWriter[Option[TimeControlInfo]] = readwriter[Value].bimap(
@@ -225,4 +241,6 @@ object JsonCodecs {
   given ReadWriter[BotMoveRequest]      = macroRW
   given ReadWriter[BotInfoResponse]     = macroRW
   given ReadWriter[AvailableBotsResponse] = macroRW
+  given ReadWriter[LeaderboardEntry]      = macroRW
+  given ReadWriter[LeaderboardResponse]   = macroRW
 }

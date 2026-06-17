@@ -79,6 +79,69 @@ lazy val persistent = project
   )
   .dependsOn(core, shared)
 
+lazy val spark = project
+  .in(file("spark"))
+  .settings(
+    commonSettings,
+    // JVM options required for Spark with Java 17+
+    fork := true,
+    run / javaOptions ++= Seq(
+      "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+      "--add-opens=java.base/java.io=ALL-UNNAMED",
+      "--add-opens=java.base/java.lang=ALL-UNNAMED",
+      "--add-opens=java.base/java.util=ALL-UNNAMED",
+      "--add-opens=java.base/java.nio=ALL-UNNAMED",
+      "--add-opens=java.base/java.net=ALL-UNNAMED",
+      "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+      "--add-opens=java.base/sun.security.util=ALL-UNNAMED",
+      "--add-opens=java.base/sun.security.x509=ALL-UNNAMED",
+      "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED"
+    ),
+    Test / javaOptions ++= Seq(
+      "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+      "--add-opens=java.base/java.io=ALL-UNNAMED",
+      "--add-opens=java.base/java.lang=ALL-UNNAMED",
+      "--add-opens=java.base/java.util=ALL-UNNAMED"
+    ),
+    libraryDependencies ++= Seq(
+      // Apache Spark 3.5.1 (latest stable, uses Scala 2.13)
+      // Spark doesn't have native Scala 3 support, so we use _2.13 artifacts
+      // Exclude scala-xml to avoid conflicts with Scala 3's version
+      ("org.apache.spark" % "spark-core_2.13" % "3.5.1")
+        .exclude("org.scala-lang.modules", "scala-xml_2.13"),
+      ("org.apache.spark" % "spark-sql_2.13" % "3.5.1")
+        .exclude("org.scala-lang.modules", "scala-xml_2.13"),
+
+      // Kafka integration for Spark
+      ("org.apache.spark" % "spark-sql-kafka-0-10_2.13" % "3.5.1")
+        .exclude("org.scala-lang.modules", "scala-xml_2.13"),
+      "org.apache.kafka" % "kafka-clients" % "3.5.1",
+
+      // MongoDB driver for reading real game data
+      "org.mongodb" % "mongodb-driver-sync" % "4.11.1",
+
+      // JSON processing
+      "com.lihaoyi" %% "upickle" % "3.1.0",
+
+      // Testing - include Spark in test scope (not provided)
+      "org.scalatest" %% "scalatest" % "3.2.19" % Test,
+      ("org.apache.spark" % "spark-core_2.13" % "3.5.1" % Test)
+        .exclude("org.scala-lang.modules", "scala-xml_2.13"),
+      ("org.apache.spark" % "spark-sql_2.13" % "3.5.1" % Test)
+        .exclude("org.scala-lang.modules", "scala-xml_2.13")
+    ),
+    sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyJarName := "chess-spark.jar",
+    sbtassembly.AssemblyPlugin.autoImport.assembly / mainClass := Some("ChessSparkApp"),
+    sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyMergeStrategy := {
+      case PathList("META-INF", "services", xs @ _*) => MergeStrategy.filterDistinctLines
+      case PathList("META-INF", "MANIFEST.MF")       => MergeStrategy.discard
+      case PathList("META-INF", xs @ _*)              => MergeStrategy.discard
+      case "reference.conf"                           => MergeStrategy.concat
+      case x                                          => MergeStrategy.first
+    }
+  )
+  .dependsOn(core, shared)
+
 // --- REST API (Http4s) ---
 lazy val restApi = project
   .in(file("rest-api"))
@@ -141,7 +204,8 @@ lazy val root = project
   .aggregate(
     tui,
     gui,
-    restApi
+    restApi,
+    spark
   )
   .settings(
     name := "me_chess"

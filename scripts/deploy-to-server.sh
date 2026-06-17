@@ -115,175 +115,44 @@ FORCE_BUILD=${1:-false}
 # Delete existing images if they exist, then always rebuild
 if [ -n "$REST_API_EXISTS" ] || [ -n "$WEB_FRONTEND_EXISTS" ]; then
     echo -e "${YELLOW}Images exist on server, deleting them...${NC}"
-    sshpass -e ssh -o StrictHostKeyChecking=no $SERVER "docker rmi chess-rest-api:latest chess-web-frontend:latest 2>/dev/null || true"
+    sshpass -e ssh -o StrictHostKeyChecking=no $SERVER "docker rmi chess-rest-api:latest chess-web-frontend:latest chess-spark:latest 2>/dev/null || true"
 fi
 
 echo -e "${GREEN}Building Docker images locally...${NC}"
 docker build -t chess-rest-api:latest -f rest-api/Dockerfile .
 docker build -t chess-web-frontend:latest -f web/frontend/Dockerfile web/frontend
 
+# Build Spark analytics image (multi-stage Dockerfile assembles JAR internally)
+echo -e "${GREEN}Building Spark analytics image...${NC}"
+docker build -t chess-spark:latest -f spark/Dockerfile .
+
 # Save images as tar files
 echo -e "${GREEN}Saving Docker images as tar files...${NC}"
 docker save chess-rest-api:latest -o chess-rest-api.tar
 docker save chess-web-frontend:latest -o chess-web-frontend.tar
+docker save chess-spark:latest -o chess-spark.tar
 
 # Transfer tar files to server
 echo -e "${GREEN}Transferring Docker images to server...${NC}"
 sshpass -e rsync -avz --progress -e "ssh -o StrictHostKeyChecking=no" chess-rest-api.tar $SERVER:$PROJECT_DIR/
 sshpass -e rsync -avz --progress -e "ssh -o StrictHostKeyChecking=no" chess-web-frontend.tar $SERVER:$PROJECT_DIR/
+sshpass -e rsync -avz --progress -e "ssh -o StrictHostKeyChecking=no" chess-spark.tar $SERVER:$PROJECT_DIR/
 
 # Load images on server
 echo -e "${GREEN}Loading Docker images on server...${NC}"
 sshpass -e ssh -o StrictHostKeyChecking=no $SERVER "cd $PROJECT_DIR && docker load -i chess-rest-api.tar"
 sshpass -e ssh -o StrictHostKeyChecking=no $SERVER "cd $PROJECT_DIR && docker load -i chess-web-frontend.tar"
+sshpass -e ssh -o StrictHostKeyChecking=no $SERVER "cd $PROJECT_DIR && docker load -i chess-spark.tar"
 
 # Clean up local tar files
 echo -e "${GREEN}Cleaning up local tar files...${NC}"
-rm chess-rest-api.tar chess-web-frontend.tar
+rm chess-rest-api.tar chess-web-frontend.tar chess-spark.tar
 
 # Clean up old images on server
 echo -e "${GREEN}Cleaning up old images on server...${NC}"
 sshpass -e ssh -o StrictHostKeyChecking=no $SERVER "docker image prune -f"
 
-# Create production docker-compose file locally
-echo -e "${GREEN}Creating production docker-compose file...${NC}"
-cat > docker-compose.prod.yml << 'YAML'
-services:
-  nginx-keycloak:
-    image: nginx:alpine
-    container_name: chess-nginx-keycloak
-    ports:
-      - "8081:80"
-      - "443:443"
-    networks:
-      - chess-network
-    volumes:
-      - ./docker/nginx-keycloak.conf:/etc/nginx/conf.d/default.conf
-      - ./docker/ssl:/etc/nginx/ssl
-    depends_on:
-      - keycloak
-
-  keycloak:
-    image: quay.io/keycloak/keycloak:24.0
-    container_name: chess-keycloak
-    ports:
-      - "8080:8080"
-    networks:
-      - chess-network
-    environment:
-      - KEYCLOAK_ADMIN=admin
-      - KEYCLOAK_ADMIN_PASSWORD=admin
-      - KC_DB=postgres
-      - KC_DB_URL=jdbc:postgresql://postgres:5432/keycloak
-      - KC_DB_USERNAME=chess_user
-      - KC_DB_PASSWORD=chess_password
-      - KC_HOSTNAME_URL=https://141.37.123.124
-      - KC_HOSTNAME_ADMIN_URL=https://141.37.123.124
-      - KC_HOSTNAME_PORT=443
-      - KC_HOSTNAME_STRICT=false
-      - KC_HOSTNAME_STRICT_HTTPS=false
-      - KC_HTTP_ENABLED=true
-      - KC_PROXY_HEADERS=xforwarded
-    command: start-dev --import-realm
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-    volumes:
-      - ./docker/keycloak-realm.json:/opt/keycloak/data/import/keycloak-realm.json
-
-  postgres:
-    image: postgres:15
-    container_name: chess-postgres
-    ports:
-      - "5432:5432"
-    networks:
-      - chess-network
-    environment:
-      - POSTGRES_DB=chess
-      - POSTGRES_USER=chess_user
-      - POSTGRES_PASSWORD=chess_password
-      - POSTGRES_MULTIPLE_DATABASES=keycloak
-    volumes:
-      - chess-data:/var/lib/postgresql/data
-      - ./docker/init-postgres.sh:/docker-entrypoint-initdb.d/init-postgres.sh
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U chess_user -d chess"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  mongodb:
-    image: mongo:4.4
-    container_name: chess-mongodb
-    ports:
-      - "27017:27017"
-    networks:
-      - chess-network
-    environment:
-      - MONGO_INITDB_DATABASE=chess
-    volumes:
-      - mongo-data:/data/db
-    healthcheck:
-      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  rest-api:
-    image: chess-rest-api:latest
-    container_name: chess-rest-api
-    ports:
-      - "8085:8080"
-    networks:
-      - chess-network
-    depends_on:
-      postgres:
-        condition: service_healthy
-      mongodb:
-        condition: service_healthy
-    environment:
-      - JAVA_OPTS=-Xmx512m
-      - MONGODB_HOST=mongodb
-      - MONGODB_PORT=27017
-      - MONGODB_DATABASE=chess
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/chess/info"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
-  web-frontend:
-    image: chess-web-frontend:latest
-    container_name: chess-web-frontend
-    ports:
-      - "3005:3000"
-    networks:
-      - chess-network
-    depends_on:
-      rest-api:
-        condition: service_healthy
-    environment:
-      - REACT_APP_API_URL=http://rest-api:8080
-
-networks:
-  chess-network:
-    driver: bridge
-
-volumes:
-  chess-data:
-    driver: local
-  mongo-data:
-    driver: local
-YAML
-
-# Transfer docker-compose.prod.yml to server
+# Transfer docker-compose.prod.yml to server (use the repo file, not a generated one)
 echo -e "${GREEN}Transferring docker-compose.prod.yml to server...${NC}"
 sshpass -e rsync -avz --progress -e "ssh -o StrictHostKeyChecking=no" docker-compose.prod.yml $SERVER:$PROJECT_DIR/
 
@@ -293,14 +162,53 @@ sshpass -e ssh -o StrictHostKeyChecking=no $SERVER << EOF
 cd $PROJECT_DIR
 
 # Stop existing containers and remove volumes to ensure clean initialization
-docker compose -f docker-compose.prod.yml down -v || true
+docker compose -f docker-compose.prod.yml down -v 2>/dev/null || true
+
+# Kill anything still holding port 80 or 443 (leftover from previous runs)
+for PORT in 80 443; do
+    PID=\$(sudo lsof -ti tcp:\$PORT 2>/dev/null || true)
+    if [ -n "\$PID" ]; then
+        echo "Killing process \$PID holding port \$PORT..."
+        sudo kill -9 \$PID 2>/dev/null || true
+    fi
+done
+sleep 2
 
 # Start new containers
 docker compose -f docker-compose.prod.yml up -d
 
-# Wait for services to be healthy
-echo "Waiting for services to be healthy..."
-sleep 30
+# Wait for Keycloak to be healthy (max 3 minutes)
+echo "Waiting for Keycloak to be healthy..."
+for i in \$(seq 1 36); do
+    if docker exec chess-keycloak curl -sf http://localhost:8080/auth/health/ready > /dev/null 2>&1; then
+        echo "Keycloak is up!"
+        break
+    fi
+    echo "  Attempt \$i/36 — waiting 5s..."
+    sleep 5
+done
+
+# Disable SSL requirement on master and chess realms
+echo "Disabling Keycloak SSL requirement..."
+docker exec chess-keycloak /opt/keycloak/bin/kcadm.sh config credentials \
+    --server http://localhost:8080/auth \
+    --realm master \
+    --user admin \
+    --password admin
+docker exec chess-keycloak /opt/keycloak/bin/kcadm.sh update realms/master -s sslRequired=none
+docker exec chess-keycloak /opt/keycloak/bin/kcadm.sh update realms/chess  -s sslRequired=none 2>/dev/null || true
+echo "Keycloak SSL disabled."
+
+# Wait for web-frontend to be reachable via nginx (max 3 minutes)
+echo "Waiting for web frontend to be reachable..."
+for i in \$(seq 1 36); do
+    if curl -sf http://localhost/ > /dev/null 2>&1; then
+        echo "Web frontend is up!"
+        break
+    fi
+    echo "  Attempt \$i/36 — waiting 5s..."
+    sleep 5
+done
 EOF
 
 # Verify deployment
@@ -313,9 +221,8 @@ EOF
 
 echo -e "${GREEN}=== Deployment complete! ===${NC}"
 echo -e "${GREEN}Access the application at:${NC}"
-echo -e "  - Web Frontend: http://141.37.123.124:3005"
-echo -e "  - REST API: http://141.37.123.124:8085"
-echo -e "  - Keycloak (HTTPS): https://141.37.123.124"
-echo -e "  - Keycloak Admin: https://141.37.123.124/admin"
-echo -e "${YELLOW}Note: SSL certificate is self-signed. Your browser will show a security warning.${NC}"
+echo -e "  - Web Frontend: http://141.37.123.124"
+echo -e "  - REST API:     http://141.37.123.124/v1"
+echo -e "  - Keycloak:     http://141.37.123.124/auth"
+echo -e "  - Kafka UI:     http://141.37.123.124/kafka-ui"
 echo -e "${YELLOW}To view logs: ssh $SERVER 'cd $PROJECT_DIR && docker compose -f docker-compose.prod.yml logs -f'${NC}"

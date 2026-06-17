@@ -4,7 +4,7 @@ metadata:
   name: web-frontend-config
   namespace: chess
 data:
-  REACT_APP_API_URL: http://141.37.123.124/v1
+  REACT_APP_API_URL: http://localhost/v1
   API_UPSTREAM: rest-api.chess.svc.cluster.local:8080
 ---
 apiVersion: apps/v1

@@ -1,0 +1,93 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-ui-config
+  namespace: chess
+data:
+  KAFKA_CLUSTERS_0_NAME: chess-cluster
+  KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+  KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+  SERVER_SERVLET_CONTEXT_PATH: /kafka-ui
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-ui
+  namespace: chess
+spec:
+  selector:
+    app: kafka-ui
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-ui
+  namespace: chess
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-ui
+  template:
+    metadata:
+      labels:
+        app: kafka-ui
+    spec:
+      containers:
+      - name: kafka-ui
+        image: provectuslabs/kafka-ui:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: KAFKA_CLUSTERS_0_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: kafka-ui-config
+              key: KAFKA_CLUSTERS_0_NAME
+        - name: KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS
+          valueFrom:
+            configMapKeyRef:
+              name: kafka-ui-config
+              key: KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS
+        - name: KAFKA_CLUSTERS_0_ZOOKEEPER
+          valueFrom:
+            configMapKeyRef:
+              name: kafka-ui-config
+              key: KAFKA_CLUSTERS_0_ZOOKEEPER
+        - name: SERVER_SERVLET_CONTEXT_PATH
+          valueFrom:
+            configMapKeyRef:
+              name: kafka-ui-config
+              key: SERVER_SERVLET_CONTEXT_PATH
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kafka-ui-ingress
+  namespace: chess
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    traefik.ingress.kubernetes.io/router.middlewares: ""
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - path: /kafka-ui
+        pathType: Prefix
+        backend:
+          service:
+            name: kafka-ui
+            port:
+              number: 8080

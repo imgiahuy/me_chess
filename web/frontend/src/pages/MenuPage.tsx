@@ -109,6 +109,9 @@ export function MenuPage() {
                 <button onClick={() => navigate("/games")} disabled={loading} className="secondary">
                     View Games
                 </button>
+                <button onClick={() => navigate("/leaderboard")} disabled={loading} className="secondary">
+                    🏆 Leaderboard
+                </button>
             </div>
 
             {/* Player Setup Dialog */}

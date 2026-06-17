@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-config
+  namespace: chess
+data:
+  KC_HOSTNAME: "chess.local"
+  KC_HOSTNAME_PORT: "80"

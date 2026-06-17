@@ -9,6 +9,7 @@ data:
   MONGODB_DATABASE: chess
   KAFKA_ENABLED: "true"
   KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+  SPARK_OUTPUT_PATH: /tmp/chess-analytics
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -59,6 +60,15 @@ spec:
             configMapKeyRef:
               name: rest-api-config
               key: KAFKA_BOOTSTRAP_SERVERS
+        - name: SPARK_OUTPUT_PATH
+          valueFrom:
+            configMapKeyRef:
+              name: rest-api-config
+              key: SPARK_OUTPUT_PATH
+        volumeMounts:
+        - name: spark-results
+          mountPath: /tmp/chess-analytics
+          readOnly: true
         resources:
           requests:
             memory: "512Mi"
@@ -80,6 +90,10 @@ spec:
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
+      volumes:
+      - name: spark-results
+        persistentVolumeClaim:
+          claimName: spark-results-pvc
 ---
 apiVersion: v1
 kind: Service

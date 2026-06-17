@@ -96,6 +96,9 @@ services:
       - MONGODB_DATABASE=chess
       - KAFKA_ENABLED=true
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - SPARK_OUTPUT_PATH=/tmp/chess-analytics
+    volumes:
+      - spark-results:/tmp/chess-analytics:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/v1/chess/info"]
       interval: 30s
@@ -158,6 +161,64 @@ services:
     stdin_open: true
     tty: true
 
+  # Spark Analytics Service - initial run on startup
+  spark:
+    build:
+      context: .
+      dockerfile: spark/Dockerfile
+    container_name: chess-spark
+    networks:
+      - chess-network
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      - JAVA_OPTS=-Xmx1g
+      - MONGODB_URI=mongodb://mongodb:27017
+      - MONGODB_DATABASE=chess
+      - SPARK_OUTPUT_PATH=/tmp/chess-analytics
+    volumes:
+      - ./sample_games.pgn:/tmp/sample_games.pgn:ro
+      - spark-results:/tmp/chess-analytics
+    command: ["mongo"]
+
+  # Spark Scheduler - re-runs analytics every 5 minutes
+  spark-scheduler:
+    build:
+      context: .
+      dockerfile: spark/Dockerfile
+    container_name: chess-spark-scheduler
+    restart: always
+    networks:
+      - chess-network
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      - JAVA_OPTS=-Xmx1g
+      - MONGODB_URI=mongodb://mongodb:27017
+      - MONGODB_DATABASE=chess
+      - SPARK_OUTPUT_PATH=/tmp/chess-analytics
+      - REFRESH_INTERVAL_SECONDS=300
+    volumes:
+      - ./sample_games.pgn:/tmp/sample_games.pgn:ro
+      - spark-results:/tmp/chess-analytics
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Spark scheduler started - refreshing every ${REFRESH_INTERVAL_SECONDS}s"
+        while true; do
+          echo "$(date): Running Spark analytics..."
+          java --add-opens=java.base/sun.nio.ch=ALL-UNNAMED \
+               --add-opens=java.base/java.io=ALL-UNNAMED \
+               --add-opens=java.base/java.lang=ALL-UNNAMED \
+               --add-opens=java.base/java.util=ALL-UNNAMED \
+               -Dspark.ui.enabled=false \
+               -jar /app/chess-spark.jar mongo
+          echo "$(date): Analytics complete. Sleeping ${REFRESH_INTERVAL_SECONDS}s..."
+          sleep ${REFRESH_INTERVAL_SECONDS}
+        done
+
 networks:
   chess-network:
     driver: bridge
@@ -166,4 +227,6 @@ volumes:
   chess-data:
     driver: local
   mongo-data:
+    driver: local
+  spark-results:
     driver: local

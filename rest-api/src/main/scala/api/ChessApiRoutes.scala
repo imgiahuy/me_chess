@@ -5,7 +5,9 @@ import akka.actor.typed.ActorSystem
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity, HttpHeader, StatusCodes, headers}
 import akka.http.scaladsl.server.Directives.*
 import akka.http.scaladsl.server.{RejectionHandler, Route}
-import api.JsonCodecs.{ActionResponse, CreateGameRequest, CreatedGameResponse, ErrorResponse, GameInfos, GameStateResponse, GameSummary, GamesListResponse, MoveRequest, ResignRequest, BotMoveRequest, BotInfoResponse, AvailableBotsResponse}
+import api.JsonCodecs.{ActionResponse, CreateGameRequest, CreatedGameResponse, ErrorResponse, GameInfos, GameStateResponse, GameSummary, GamesListResponse, MoveRequest, ResignRequest, BotMoveRequest, BotInfoResponse, AvailableBotsResponse, LeaderboardEntry, LeaderboardResponse}
+import java.io.File
+import java.time.Instant
 
 
 
@@ -435,6 +437,47 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
                } catch {
                  case e: Exception =>
                    complete(StatusCodes.InternalServerError, jsonResponse(ErrorResponse(s"Failed to get available bots: ${e.getMessage}")))
+               }
+             }
+           }
+         ) ~(
+           // ─── Spark Leaderboard ────────────────────────────────────────────────
+
+           /** GET /v1/chess/leaderboard - Player leaderboard from Spark analytics */
+           get {
+             path("leaderboard") {
+               val sparkOutputDir = sys.env.getOrElse("SPARK_OUTPUT_PATH", "/tmp/chess-analytics")
+               val statsDir = new File(s"$sparkOutputDir/player-stats")
+               try {
+                 val entries = if (statsDir.exists() && statsDir.isDirectory) {
+                   val jsonFiles = statsDir.listFiles().filter(f => f.getName.endsWith(".json") && !f.getName.startsWith("_"))
+                   val rows = jsonFiles.flatMap { f =>
+                     val content = scala.io.Source.fromFile(f).mkString
+                     content.split("\n").filter(_.trim.nonEmpty).flatMap { line =>
+                       try {
+                         val obj = ujson.read(line)
+                         Some((
+                           obj("player").str,
+                           obj("totalGames").num.toLong,
+                           obj("victories").num.toLong,
+                           obj("defeats").num.toLong,
+                           obj("draws").num.toLong,
+                           obj("winRate").num
+                         ))
+                       } catch { case _: Exception => None }
+                     }
+                   }
+                   rows.sortBy(-_._3).zipWithIndex.map { case ((player, total, wins, losses, draws, wr), idx) =>
+                     LeaderboardEntry(idx + 1, player, total, wins, losses, draws, wr)
+                   }.toList
+                 } else {
+                   List.empty
+                 }
+                 val source = if (entries.isEmpty) "no-spark-data" else "spark-analytics"
+                 complete(jsonResponse(LeaderboardResponse(entries, Instant.now().toString, source)))
+               } catch {
+                 case e: Exception =>
+                   complete(StatusCodes.InternalServerError, jsonResponse(ErrorResponse(s"Failed to read leaderboard: ${e.getMessage}")))
                }
              }
            }
