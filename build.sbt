@@ -198,6 +198,32 @@ lazy val restApi = project
   )
   .dependsOn(core, persistent, shared)
 
+// --- Player Service (standalone microservice) ---
+lazy val playerService = project
+  .in(file("player-service"))
+  .settings(
+    commonSettings,
+    fork := true,
+    libraryDependencies ++= Seq(
+      ("com.typesafe.akka" % "akka-actor-typed_3" % "2.8.5")
+        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
+      ("com.typesafe.akka" % "akka-http_3" % "10.5.3")
+        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
+      ("com.typesafe.akka" % "akka-stream_3" % "2.8.5")
+        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
+      "com.lihaoyi" %% "upickle" % "3.1.0",
+      "org.scala-lang.modules" % "scala-java8-compat_3" % "1.0.2"
+    ),
+    sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyJarName := "chess-player-service.jar",
+    sbtassembly.AssemblyPlugin.autoImport.assembly / mainClass := Some("player.PlayerServiceMain"),
+    sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyMergeStrategy := {
+      case PathList("META-INF", "MANIFEST.MF") => MergeStrategy.discard
+      case PathList("META-INF", xs @ _*) => MergeStrategy.discard
+      case "reference.conf" => MergeStrategy.concat
+      case _ => MergeStrategy.first
+    }
+  )
+
 // --- Root project (aggregator only) ---
 lazy val root = project
   .in(file("."))
@@ -205,7 +231,8 @@ lazy val root = project
     tui,
     gui,
     restApi,
-    spark
+    spark,
+    playerService
   )
   .settings(
     name := "me_chess"

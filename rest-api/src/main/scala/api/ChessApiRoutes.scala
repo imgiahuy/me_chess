@@ -2,17 +2,20 @@ package api
 
 import scala.language.postfixOps
 import akka.actor.typed.ActorSystem
-import akka.http.scaladsl.model.{ContentTypes, HttpEntity, HttpHeader, StatusCodes, headers}
+import akka.http.scaladsl.model.{ContentTypes, HttpEntity, HttpHeader, StatusCodes, headers, sse}
 import akka.http.scaladsl.server.Directives.*
 import akka.http.scaladsl.server.{RejectionHandler, Route}
-import api.JsonCodecs.{ActionResponse, CreateGameRequest, CreatedGameResponse, ErrorResponse, GameInfos, GameStateResponse, GameSummary, GamesListResponse, MoveRequest, ResignRequest, BotMoveRequest, BotInfoResponse, AvailableBotsResponse, LeaderboardEntry, LeaderboardResponse}
+import akka.http.scaladsl.marshalling.sse.EventStreamMarshalling
+import akka.stream.scaladsl.Source
+import scala.concurrent.duration._
+import api.JsonCodecs.{ActionResponse, CreateGameRequest, CreatedGameResponse, ErrorResponse, GameInfos, GameStateResponse, GameSummary, GamesListResponse, MoveRequest, ResignRequest, BotMoveRequest, BotInfoResponse, AvailableBotsResponse, LeaderboardEntry, LeaderboardResponse, HealthStatus, MetricsResponse}
 import java.io.File
 import java.time.Instant
-
+import java.lang.management.ManagementFactory
 
 
 /** REST API routes for chess game management and play. */
-class ChessApiRoutes(sessionController: GameSessionController)(implicit system: ActorSystem[?]) {
+class ChessApiRoutes(sessionController: GameSessionController)(implicit system: ActorSystem[?]) extends EventStreamMarshalling {
 
   private def jsonResponse[T: upickle.default.Writer](obj: T): HttpEntity.Strict =
     HttpEntity(ContentTypes.`application/json`, upickle.default.write(obj))
@@ -90,7 +93,7 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
               }
             }
           }
-        ) ~(
+          ) ~ (
           // ─── Get Game State ───────────────────────────────────────────────────
 
           /** GET /v1/chess/games/{gameId} - Get current game state (checks for timeout) */
@@ -113,7 +116,7 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
               }
             }
           }
-        ) ~(
+          ) ~ (
           // ─── Apply Moves ──────────────────────────────────────────────────────
 
           /** POST /v1/chess/games/{gameId}/moves - Apply a move */
@@ -167,7 +170,7 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
               }
             }
           }
-        ) ~(
+          ) ~ (
           // ─── List Games ───────────────────────────────────────────────────────
 
           /** GET /v1/chess/games - List all active games */
@@ -191,7 +194,7 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
               }
             }
           }
-        ) ~(
+          ) ~ (
           // ─── Delete Game ──────────────────────────────────────────────────────
 
           /** DELETE /v1/chess/games/{gameId} - Delete a game session */
@@ -209,7 +212,7 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
               }
             }
           }
-        ) ~(
+          ) ~ (
           // ─── Save Game ────────────────────────────────────────────────────────
 
           /** POST /v1/chess/games/{gameId}/save - Save a game to disk */
@@ -228,7 +231,7 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
               }
             }
           }
-        ) ~(
+          ) ~ (
           // ─── Load Game ────────────────────────────────────────────────────────
 
           /** POST /v1/chess/games/{gameId}/load - Load a saved game from database */
@@ -247,7 +250,7 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
               }
             }
           }
-        ) ~(
+          ) ~ (
           // ─── Load Latest Game ─────────────────────────────────────────────────
 
           /** POST /v1/chess/games/load-latest - Load the latest saved game from database */
@@ -261,7 +264,7 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
               }
             }
           }
-        ) ~(
+          ) ~ (
           // ─── Game Status ──────────────────────────────────────────────────────
 
           /** GET /v1/chess/games/{gameId}/status - Get game status (checks for timeout) */
@@ -313,7 +316,7 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
               }
             }
           }
-        ) ~(
+          ) ~ (
           // ─── PGN Export ───────────────────────────────────────────────────────
 
           /** POST /v1/chess/games/{gameId}/export - Export game to PGN */
@@ -350,151 +353,281 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
               }
             }
           }
-         ) ~(
-           // ─── Resign ───────────────────────────────────────────────────────────
+          ) ~ (
+          // ─── Resign ───────────────────────────────────────────────────────────
 
-           /** POST /v1/chess/games/{gameId}/resign - Player resigns */
-           post {
-             path("games" / Segment / "resign") { gameId =>
-               validateGameId(gameId) match {
-                 case Right(_) =>
-                   entity(as[String]) { body =>
-                     parseJson[ResignRequest](body) match {
-                       case Right(request) =>
-                         sessionController.getGame(gameId) match {
-                           case Some(state) =>
-                             try {
-                               val color = if (request.color.toLowerCase == "white") model.White else model.Black
-                               val newState = sessionController.resign(gameId, color)
-                               val response = GameStateResponse.fromPositionState(gameId, newState)
-                               complete(jsonResponse(response))
-                             } catch {
-                               case e: Exception =>
-                                 complete(StatusCodes.InternalServerError, jsonResponse(ErrorResponse(s"Failed to process resignation: ${e.getMessage}")))
-                             }
-                           case None =>
-                             complete(StatusCodes.NotFound, jsonResponse(ErrorResponse(s"Game not found: $gameId")))
-                         }
-                       case Left(error) =>
-                         complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
-                     }
-                   }
-                 case Left(error) =>
-                   complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
-               }
-             }
-           }
-         ) ~(
-           // ─── Bot Moves ────────────────────────────────────────────────────────
+          /** POST /v1/chess/games/{gameId}/resign - Player resigns */
+          post {
+            path("games" / Segment / "resign") { gameId =>
+              validateGameId(gameId) match {
+                case Right(_) =>
+                  entity(as[String]) { body =>
+                    parseJson[ResignRequest](body) match {
+                      case Right(request) =>
+                        sessionController.getGame(gameId) match {
+                          case Some(state) =>
+                            try {
+                              val colorLower = request.color.toLowerCase
+                              val colorOpt = colorLower match {
+                                case "white" => Some(model.White)
+                                case "black" => Some(model.Black)
+                                case _ => None
+                              }
+                              colorOpt match {
+                                case Some(color) =>
+                                  val newState = sessionController.resign(gameId, color)
+                                  val response = GameStateResponse.fromPositionState(gameId, newState)
+                                  complete(jsonResponse(response))
+                                case None =>
+                                  complete(StatusCodes.BadRequest, jsonResponse(
+                                    ErrorResponse(s"Invalid color: ${request.color}. Must be 'white' or 'black'")
+                                  ))
+                              }
+                            } catch {
+                              case e: Exception =>
+                                complete(StatusCodes.InternalServerError, jsonResponse(ErrorResponse(s"Failed to process resignation: ${e.getMessage}")))
+                            }
+                          case None =>
+                            complete(StatusCodes.NotFound, jsonResponse(ErrorResponse(s"Game not found: $gameId")))
+                        }
+                      case Left(error) =>
+                        complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+                    }
+                  }
+                case Left(error) =>
+                  complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+              }
+            }
+          }
+          ) ~ (
+          // ─── Pause / Resume ───────────────────────────────────────────────────
 
-           /** POST /v1/chess/games/{gameId}/bot-move - Bot plays a move */
-           post {
-             path("games" / Segment / "bot-move") { gameId =>
-               validateGameId(gameId) match {
-                 case Right(_) =>
-                   entity(as[String]) { body =>
-                     parseJson[BotMoveRequest](body) match {
-                       case Right(request) =>
-                         sessionController.getGame(gameId) match {
-                           case Some(state) =>
-                             try {
-                               val result = sessionController.playBotMove(gameId, request.botType)
-                               result match {
-                                 case Right(newState) =>
-                                   val response = GameStateResponse.fromPositionState(gameId, newState)
-                                   complete(jsonResponse(response))
-                                 case Left(error) =>
-                                   complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
-                               }
-                             } catch {
-                               case e: Exception =>
-                                 complete(StatusCodes.InternalServerError, jsonResponse(ErrorResponse(s"Bot error: ${e.getMessage}")))
-                             }
-                           case None =>
-                             complete(StatusCodes.NotFound, jsonResponse(ErrorResponse(s"Game not found: $gameId")))
-                         }
-                       case Left(error) =>
-                         complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
-                     }
-                   }
-                 case Left(error) =>
-                   complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
-               }
-             }
-           }
-         ) ~(
-           // ─── Available Bots ───────────────────────────────────────────────────
+          /** POST /v1/chess/games/{gameId}/pause - Pause the game */
+          post {
+            path("games" / Segment / "pause") { gameId =>
+              validateGameId(gameId) match {
+                case Right(_) =>
+                  sessionController.pauseGame(gameId) match {
+                    case Right(newState) =>
+                      val response = GameStateResponse.fromPositionState(gameId, newState)
+                      complete(jsonResponse(response))
+                    case Left(error) =>
+                      complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+                  }
+                case Left(error) =>
+                  complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+              }
+            }
+          }
+          ) ~ (
+          /** POST /v1/chess/games/{gameId}/resume - Resume a paused game */
+          post {
+            path("games" / Segment / "resume") { gameId =>
+              validateGameId(gameId) match {
+                case Right(_) =>
+                  sessionController.resumeGame(gameId) match {
+                    case Right(newState) =>
+                      val response = GameStateResponse.fromPositionState(gameId, newState)
+                      complete(jsonResponse(response))
+                    case Left(error) =>
+                      complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+                  }
+                case Left(error) =>
+                  complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+              }
+            }
+          }
+          ) ~ (
+          // ─── Bot Moves ────────────────────────────────────────────────────────
 
-           /** GET /v1/chess/bots - Get available bot types with metadata */
-           get {
-             path("bots") {
-               try {
-                 val botInfos = sessionController.getAvailableBotInfos()
-                 val response = botInfos.map { info =>
-                   BotInfoResponse(info.id, info.name, info.difficulty, info.description)
-                 }
-                 complete(jsonResponse(AvailableBotsResponse(response)))
-               } catch {
-                 case e: Exception =>
-                   complete(StatusCodes.InternalServerError, jsonResponse(ErrorResponse(s"Failed to get available bots: ${e.getMessage}")))
-               }
-             }
-           }
-         ) ~(
-           // ─── Spark Leaderboard ────────────────────────────────────────────────
+          /** POST /v1/chess/games/{gameId}/bot-move - Bot plays a move */
+          post {
+            path("games" / Segment / "bot-move") { gameId =>
+              validateGameId(gameId) match {
+                case Right(_) =>
+                  entity(as[String]) { body =>
+                    parseJson[BotMoveRequest](body) match {
+                      case Right(request) =>
+                        sessionController.getGame(gameId) match {
+                          case Some(state) =>
+                            try {
+                              val result = sessionController.playBotMove(gameId, request.botType)
+                              result match {
+                                case Right(newState) =>
+                                  val response = GameStateResponse.fromPositionState(gameId, newState)
+                                  complete(jsonResponse(response))
+                                case Left(error) =>
+                                  complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+                              }
+                            } catch {
+                              case e: Exception =>
+                                complete(StatusCodes.InternalServerError, jsonResponse(ErrorResponse(s"Bot error: ${e.getMessage}")))
+                            }
+                          case None =>
+                            complete(StatusCodes.NotFound, jsonResponse(ErrorResponse(s"Game not found: $gameId")))
+                        }
+                      case Left(error) =>
+                        complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+                    }
+                  }
+                case Left(error) =>
+                  complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+              }
+            }
+          }
+          ) ~ (
+          // ─── Available Bots ───────────────────────────────────────────────────
 
-           /** GET /v1/chess/leaderboard - Player leaderboard from Spark analytics */
-           get {
-             path("leaderboard") {
-               val sparkOutputDir = sys.env.getOrElse("SPARK_OUTPUT_PATH", "/tmp/chess-analytics")
-               val statsDir = new File(s"$sparkOutputDir/player-stats")
-               try {
-                 val entries = if (statsDir.exists() && statsDir.isDirectory) {
-                   val jsonFiles = statsDir.listFiles().filter(f => f.getName.endsWith(".json") && !f.getName.startsWith("_"))
-                   val rows = jsonFiles.flatMap { f =>
-                     val content = scala.io.Source.fromFile(f).mkString
-                     content.split("\n").filter(_.trim.nonEmpty).flatMap { line =>
-                       try {
-                         val obj = ujson.read(line)
-                         Some((
-                           obj("player").str,
-                           obj("totalGames").num.toLong,
-                           obj("victories").num.toLong,
-                           obj("defeats").num.toLong,
-                           obj("draws").num.toLong,
-                           obj("winRate").num
-                         ))
-                       } catch { case _: Exception => None }
-                     }
-                   }
-                   rows.sortBy(-_._3).zipWithIndex.map { case ((player, total, wins, losses, draws, wr), idx) =>
-                     LeaderboardEntry(idx + 1, player, total, wins, losses, draws, wr)
-                   }.toList
-                 } else {
-                   List.empty
-                 }
-                 val source = if (entries.isEmpty) "no-spark-data" else "spark-analytics"
-                 complete(jsonResponse(LeaderboardResponse(entries, Instant.now().toString, source)))
-               } catch {
-                 case e: Exception =>
-                   complete(StatusCodes.InternalServerError, jsonResponse(ErrorResponse(s"Failed to read leaderboard: ${e.getMessage}")))
-               }
-             }
-           }
-         ) ~(
-           // ─── Health / Info ────────────────────────────────────────────────────
+          /** GET /v1/chess/bots - Get available bot types with metadata */
+          get {
+            path("bots") {
+              try {
+                val botInfos = sessionController.getAvailableBotInfos()
+                val response = botInfos.map { info =>
+                  BotInfoResponse(info.id, info.name, info.difficulty, info.description)
+                }
+                complete(jsonResponse(AvailableBotsResponse(response)))
+              } catch {
+                case e: Exception =>
+                  complete(StatusCodes.InternalServerError, jsonResponse(ErrorResponse(s"Failed to get available bots: ${e.getMessage}")))
+              }
+            }
+          }
+          ) ~ (
+          // ─── Spark Leaderboard ────────────────────────────────────────────────
 
-           /** GET /v1/chess/info - API information */
-           get {
-             path("info") {
-               complete(jsonResponse(GameInfos(
-                 "ME Chess REST API",
-                 "1.0.0",
-                 "running"
-               )))
-             }
-           }
-         )
+          /** GET /v1/chess/leaderboard - Player leaderboard from Spark analytics */
+          get {
+            path("leaderboard") {
+              val sparkOutputDir = sys.env.getOrElse("SPARK_OUTPUT_PATH", System.getProperty("java.io.tmpdir") + "/chess-analytics")
+              val statsDir = new File(s"$sparkOutputDir/player-stats")
+              try {
+                val entries = if (statsDir.exists() && statsDir.isDirectory) {
+                  val jsonFiles = statsDir.listFiles().filter(f => f.getName.endsWith(".json") && !f.getName.startsWith("_"))
+                  val rows = jsonFiles.flatMap { f =>
+                    val content = try {
+                      val source = scala.io.Source.fromFile(f)
+                      try source.mkString finally source.close()
+                    } catch {
+                      case _: Exception => ""
+                    }
+                    content.split("\n").filter(_.trim.nonEmpty).flatMap { line =>
+                      try {
+                        val obj = ujson.read(line)
+                        Some((
+                          obj("player").str,
+                          obj("totalGames").num.toLong,
+                          obj("victories").num.toLong,
+                          obj("defeats").num.toLong,
+                          obj("draws").num.toLong,
+                          obj("winRate").num
+                        ))
+                      } catch {
+                        case _: Exception => None
+                      }
+                    }
+                  }
+                  rows.sortBy(-_._3).zipWithIndex.map { case ((player, total, wins, losses, draws, wr), idx) =>
+                    LeaderboardEntry(idx + 1, player, total, wins, losses, draws, wr)
+                  }.toList
+                } else {
+                  List.empty
+                }
+                val source = if (entries.isEmpty) "no-spark-data" else "spark-analytics"
+                complete(jsonResponse(LeaderboardResponse(entries, Instant.now().toString, source)))
+              } catch {
+                case e: Exception =>
+                  complete(StatusCodes.InternalServerError, jsonResponse(ErrorResponse(s"Failed to read leaderboard: ${e.getMessage}")))
+              }
+            }
+          }
+          ) ~ (
+          // ─── Health / Info ────────────────────────────────────────────────────
+
+          /** GET /v1/chess/info - API information */
+          get {
+            path("info") {
+              complete(jsonResponse(GameInfos(
+                "ME Chess REST API",
+                "1.0.0",
+                "running"
+              )))
+            }
+          }
+          ) ~ (
+          // ─── Game Events (SSE) ────────────────────────────────────────────────
+
+          /** GET /v1/chess/games/{gameId}/events - Real-time game state via SSE */
+          get {
+            path("games" / Segment / "events") { gameId =>
+              validateGameId(gameId) match {
+                case Right(_) =>
+                  val eventSource = Source.tick(0.seconds, 2.seconds, ())
+                    .map { _ =>
+                      sessionController.checkAndApplyTimeout(gameId) match {
+                        case Right(state) =>
+                          val response = GameStateResponse.fromPositionState(gameId, state)
+                          val data = upickle.default.write(response)
+                          sse.ServerSentEvent(data, "game-state")
+                        case Left(_) =>
+                          sse.ServerSentEvent(s"""{"error":"game not found","gameId":"$gameId"}""", "error")
+                      }
+                    }
+                    .keepAlive(30.seconds, () => sse.ServerSentEvent("", "heartbeat"))
+                  complete(eventSource)
+                case Left(error) =>
+                  complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+              }
+            }
+          }
+          ) ~ (
+          // ─── Health Checks ────────────────────────────────────────────────────
+
+          /** GET /v1/chess/health - Overall health */
+          get {
+            path("health") {
+              val activeGames = sessionController.listGames().length
+              val status = HealthStatus("UP", "ME Chess REST API", "1.0.0", activeGames, Instant.now().toString)
+              complete(jsonResponse(status))
+            }
+          }
+          ) ~ (
+          /** GET /v1/chess/health/ready - Readiness probe */
+          get {
+            path("health" / "ready") {
+              complete(jsonResponse(Map("status" -> "READY", "timestamp" -> Instant.now().toString)))
+            }
+          }
+          ) ~ (
+          /** GET /v1/chess/health/live - Liveness probe */
+          get {
+            path("health" / "live") {
+              complete(jsonResponse(Map("status" -> "ALIVE", "timestamp" -> Instant.now().toString)))
+            }
+          }
+          ) ~ (
+          // ─── Metrics ──────────────────────────────────────────────────────────
+
+          /** GET /v1/chess/metrics - Prometheus-compatible metrics */
+          get {
+            path("metrics") {
+              val runtime = Runtime.getRuntime
+              val bean = ManagementFactory.getRuntimeMXBean
+              val activeGames = sessionController.listGames().length
+              val heapUsed = (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024)
+              val heapMax = runtime.maxMemory() / (1024 * 1024)
+              val uptimeSeconds = bean.getUptime / 1000
+              val metrics = MetricsResponse(
+                activeGames = activeGames,
+                heapUsedMb = heapUsed,
+                heapMaxMb = heapMax,
+                uptimeSeconds = uptimeSeconds,
+                timestamp = Instant.now().toString
+              )
+              complete(jsonResponse(metrics))
+            }
+          }
+          )
       }
     }
 }

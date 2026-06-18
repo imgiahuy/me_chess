@@ -75,6 +75,16 @@ class GameController extends GameControllerInterface {
     GameService.getLegalMoves(state, color)
   }
 
+  /** Pause the game */
+  def pauseGame(state: PositionState): Either[String, PositionState] = {
+    GameService.pauseGame(state)
+  }
+
+  /** Resume the game */
+  def resumeGame(state: PositionState): Either[String, PositionState] = {
+    GameService.resumeGame(state)
+  }
+
   /** Play a bot move */
   def playBotMove(bot: Bot, state: PositionState): Either[String, PositionState] = {
     BotService.playBotMove(bot, state)

@@ -24,11 +24,11 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
+      test: ["CMD-SHELL", "timeout 5 bash -c 'cat < /dev/null > /dev/tcp/localhost/8080' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 60s
+      start_period: 90s
     volumes:
       - ./docker/keycloak-realm.json:/opt/keycloak/data/import/keycloak-realm.json
 
@@ -69,8 +69,49 @@ services:
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # Kafka (with Zookeeper)
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: chess-zookeeper
+    networks:
+      - chess-network
+    environment:
+      - ZOOKEEPER_CLIENT_PORT=2181
+      - ZOOKEEPER_TICK_TIME=2000
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 2181 || exit 1"]
+      interval: 10s
       timeout: 5s
       retries: 5
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: chess-kafka
+    ports:
+      - "9092:9092"
+    networks:
+      - chess-network
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      - KAFKA_BROKER_ID=1
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      - KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:29092 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   # REST API Service
   rest-api:
@@ -97,6 +138,7 @@ services:
       - KAFKA_ENABLED=true
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - SPARK_OUTPUT_PATH=/tmp/chess-analytics
+      - PLAYER_SERVICE_URL=http://player-service:8090
     volumes:
       - spark-results:/tmp/chess-analytics:ro
     healthcheck:
@@ -105,6 +147,25 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  # Player Microservice
+  player-service:
+    build:
+      context: .
+      dockerfile: player-service/Dockerfile
+    container_name: chess-player-service
+    ports:
+      - "8090:8090"
+    networks:
+      - chess-network
+    environment:
+      - JAVA_OPTS=-Xmx256m
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/v1/players/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   # Web Frontend Service
   web-frontend:
@@ -119,47 +180,50 @@ services:
     depends_on:
       rest-api:
         condition: service_healthy
+      player-service:
+        condition: service_healthy
     environment:
       - REACT_APP_API_URL=http://rest-api:8080
       - API_UPSTREAM=rest-api:8080
+      - PLAYER_SERVICE_UPSTREAM=player-service:8090
 
-  # GUI Service (with X11 forwarding for display)
-  gui:
-    build:
-      context: .
-      dockerfile: gui/Dockerfile
-    container_name: chess-gui
-    networks:
-      - chess-network
-    depends_on:
-      rest-api:
-        condition: service_healthy
-    environment:
-      - DISPLAY=host.docker.internal:0
-      - JAVA_OPTS=-Xmx256m
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    # Note: For VcXsrv on Windows:
-    # 1. Launch XLaunch with "Multiple windows" mode
-    # 2. Select "Disable access control"
-    # 3. Enable OpenGL in the Extra Settings
-    # 4. Display number should be 0
+  # GUI Service (with X11 forwarding for display) - Desktop only, commented out
+  # gui:
+  #   build:
+  #     context: .
+  #     dockerfile: gui/Dockerfile
+  #   container_name: chess-gui
+  #   networks:
+  #     - chess-network
+  #   depends_on:
+  #     rest-api:
+  #       condition: service_healthy
+  #   environment:
+  #     - DISPLAY=host.docker.internal:0
+  #     - JAVA_OPTS=-Xmx256m
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
+  #   # Note: For VcXsrv on Windows:
+  #   # 1. Launch XLaunch with "Multiple windows" mode
+  #   # 2. Select "Disable access control"
+  #   # 3. Enable OpenGL in the Extra Settings
+  #   # 4. Display number should be 0
 
-  # TUI Service
-  tui:
-    build:
-      context: .
-      dockerfile: tui/Dockerfile
-    container_name: chess-tui
-    networks:
-      - chess-network
-    depends_on:
-      rest-api:
-        condition: service_healthy
-    environment:
-      - JAVA_OPTS=-Xmx256m
-    stdin_open: true
-    tty: true
+  # TUI Service - Desktop only, commented out
+  # tui:
+  #   build:
+  #     context: .
+  #     dockerfile: tui/Dockerfile
+  #   container_name: chess-tui
+  #   networks:
+  #     - chess-network
+  #   depends_on:
+  #     rest-api:
+  #       condition: service_healthy
+  #   environment:
+  #     - JAVA_OPTS=-Xmx256m
+  #   stdin_open: true
+  #   tty: true
 
   # Spark Analytics Service - initial run on startup
   spark:

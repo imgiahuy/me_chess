@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from "react";
-import { getGame, makeMove, getGameStatus, playBotMove } from "../utils/apiClient";
+import { getGame, makeMove, getGameStatus, playBotMove, pauseGame, resumeGame } from "../utils/apiClient";
 import type { GameResponse } from "../types/chess";
 
 export function useGame(gameId: string) {
@@ -12,6 +12,8 @@ export function useGame(gameId: string) {
     const serverTimestampRef = useRef<number>(Date.now());
     // Guard against concurrent fetches
     const fetchingRef = useRef(false);
+    // Track current game state to avoid stale closures in callbacks
+    const gameRef = useRef<GameResponse | null>(null);
 
     function detectGameEnd(data: { gameResult: { status: string; winner: string | null; reason: string | null } }) {
         const wasOngoingOrFirstLoad = lastGameResultRef.current === "ongoing" || lastGameResultRef.current === null;
@@ -69,7 +71,8 @@ export function useGame(gameId: string) {
 
     // Check for timeout on the server (uses status endpoint which is lighter)
     const checkTimeout = useCallback(async () => {
-        if (!game || game.gameResult.status !== "ongoing") return;
+        const currentGame = gameRef.current;
+        if (!currentGame || currentGame.gameResult.status !== "ongoing") return;
         if (fetchingRef.current) return;
         fetchingRef.current = true;
 
@@ -94,7 +97,7 @@ export function useGame(gameId: string) {
         } finally {
             fetchingRef.current = false;
         }
-    }, [game, gameId]);
+    }, [gameId]);
 
     useEffect(() => {
         refresh().finally(() => setLoading(false));
@@ -111,37 +114,69 @@ export function useGame(gameId: string) {
         return () => clearInterval(interval);
     }, [game?.gameResult.status, gameId, checkTimeout]);
 
+    async function pause() {
+        setError(null);
+        try {
+            const data = await pauseGame(gameId);
+            serverTimestampRef.current = Date.now();
+            setGame(data);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : "Failed to pause game");
+            throw e;
+        }
+    }
+
+    async function resume() {
+        setError(null);
+        try {
+            const data = await resumeGame(gameId);
+            serverTimestampRef.current = Date.now();
+            setGame(data);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : "Failed to resume game");
+            throw e;
+        }
+    }
+
     // Local countdown effect: computes display time without mutating the server-sourced game state.
     // Instead we store a separate "display game" derived from the server game + elapsed offset.
     const [displayGame, setDisplayGame] = useState<GameResponse | null>(null);
 
     useEffect(() => {
+        gameRef.current = game;
         setDisplayGame(game);
     }, [game]);
 
     useEffect(() => {
-        if (!game || game.gameResult.status !== "ongoing") return;
-        if (!game.whiteTime || !game.blackTime) return;
+        const currentGame = gameRef.current;
+        if (!currentGame || currentGame.gameResult.status !== "ongoing") return;
+        if (!currentGame.whiteTime || !currentGame.blackTime) return;
+        // Do not tick down while paused
+        if (currentGame.isPaused) return;
 
         const countdown = setInterval(() => {
+            const latestGame = gameRef.current;
+            if (!latestGame || !latestGame.whiteTime || !latestGame.blackTime) return;
+            if (latestGame.isPaused) return;
+
             const elapsed = Date.now() - serverTimestampRef.current;
-            const isWhiteTurn = game.turn === "White";
+            const isWhiteTurn = latestGame.turn === "White";
 
             setDisplayGame({
-                ...game,
-                whiteTime: game.whiteTime ? {
-                    ...game.whiteTime,
-                    remainingTimeMs: Math.max(0, game.whiteTime.remainingTimeMs - (isWhiteTurn ? elapsed : 0))
-                } : null,
-                blackTime: game.blackTime ? {
-                    ...game.blackTime,
-                    remainingTimeMs: Math.max(0, game.blackTime.remainingTimeMs - (!isWhiteTurn ? elapsed : 0))
-                } : null
+                ...latestGame,
+                whiteTime: {
+                    ...latestGame.whiteTime,
+                    remainingTimeMs: Math.max(0, latestGame.whiteTime.remainingTimeMs - (isWhiteTurn ? elapsed : 0))
+                },
+                blackTime: {
+                    ...latestGame.blackTime,
+                    remainingTimeMs: Math.max(0, latestGame.blackTime.remainingTimeMs - (!isWhiteTurn ? elapsed : 0))
+                }
             });
         }, 200);
 
         return () => clearInterval(countdown);
-    }, [game]);
+    }, [game?.gameResult.status, game?.whiteTime, game?.blackTime, game?.isPaused]);
 
     const clearGameEndNotification = useCallback(() => {
         setGameEnded(null);
@@ -161,5 +196,5 @@ export function useGame(gameId: string) {
         }
     }, []);
 
-    return { game: displayGame, loading, error, move, botMove, refresh, gameEnded, clearGameEndNotification, setGameDirect };
+    return { game: displayGame, loading, error, move, botMove, refresh, gameEnded, clearGameEndNotification, setGameDirect, pause, resume };
 }

@@ -76,9 +76,23 @@ object ChessRestServer {
         None
       }
 
+      // Initialize Player Service client (optional, enabled when player-service is available)
+      val playerServiceUrl = sys.env.getOrElse("PLAYER_SERVICE_URL", "http://player-service:8090")
+      val playerServiceClient: Option[PlayerServiceClient] = try {
+        println(s"[INFO] Initializing Player Service client at $playerServiceUrl...")
+        val client = new PlayerServiceClient(playerServiceUrl)
+        println("[INFO] Player Service client enabled - players will be auto-created")
+        Some(client)
+      } catch {
+        case e: Exception =>
+          println(s"[WARN] Failed to initialize Player Service client: ${e.getMessage}")
+          println("[WARN] Game creation will not auto-create players")
+          None
+      }
+
       // Create database-backed repository
       val gameRepository = new DatabaseGameRepository(dbManager.gameDao)
-      val sessionController = new GameSessionController(controller, gameRepository, kafkaService)
+      val sessionController = new GameSessionController(controller, gameRepository, kafkaService, playerServiceClient)
 
       println("[INFO] Setting up API routes...")
       val chessRoutes = new ChessApiRoutes(sessionController).routes

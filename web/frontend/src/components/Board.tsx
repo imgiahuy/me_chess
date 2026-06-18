@@ -31,7 +31,7 @@ export function Board({ fen, onMove, turn, gameOver = false }: Props) {
                 // Get the piece at the from position
                 const piece = board[fromRank][fromFile];
                 const isPawn = piece?.toLowerCase() === 'p';
-                const isWhitePiece = piece === piece?.toUpperCase();
+                const isWhitePiece = piece && piece === piece.toUpperCase();
                 
                 // Check if this is a castling move (king moves 2 squares horizontally)
                 const toFile = pos.charCodeAt(0) - 97;
@@ -124,50 +124,44 @@ export function Board({ fen, onMove, turn, gameOver = false }: Props) {
             {/* Promotion Dialog */}
             {showPromotionDialog && (
                 <div style={{
-                    position: "fixed",
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    backgroundColor: "rgba(0, 0, 0, 0.7)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    zIndex: 1000
+                    position: "fixed", inset: 0,
+                    backgroundColor: "rgba(0,0,0,0.7)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    zIndex: 1000,
                 }}>
                     <div style={{
-                        background: "#1E1E1E",
-                        padding: "2rem",
-                        borderRadius: "8px",
-                        border: "1px solid #444",
-                        minWidth: "300px"
+                        background: "var(--color-surface)",
+                        border: "1px solid var(--color-border)",
+                        borderRadius: "var(--radius-lg)",
+                        boxShadow: "var(--shadow-lg)",
+                        padding: "1.5rem",
+                        minWidth: 280,
                     }}>
-                        <h3 style={{ color: "#e0e0e0", marginBottom: "1rem" }}>Choose Promotion Piece</h3>
+                        <h3 style={{ marginBottom: "1rem", textAlign: "center" }}>Choose Promotion</h3>
                         <div style={{ display: "flex", gap: "0.5rem", justifyContent: "center", marginBottom: "1rem" }}>
-                            {['q', 'r', 'b', 'n'].map((piece) => (
+                            {[
+                                { key: 'q', symbol: '♕' },
+                                { key: 'r', symbol: '♖' },
+                                { key: 'b', symbol: '♗' },
+                                { key: 'n', symbol: '♘' },
+                            ].map(({ key, symbol }) => (
                                 <button
-                                    key={piece}
-                                    onClick={() => handlePromotion(piece)}
+                                    key={key}
+                                    onClick={() => handlePromotion(key)}
+                                    className="secondary"
                                     style={{
-                                        width: "60px",
-                                        height: "60px",
-                                        fontSize: "2rem",
-                                        background: "#2C2C2C",
-                                        border: "1px solid #555",
-                                        borderRadius: "4px",
-                                        cursor: "pointer",
-                                        color: "#e0e0e0"
+                                        width: 62, height: 62,
+                                        fontSize: "2.25rem",
+                                        padding: 0,
+                                        display: "flex", alignItems: "center", justifyContent: "center",
+                                        borderRadius: "var(--radius-sm)",
                                     }}
                                 >
-                                    {piece.toUpperCase()}
+                                    {symbol}
                                 </button>
                             ))}
                         </div>
-                        <button
-                            onClick={handleCancelPromotion}
-                            className="secondary"
-                            style={{ width: "100%" }}
-                        >
+                        <button onClick={handleCancelPromotion} className="ghost" style={{ width: "100%" }}>
                             Cancel
                         </button>
                     </div>

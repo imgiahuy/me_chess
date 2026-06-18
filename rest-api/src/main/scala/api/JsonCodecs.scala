@@ -70,7 +70,8 @@ object JsonCodecs {
     gameResult: GameResultInfo,
     whiteTime: Option[TimeControlInfo],
     blackTime: Option[TimeControlInfo],
-    legalMoves: Option[List[String]]
+    legalMoves: Option[List[String]],
+    isPaused: Boolean = false
   )
 
   object GameStateResponse {
@@ -116,7 +117,8 @@ object JsonCodecs {
         gameResult = gameResultInfo,
         whiteTime = whiteTimeInfo,
         blackTime = blackTimeInfo,
-        legalMoves = legalMovesStr
+        legalMoves = legalMovesStr,
+        isPaused = state.isPaused
       )
     }
   }
@@ -185,6 +187,22 @@ object JsonCodecs {
     source: String
   )
 
+  final case class HealthStatus(
+    status: String,
+    service: String,
+    version: String,
+    activeGames: Int,
+    timestamp: String
+  )
+
+  final case class MetricsResponse(
+    activeGames: Int,
+    heapUsedMb: Long,
+    heapMaxMb: Long,
+    uptimeSeconds: Long,
+    timestamp: String
+  )
+
   given ReadWriter[TimeControlInfo]  = macroRW
 
   given optionTimeControlInfoRW: ReadWriter[Option[TimeControlInfo]] = readwriter[Value].bimap(
@@ -243,4 +261,6 @@ object JsonCodecs {
   given ReadWriter[AvailableBotsResponse] = macroRW
   given ReadWriter[LeaderboardEntry]      = macroRW
   given ReadWriter[LeaderboardResponse]   = macroRW
+  given ReadWriter[HealthStatus]          = macroRW
+  given ReadWriter[MetricsResponse]       = macroRW
 }

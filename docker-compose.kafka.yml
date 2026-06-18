@@ -15,10 +15,11 @@ services:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
     healthcheck:
-      test: ["CMD", "bash", "-c", "echo 'ruok' | nc localhost 2181"]
+      test: ["CMD", "bash", "-c", "echo ruok | nc localhost 2181 || exit 1"]
       interval: 10s
-      timeout: 5s
-      retries: 5
+      timeout: 10s
+      retries: 10
+      start_period: 30s
 
   # Kafka Broker - Event streaming platform
   kafka:
@@ -47,8 +48,9 @@ services:
     healthcheck:
       test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
       interval: 10s
-      timeout: 5s
-      retries: 5
+      timeout: 10s
+      retries: 10
+      start_period: 30s
 
   # Kafka UI - Web interface for managing Kafka
   kafka-ui:
@@ -129,4 +131,4 @@ services:
 
 networks:
   chess-network:
-    external: false
+    driver: bridge

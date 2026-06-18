@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { getLeaderboard } from "../utils/apiClient";
+import { useTheme } from "../router/App";
 
 interface LeaderboardEntry {
     rank: number;
@@ -34,10 +35,10 @@ const medalIcon = (rank: number) => {
 
 export function LeaderboardPage() {
     const navigate = useNavigate();
+    const { theme, toggleTheme } = useTheme();
     const [data, setData] = React.useState<LeaderboardResponse | null>(null);
     const [loading, setLoading] = React.useState(true);
     const [error, setError] = React.useState<string | null>(null);
-
     const [countdown, setCountdown] = React.useState(60);
 
     const fetchData = React.useCallback(() => {
@@ -61,119 +62,114 @@ export function LeaderboardPage() {
         return () => clearInterval(tick);
     }, []);
 
+    const winRateBadge = (wr: number) => {
+        if (wr >= 0.6) return { bg: "var(--color-success-bg)", color: "var(--color-success)" };
+        if (wr >= 0.4) return { bg: "var(--color-accent-bg)", color: "var(--color-accent)" };
+        return { bg: "var(--color-danger-bg)", color: "var(--color-danger)" };
+    };
+
     return (
-        <div className="container" style={{ maxWidth: "800px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "0.5rem" }}>
-                <button onClick={() => navigate("/")} className="secondary" style={{ padding: "0.4rem 0.8rem" }}>
-                    ← Back
-                </button>
-                <h1 style={{ color: "#e0e0e0", margin: 0 }}>🏆 Leaderboard</h1>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "1.5rem" }}>
-                <p style={{ color: "#888", fontSize: "0.9rem", margin: 0 }}>
-                    Powered by Apache Spark analytics
-                </p>
-                <span style={{ color: "#555", fontSize: "0.8rem", marginLeft: "auto" }}>
-                    Auto-refresh in {countdown}s
+        <div style={{ minHeight: "100vh" }}>
+            {/* Navbar */}
+            <div style={{
+                display: "flex", alignItems: "center", gap: "0.75rem",
+                padding: "0.75rem 1.5rem",
+                background: "var(--color-surface)",
+                borderBottom: "1px solid var(--color-border)",
+                position: "sticky", top: 0, zIndex: 50,
+            }}>
+                <button onClick={() => navigate("/")} className="ghost" style={{ padding: "0.3rem 0.6rem" }}>← Menu</button>
+                <span style={{ fontSize: "1.0625rem", fontWeight: 700 }}>🏆 Leaderboard</span>
+                <span style={{ fontSize: "0.75rem", color: "var(--color-text-dim)", marginLeft: "0.25rem" }}>
+                    Powered by Apache Spark
                 </span>
-                <button onClick={fetchData} className="secondary" style={{ padding: "0.3rem 0.7rem", fontSize: "0.8rem" }}>
-                    ↻ Refresh now
-                </button>
+                <div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                    <span style={{ fontSize: "0.75rem", color: "var(--color-text-dim)" }}>
+                        ↻ {countdown}s
+                    </span>
+                    <button onClick={fetchData} className="ghost" style={{ padding: "0.3rem 0.6rem", fontSize: "0.8rem" }}>Refresh</button>
+                    <button onClick={toggleTheme} className="ghost" style={{ padding: "0.3rem 0.55rem", fontSize: "0.95rem" }}>
+                        {theme === "dark" ? "☀️" : "🌙"}
+                    </button>
+                </div>
             </div>
 
-            {loading && <p style={{ color: "#b0b0b0" }}>Loading leaderboard...</p>}
+            <div className="container" style={{ maxWidth: 860 }}>
+                {loading && <div className="loading">Loading leaderboard…</div>}
+                {error && <div className="error">Failed to load leaderboard: {error}</div>}
 
-            {error && (
-                <div className="error">
-                    Failed to load leaderboard: {error}
-                </div>
-            )}
+                {data && data.source === "no-spark-data" && (
+                    <div className="card" style={{ textAlign: "center", padding: "3rem 2rem" }}>
+                        <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>📊</div>
+                        <h3 style={{ marginBottom: "0.5rem" }}>No analytics data yet</h3>
+                        <p style={{ color: "var(--color-text-muted)", marginBottom: "0.75rem" }}>
+                            Play some games and the leaderboard will appear here.
+                        </p>
+                        <p style={{ fontSize: "0.8rem", color: "var(--color-text-dim)" }}>
+                            Run:{" "}
+                            <code style={{ background: "var(--color-surface-2)", padding: "2px 7px", borderRadius: "4px", fontFamily: "monospace" }}>
+                                sbt "spark/run batch"
+                            </code>
+                        </p>
+                    </div>
+                )}
 
-            {data && data.source === "no-spark-data" && (
-                <div style={{
-                    background: "#2a2a2a",
-                    border: "1px solid #555",
-                    borderRadius: "8px",
-                    padding: "2rem",
-                    textAlign: "center",
-                    color: "#b0b0b0"
-                }}>
-                    <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>📊</div>
-                    <h3 style={{ color: "#e0e0e0" }}>No analytics data yet</h3>
-                    <p>Spark analytics haven't run yet. Play some games and the leaderboard will appear here.</p>
-                    <p style={{ fontSize: "0.8rem", color: "#666" }}>
-                        Run: <code style={{ background: "#333", padding: "2px 6px", borderRadius: "3px" }}>
-                            sbt "spark/run batch"
-                        </code> to generate initial data.
-                    </p>
-                </div>
-            )}
-
-            {data && data.entries.length > 0 && (
-                <>
-                    <div style={{ overflowX: "auto" }}>
-                        <table style={{
-                            width: "100%",
-                            borderCollapse: "collapse",
-                            background: "#1e1e1e",
-                            borderRadius: "8px",
-                            overflow: "hidden"
-                        }}>
-                            <thead>
-                                <tr style={{ background: "#2a2a2a", borderBottom: "2px solid #444" }}>
-                                    {["Rank", "Player", "Games", "Wins", "Losses", "Draws", "Win Rate"].map(h => (
-                                        <th key={h} style={{
-                                            padding: "0.75rem 1rem",
-                                            textAlign: h === "Rank" || h === "Player" ? "left" : "center",
-                                            color: "#b0b0b0",
-                                            fontSize: "0.85rem",
-                                            fontWeight: "600",
-                                            letterSpacing: "0.05em"
-                                        }}>{h}</th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {data.entries.map((entry, i) => (
-                                    <tr key={entry.player} style={{
-                                        borderBottom: "1px solid #333",
-                                        background: i % 2 === 0 ? "#1e1e1e" : "#222",
-                                        transition: "background 0.15s"
-                                    }}>
-                                        <td style={{ padding: "0.75rem 1rem", color: medalColor(entry.rank), fontWeight: "bold", fontSize: "1.1rem" }}>
-                                            {medalIcon(entry.rank)}
-                                        </td>
-                                        <td style={{ padding: "0.75rem 1rem", color: "#e0e0e0", fontWeight: entry.rank <= 3 ? "bold" : "normal" }}>
-                                            {entry.player}
-                                        </td>
-                                        <td style={{ padding: "0.75rem 1rem", color: "#b0b0b0", textAlign: "center" }}>{entry.totalGames}</td>
-                                        <td style={{ padding: "0.75rem 1rem", color: "#4caf50", textAlign: "center", fontWeight: "bold" }}>{entry.victories}</td>
-                                        <td style={{ padding: "0.75rem 1rem", color: "#f44336", textAlign: "center" }}>{entry.defeats}</td>
-                                        <td style={{ padding: "0.75rem 1rem", color: "#9e9e9e", textAlign: "center" }}>{entry.draws}</td>
-                                        <td style={{ padding: "0.75rem 1rem", textAlign: "center" }}>
-                                            <span style={{
-                                                display: "inline-block",
-                                                background: entry.winRate >= 0.6 ? "#1b5e20" : entry.winRate >= 0.4 ? "#1a237e" : "#3e2723",
-                                                color: entry.winRate >= 0.6 ? "#81c784" : entry.winRate >= 0.4 ? "#90caf9" : "#ffab91",
-                                                padding: "2px 8px",
-                                                borderRadius: "12px",
-                                                fontWeight: "bold",
-                                                fontSize: "0.9rem"
-                                            }}>
-                                                {(entry.winRate * 100).toFixed(1)}%
-                                            </span>
-                                        </td>
+                {data && data.entries.length > 0 && (
+                    <>
+                        <div style={{ overflowX: "auto" }}>
+                            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                                <thead>
+                                    <tr style={{ borderBottom: "2px solid var(--color-border)" }}>
+                                        {["Rank", "Player", "Games", "Wins", "Losses", "Draws", "Win Rate"].map(h => (
+                                            <th key={h} style={{
+                                                padding: "0.6rem 0.875rem",
+                                                textAlign: h === "Rank" || h === "Player" ? "left" : "center",
+                                                color: "var(--color-text-dim)",
+                                                fontSize: "0.75rem", fontWeight: 600,
+                                                letterSpacing: "0.07em", textTransform: "uppercase",
+                                            }}>{h}</th>
+                                        ))}
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <div style={{ marginTop: "1rem", fontSize: "0.75rem", color: "#555", textAlign: "right" }}>
-                        Last updated: {new Date(data.generatedAt).toLocaleString()} · Source: {data.source}
-                    </div>
-                </>
-            )}
+                                </thead>
+                                <tbody>
+                                    {data.entries.map((entry, i) => (
+                                        <tr key={entry.player} style={{
+                                            borderBottom: "1px solid var(--color-border)",
+                                            background: i < 3 ? "var(--color-surface-2)" : "transparent",
+                                            transition: "background 0.15s",
+                                        }}>
+                                            <td style={{ padding: "0.75rem 0.875rem", fontWeight: 700, fontSize: "1.05rem", color: medalColor(entry.rank) }}>
+                                                {medalIcon(entry.rank)}
+                                            </td>
+                                            <td style={{ padding: "0.75rem 0.875rem", fontWeight: entry.rank <= 3 ? 700 : 400, color: "var(--color-text)" }}>
+                                                {entry.player}
+                                            </td>
+                                            <td style={{ padding: "0.75rem 0.875rem", textAlign: "center", color: "var(--color-text-muted)", fontSize: "0.875rem" }}>{entry.totalGames}</td>
+                                            <td style={{ padding: "0.75rem 0.875rem", textAlign: "center", color: "var(--color-success)", fontWeight: 600, fontSize: "0.875rem" }}>{entry.victories}</td>
+                                            <td style={{ padding: "0.75rem 0.875rem", textAlign: "center", color: "var(--color-danger)", fontSize: "0.875rem" }}>{entry.defeats}</td>
+                                            <td style={{ padding: "0.75rem 0.875rem", textAlign: "center", color: "var(--color-text-dim)", fontSize: "0.875rem" }}>{entry.draws}</td>
+                                            <td style={{ padding: "0.75rem 0.875rem", textAlign: "center" }}>
+                                                <span style={{
+                                                    display: "inline-block",
+                                                    background: winRateBadge(entry.winRate).bg,
+                                                    color: winRateBadge(entry.winRate).color,
+                                                    padding: "2px 9px", borderRadius: "999px",
+                                                    fontWeight: 700, fontSize: "0.8rem",
+                                                }}>
+                                                    {(entry.winRate * 100).toFixed(1)}%
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        <p style={{ marginTop: "1rem", fontSize: "0.72rem", color: "var(--color-text-dim)", textAlign: "right" }}>
+                            Updated {new Date(data.generatedAt).toLocaleString()} · {data.source}
+                        </p>
+                    </>
+                )}
+            </div>
         </div>
     );
 }

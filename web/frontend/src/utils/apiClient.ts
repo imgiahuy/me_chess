@@ -108,6 +108,28 @@ export async function getLeaderboard() {
     return res.json();
 }
 
+export async function pauseGame(gameId: string) {
+    const res = await fetch(`${BASE_URL}/games/${gameId}/pause`, {
+        method: "POST",
+    });
+    if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || `Failed to pause game: ${res.status}`);
+    }
+    return res.json();
+}
+
+export async function resumeGame(gameId: string) {
+    const res = await fetch(`${BASE_URL}/games/${gameId}/resume`, {
+        method: "POST",
+    });
+    if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || `Failed to resume game: ${res.status}`);
+    }
+    return res.json();
+}
+
 export async function playBotMove(gameId: string, botType: string) {
     const res = await fetch(`${BASE_URL}/games/${gameId}/bot-move`, {
         method: "POST",

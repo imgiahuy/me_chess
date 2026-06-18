@@ -11,7 +11,8 @@ import scala.concurrent.duration._
 class GameSessionController(
                              controller: GameControllerInterface,
                              repo: GameRepository,
-                             kafkaService: Option[KafkaGameEventService] = None
+                             kafkaService: Option[KafkaGameEventService] = None,
+                             playerServiceClient: Option[PlayerServiceClient] = None
                            )(implicit ec: ExecutionContext) {
 
   /** Create a new game session and return its ID */
@@ -28,16 +29,50 @@ class GameSessionController(
 
   /** Create a new game session with player names and time control */
   def createGameWithTimeControl(whitePlayer: String, blackPlayer: String, timeControl: model.TimeControl): String = {
-    val initialState = controller.createWithTimeControl(whitePlayer, blackPlayer, timeControl)
-    val gameId = repo.createGame(initialState)
+    // Detect if players are bots (names starting with "Bot (")
+    val isWhiteBot = whitePlayer.startsWith("Bot (")
+    val isBlackBot = blackPlayer.startsWith("Bot (")
 
-    // Publish GameCreated event to Kafka
-    kafkaService.foreach { service =>
-      service.publishGameCreated(gameId, whitePlayer, blackPlayer, initialState)
-        .recover { case ex => println(s"[Kafka] Failed to publish game created: ${ex.getMessage}") }
+    // For human players, get or create in player-service
+    val whitePlayerIdFuture = if (isWhiteBot) Future.successful(None) else {
+      playerServiceClient match {
+        case Some(client) => client.getOrCreatePlayer(whitePlayer).map(Some(_))
+        case None => Future.successful(None)
+      }
+    }
+    val blackPlayerIdFuture = if (isBlackBot) Future.successful(None) else {
+      playerServiceClient match {
+        case Some(client) => client.getOrCreatePlayer(blackPlayer).map(Some(_))
+        case None => Future.successful(None)
+      }
     }
 
-    gameId
+    // Create game after player IDs are resolved
+    val gameIdFuture = for {
+      whiteIdOpt <- whitePlayerIdFuture
+      blackIdOpt <- blackPlayerIdFuture
+    } yield {
+      val initialState = controller.createWithTimeControl(whitePlayer, blackPlayer, timeControl)
+      val gameId = repo.createGame(initialState)
+
+      // Store player IDs in the game state metadata (for future use)
+      // Note: PositionState doesn't have player ID fields yet, so we log for now
+      whiteIdOpt.foreach(id => println(s"[PlayerService] White player ID: $id"))
+      blackIdOpt.foreach(id => println(s"[PlayerService] Black player ID: $id"))
+
+      // Publish GameCreated event to Kafka
+      kafkaService.foreach { service =>
+        service.publishGameCreated(gameId, whitePlayer, blackPlayer, initialState)
+          .recover { case ex => println(s"[Kafka] Failed to publish game created: ${ex.getMessage}") }
+      }
+
+      gameId
+    }
+
+    // Block for synchronous API (this is called from a non-async route)
+    import scala.concurrent.Await
+    import scala.concurrent.duration._
+    Await.result(gameIdFuture, 10.seconds)
   }
 
   /** Get a game by ID */
@@ -133,6 +168,34 @@ class GameSessionController(
   /** Get available bot types with metadata */
   def getAvailableBotInfos(): List[model.BotInfo] = {
     model.BotFactory.availableBotInfo
+  }
+
+  /** Pause a game */
+  def pauseGame(gameId: String): Either[String, PositionState] = {
+    repo.getGame(gameId) match {
+      case Some(state) =>
+        GameService.pauseGame(state) match {
+          case Right(newState) =>
+            repo.updateGame(gameId, newState)
+            Right(newState)
+          case Left(err) => Left(err)
+        }
+      case None => Left("Game not found")
+    }
+  }
+
+  /** Resume a game */
+  def resumeGame(gameId: String): Either[String, PositionState] = {
+    repo.getGame(gameId) match {
+      case Some(state) =>
+        GameService.resumeGame(state) match {
+          case Right(newState) =>
+            repo.updateGame(gameId, newState)
+            Right(newState)
+          case Left(err) => Left(err)
+        }
+      case None => Left("Game not found")
+    }
   }
 
   /** Delete a game session */

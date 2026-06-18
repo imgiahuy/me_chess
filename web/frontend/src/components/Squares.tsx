@@ -28,6 +28,8 @@ export function Square({
 
     const pieceSymbol = piece ? PIECE_SYMBOLS[piece] || piece : '';
 
+    const isWhitePiece = piece && piece === piece.toUpperCase();
+
     return (
         <div
             onClick={() => onClick?.(position)}
@@ -42,6 +44,7 @@ export function Square({
                 fontSize: 40,
                 userSelect: "none",
                 transition: "background-color 0.1s",
+                position: "relative",
             }}
             onMouseEnter={(e) => {
                 if (!isSelected) {
@@ -54,9 +57,12 @@ export function Square({
                 }
             }}
         >
-            <span style={{ 
-                color: piece === piece.toUpperCase() ? '#fff' : '#000',
-                textShadow: piece === piece.toUpperCase() ? '0 0 2px #000' : 'none'
+            <span style={{
+                color: isWhitePiece ? '#ffffff' : '#1a1a1a',
+                textShadow: isWhitePiece
+                    ? '0 1px 3px rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,0.7)'
+                    : '0 1px 2px rgba(255,255,255,0.3)',
+                lineHeight: 1,
             }}>
                 {pieceSymbol}
             </span>

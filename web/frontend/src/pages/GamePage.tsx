@@ -3,6 +3,8 @@ import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useGame } from "../hooks/useGame";
 import { Board } from "../components/Board";
 import { saveGame, exportPgn, resign, getAvailableBots } from "../utils/apiClient";
+import { useTheme } from "../router/App";
+import { fenToBoard } from "../utils/fen";
 import type { BotInfo } from "../types/chess";
 
 // Helper function to convert Position(x,y) to algebraic notation
@@ -14,7 +16,6 @@ function convertPositionToAlgebraic(message: string): string {
     });
 }
 
-// Helper function to format time in milliseconds to minutes:seconds
 function formatTime(ms: number | undefined | null): string {
     if (ms == null || isNaN(ms) || ms < 0) return "0:00";
     const totalSeconds = Math.floor(ms / 1000);
@@ -23,24 +24,110 @@ function formatTime(ms: number | undefined | null): string {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
-// Helper function to get game result display text
 function getGameResultText(gameResult: any): string {
     if (gameResult.status === "ongoing") return "";
-    if (gameResult.status === "checkmate") return `Checkmate - ${gameResult.winner} wins`;
-    if (gameResult.status === "draw") return `Draw - ${gameResult.reason}`;
-    if (gameResult.status === "resignation") return `Resignation - ${gameResult.winner} wins`;
-    if (gameResult.status === "timeout") return `Time out - ${gameResult.winner} wins`;
+    if (gameResult.status === "checkmate") return `Checkmate · ${gameResult.winner} wins`;
+    if (gameResult.status === "draw") return `Draw · ${gameResult.reason}`;
+    if (gameResult.status === "resignation") return `Resignation · ${gameResult.winner} wins`;
+    if (gameResult.status === "timeout") return `Timeout · ${gameResult.winner} wins`;
     return "Game Over";
+}
+
+const PIECE_SYMBOLS: Record<string, string> = {
+    'K': '♔', 'Q': '♕', 'R': '♖', 'B': '♗', 'N': '♘', 'P': '♙',
+    'k': '♚', 'q': '♛', 'r': '♜', 'b': '♝', 'n': '♞', 'p': '♟',
+};
+
+const PIECE_VALUES: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
+
+function getCapturedPieces(fen: string): { whiteCaptured: string[]; blackCaptured: string[] } {
+    const startCounts: Record<string, number> = { p: 8, n: 2, b: 2, r: 2, q: 1, k: 1, P: 8, N: 2, B: 2, R: 2, Q: 1, K: 1 };
+    const board = fenToBoard(fen);
+    const currentCounts: Record<string, number> = {};
+    board.flat().forEach(piece => { if (piece) currentCounts[piece] = (currentCounts[piece] || 0) + 1; });
+    const whiteCaptured: string[] = [];
+    const blackCaptured: string[] = [];
+    Object.entries(startCounts).forEach(([piece, count]) => {
+        const remaining = currentCounts[piece] || 0;
+        const captured = count - remaining;
+        for (let i = 0; i < captured; i++) {
+            if (piece === piece.toUpperCase()) blackCaptured.push(piece);
+            else whiteCaptured.push(piece);
+        }
+    });
+    const order = ['q', 'r', 'b', 'n', 'p'];
+    const sort = (arr: string[]) => arr.sort((a, b) => order.indexOf(a.toLowerCase()) - order.indexOf(b.toLowerCase()));
+    return { whiteCaptured: sort(whiteCaptured), blackCaptured: sort(blackCaptured) };
+}
+
+function materialScore(pieces: string[]): number {
+    return pieces.reduce((sum, p) => sum + (PIECE_VALUES[p.toLowerCase()] || 0), 0);
+}
+
+function CapturedPieces({ fen }: { fen: string }) {
+    const { whiteCaptured, blackCaptured } = getCapturedPieces(fen);
+    const whiteScore = materialScore(whiteCaptured);
+    const blackScore = materialScore(blackCaptured);
+    const diff = whiteScore - blackScore;
+
+    return (
+        <div className="card" style={{ marginBottom: "0.75rem" }}>
+            <p style={{ fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-text-dim)", marginBottom: "0.6rem" }}>Captured Pieces</p>
+            {[
+                { label: "By White", pieces: whiteCaptured, score: whiteScore, advantage: diff > 0 ? `+${diff}` : null },
+                { label: "By Black", pieces: blackCaptured, score: blackScore, advantage: diff < 0 ? `+${Math.abs(diff)}` : null },
+            ].map(({ label, pieces, advantage }) => (
+                <div key={label} style={{ marginBottom: "0.4rem" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.2rem" }}>
+                        <span style={{ fontSize: "0.7rem", color: "var(--color-text-dim)" }}>{label}</span>
+                        {advantage && <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "var(--color-success)", background: "var(--color-success-bg)", padding: "0 5px", borderRadius: "999px" }}>{advantage}</span>}
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "1px", minHeight: "1.4rem" }}>
+                        {pieces.length === 0
+                            ? <span style={{ fontSize: "0.75rem", color: "var(--color-text-dim)", fontStyle: "italic" }}>—</span>
+                            : pieces.map((p, i) => (
+                                <span key={i} style={{ fontSize: "1rem", lineHeight: 1, opacity: 0.85, color: p === p.toUpperCase() ? "var(--color-text)" : "var(--color-text-muted)" }}>
+                                    {PIECE_SYMBOLS[p] || p}
+                                </span>
+                            ))
+                        }
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function ClockCard({ label, timeMs, isActive, isLow }: { label: string; timeMs: number; isActive: boolean; isLow: boolean }) {
+    return (
+        <div style={{
+            flex: 1, padding: "0.75rem 0.875rem",
+            background: isActive ? "var(--color-bg-3)" : "var(--color-surface-2)",
+            borderRadius: "var(--radius-sm)",
+            border: `1px solid ${isActive ? "var(--color-teal)" : "var(--color-border)"}`,
+            transition: "all 0.2s",
+        }}>
+            <div style={{ fontSize: "0.7rem", color: "var(--color-text-dim)", marginBottom: "0.2rem" }}>{label}</div>
+            <div style={{
+                fontSize: "1.375rem", fontWeight: 700, fontFamily: "monospace",
+                color: isLow ? "var(--color-danger)" : isActive ? "var(--color-teal)" : "var(--color-text)",
+                letterSpacing: "0.04em",
+            }}>
+                {formatTime(timeMs)}
+            </div>
+            {isActive && <div style={{ fontSize: "0.65rem", color: "var(--color-teal)", marginTop: "0.2rem" }}>▶ Active</div>}
+        </div>
+    );
 }
 
 export function GamePage() {
     const { gameId } = useParams();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
-    const { game, loading, move, botMove, refresh, gameEnded, clearGameEndNotification, setGameDirect } = useGame(gameId!);
+    const { game, loading, move, botMove, refresh, gameEnded, clearGameEndNotification, setGameDirect, pause, resume } = useGame(gameId!);
     const [moveError, setMoveError] = React.useState<string | null>(null);
     const [saveMessage, setSaveMessage] = React.useState<string | null>(null);
-    const [exportMessage, setExportMessage] = React.useState<string | null>(null);
+
     const [notification, setNotification] = React.useState<string>("Welcome to the game!");
     const [showExportDialog, setShowExportDialog] = React.useState(false);
     const [showGameEndDialog, setShowGameEndDialog] = React.useState(false);
@@ -97,7 +184,6 @@ export function GamePage() {
     async function handleExportPgn() {
         setMoveError(null);
         setSaveMessage(null);
-        setExportMessage(null);
         setNotification("Exporting game to PGN...");
         try {
             const response = await exportPgn(gameId!, exportForm.event, exportForm.site);
@@ -111,7 +197,6 @@ export function GamePage() {
             a.click();
             document.body.removeChild(a);
             window.URL.revokeObjectURL(url);
-            setExportMessage("Game exported successfully");
             setNotification("Game exported successfully to " + response.filename);
             setShowExportDialog(false);
         } catch (e) {
@@ -148,6 +233,32 @@ export function GamePage() {
         }
     }
 
+    async function handlePause() {
+        setMoveError(null);
+        setSaveMessage(null);
+        setNotification("Pausing game...");
+        try {
+            await pause();
+            setNotification("Game paused");
+        } catch (e) {
+            setMoveError(e instanceof Error ? e.message : "Failed to pause game");
+            setNotification("Failed to pause game");
+        }
+    }
+
+    async function handleResume() {
+        setMoveError(null);
+        setSaveMessage(null);
+        setNotification("Resuming game...");
+        try {
+            await resume();
+            setNotification("Game resumed");
+        } catch (e) {
+            setMoveError(e instanceof Error ? e.message : "Failed to resume game");
+            setNotification("Failed to resume game");
+        }
+    }
+
     async function handleBotMove(botType?: string) {
         const botToUse = botType || selectedBot;
         if (!botToUse || isBotMoving) return;
@@ -168,9 +279,9 @@ export function GamePage() {
         }
     }
 
-    // Auto-trigger bot move when it's bot's turn
+    // Auto-trigger bot move when it's bot's turn (skip when paused)
     React.useEffect(() => {
-        if (!game || game.gameResult.status !== "ongoing" || isBotMoving) return;
+        if (!game || game.gameResult.status !== "ongoing" || isBotMoving || game.isPaused) return;
 
         const currentTurnBot = game.turn === "White" ? whiteBotType : blackBotType;
         if (currentTurnBot) {
@@ -179,337 +290,216 @@ export function GamePage() {
             }, 500); // Small delay for better UX
             return () => clearTimeout(timer);
         }
-    }, [game?.turn, game?.gameResult.status, whiteBotType, blackBotType]);
+    }, [game?.turn, game?.gameResult.status, game?.isPaused, whiteBotType, blackBotType]);
 
-    if (loading) return <div className="loading">Loading game...</div>;
+    const { theme, toggleTheme } = useTheme();
+    const isOngoing = game?.gameResult.status === "ongoing";
+
+    if (loading) return <div className="loading">Loading game…</div>;
     if (!game) return <div className="error">No game found</div>;
 
+    // Pair moves: [white, black?]
+    const movePairs: [string, string | undefined][] = [];
+    for (let i = 0; i < game.moveHistory.length; i += 2) {
+        movePairs.push([game.moveHistory[i], game.moveHistory[i + 1]]);
+    }
+
     return (
-        <div className="container">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem" }}>
-                <h1>Game {game.gameId.slice(0, 8)}...</h1>
-                <button onClick={() => navigate("/")} className="secondary">
-                    Back to Menu
-                </button>
+        <div style={{ minHeight: "100vh", background: "var(--color-bg)" }}>
+            {/* Top navbar */}
+            <div style={{
+                display: "flex", alignItems: "center", gap: "0.75rem",
+                padding: "0.75rem 1.5rem",
+                background: "var(--color-surface)",
+                borderBottom: "1px solid var(--color-border)",
+                position: "sticky", top: 0, zIndex: 50,
+            }}>
+                <button onClick={() => navigate("/")} className="ghost" style={{ padding: "0.3rem 0.6rem" }}>← Menu</button>
+                <span style={{ fontSize: "0.875rem", color: "var(--color-text-muted)", fontFamily: "monospace" }}>
+                    #{game.gameId.slice(0, 8)}
+                </span>
+                {isOngoing && (
+                    <span style={{
+                        marginLeft: "0.25rem", padding: "0.15rem 0.6rem",
+                        borderRadius: "999px", fontSize: "0.7rem", fontWeight: 600,
+                        background: game.isPaused ? "var(--color-warning-bg)" : "var(--color-success-bg)",
+                        color: game.isPaused ? "var(--color-warning)" : "var(--color-success)",
+                        border: `1px solid ${game.isPaused ? "var(--color-warning)" : "var(--color-success)"}`,
+                    }}>
+                        {game.isPaused ? "⏸ Paused" : "● Live"}
+                    </span>
+                )}
+                {!isOngoing && (
+                    <span style={{ padding: "0.15rem 0.6rem", borderRadius: "999px", fontSize: "0.7rem", fontWeight: 600, background: "var(--color-danger-bg)", color: "var(--color-danger)", border: "1px solid var(--color-danger)" }}>
+                        ◼ Ended
+                    </span>
+                )}
+                <div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                    {moveError && (
+                        <span style={{ fontSize: "0.75rem", color: "var(--color-danger)", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            ⚠ {convertPositionToAlgebraic(moveError)}
+                        </span>
+                    )}
+                    {saveMessage && <span style={{ fontSize: "0.75rem", color: "var(--color-success)" }}>✓ {saveMessage}</span>}
+                    <button onClick={toggleTheme} className="ghost" style={{ padding: "0.3rem 0.55rem", fontSize: "0.95rem" }} title="Toggle theme">
+                        {theme === "dark" ? "☀️" : "🌙"}
+                    </button>
+                    <button onClick={refresh} className="ghost" style={{ padding: "0.3rem 0.6rem", fontSize: "0.8rem" }}>↻ Refresh</button>
+                </div>
             </div>
 
-            <div style={{ minHeight: "60px", marginBottom: "1rem" }}>
-                {moveError && <div className="error">{convertPositionToAlgebraic(moveError)}</div>}
-                {saveMessage && <div className="success">{saveMessage}</div>}
-                {exportMessage && <div className="success">{exportMessage}</div>}
-            </div>
-
-            <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap" }}>
-                <div>
-                    <Board
-                        fen={game.fen}
-                        onMove={handleMove}
-                        turn={game.turn}
-                        gameOver={game.gameResult.status !== "ongoing"}
-                    />
+            {/* Main layout */}
+            <div style={{ display: "flex", gap: "1.25rem", padding: "1.25rem 1.5rem", flexWrap: "wrap", alignItems: "flex-start" }}>
+                {/* Board column */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
+                    {/* Game result banner */}
+                    {!isOngoing && (
+                        <div style={{
+                            padding: "0.6rem 1rem", borderRadius: "var(--radius-sm)",
+                            background: "var(--color-danger-bg)", border: "1px solid var(--color-danger)",
+                            color: "var(--color-danger)", fontWeight: 600, fontSize: "0.875rem", textAlign: "center",
+                        }}>
+                            {getGameResultText(game.gameResult)}
+                        </div>
+                    )}
+                    <Board fen={game.fen} onMove={handleMove} turn={game.turn} gameOver={!isOngoing} />
+                    <p style={{ fontSize: "0.7rem", color: "var(--color-text-dim)", textAlign: "center" }}>
+                        {notification}
+                    </p>
                 </div>
 
-                <div style={{ flex: 1, minWidth: "250px" }}>
-                    <div style={{ background: "#1E1E1E", padding: "1.5rem", borderRadius: "8px", border: "1px solid #444", marginBottom: "1rem" }}>
-                        <h3 style={{ color: "#e0e0e0" }}>Game Status</h3>
-                        <p style={{ color: "#b0b0b0" }}>
-                            <strong>Turn:</strong> {game.turn}
-                        </p>
-                        <p style={{ color: "#b0b0b0" }}>
-                            <strong>Moves:</strong> {game.moveHistory.length}
-                        </p>
-                        {game.gameResult.status !== "ongoing" && (
-                            <p style={{ color: "#ff6b6b", fontWeight: "bold" }}>
-                                {getGameResultText(game.gameResult)}
-                            </p>
-                        )}
-                        {game.whiteTime && game.blackTime && (
-                            <div style={{
-                                display: "flex",
-                                gap: "1rem",
-                                marginTop: "0.5rem"
-                            }}>
-                                <div style={{
-                                    flex: 1,
-                                    padding: "0.75rem",
-                                    backgroundColor: game.turn === "White" ? "#2d4a3e" : "#2C2C2C",
-                                    borderRadius: "6px",
-                                    border: game.turn === "White" ? "2px solid #4ec9b0" : "1px solid #444"
-                                }}>
-                                    <div style={{ fontSize: "0.75rem", color: "#888", marginBottom: "0.25rem" }}>White</div>
-                                    <div style={{
-                                        fontSize: "1.25rem",
-                                        fontWeight: "bold",
-                                        color: game.whiteTime.remainingTimeMs < 30000
-                                            ? "#ff6b6b"
-                                            : game.turn === "White" ? "#4ec9b0" : "#e0e0e0",
-                                        fontFamily: "monospace"
-                                    }}>
-                                        {formatTime(game.whiteTime.remainingTimeMs)}
-                                    </div>
-                                    {game.turn === "White" && (
-                                        <div style={{ fontSize: "0.7rem", color: "#4ec9b0", marginTop: "0.25rem" }}>Your turn</div>
-                                    )}
-                                </div>
-                                <div style={{
-                                    flex: 1,
-                                    padding: "0.75rem",
-                                    backgroundColor: game.turn === "Black" ? "#2d4a3e" : "#2C2C2C",
-                                    borderRadius: "6px",
-                                    border: game.turn === "Black" ? "2px solid #4ec9b0" : "1px solid #444"
-                                }}>
-                                    <div style={{ fontSize: "0.75rem", color: "#888", marginBottom: "0.25rem" }}>Black</div>
-                                    <div style={{
-                                        fontSize: "1.25rem",
-                                        fontWeight: "bold",
-                                        color: game.blackTime.remainingTimeMs < 30000
-                                            ? "#ff6b6b"
-                                            : game.turn === "Black" ? "#4ec9b0" : "#e0e0e0",
-                                        fontFamily: "monospace"
-                                    }}>
-                                        {formatTime(game.blackTime.remainingTimeMs)}
-                                    </div>
-                                    {game.turn === "Black" && (
-                                        <div style={{ fontSize: "0.7rem", color: "#4ec9b0", marginTop: "0.25rem" }}>Your turn</div>
-                                    )}
-                                </div>
+                {/* Side panel */}
+                <div style={{ flex: 1, minWidth: 280, maxWidth: 340, display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+
+                    {/* Status row */}
+                    <div className="card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.75rem 1rem" }}>
+                        <div>
+                            <span style={{ fontSize: "0.7rem", color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Turn</span>
+                            <div style={{ fontWeight: 700, fontSize: "0.9375rem" }}>{game.turn}</div>
+                        </div>
+                        <div style={{ textAlign: "right" }}>
+                            <span style={{ fontSize: "0.7rem", color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Moves</span>
+                            <div style={{ fontWeight: 700, fontSize: "0.9375rem" }}>{game.moveHistory.length}</div>
+                        </div>
+                    </div>
+
+                    {/* Clocks */}
+                    {game.whiteTime && game.blackTime && (
+                        <div className="card" style={{ padding: "0.75rem 1rem" }}>
+                            <p style={{ fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-text-dim)", marginBottom: "0.6rem" }}>Clocks</p>
+                            <div style={{ display: "flex", gap: "0.5rem" }}>
+                                <ClockCard label="⬜ White" timeMs={game.whiteTime.remainingTimeMs} isActive={isOngoing && game.turn === "White" && !game.isPaused} isLow={game.whiteTime.remainingTimeMs < 30000} />
+                                <ClockCard label="⬛ Black" timeMs={game.blackTime.remainingTimeMs} isActive={isOngoing && game.turn === "Black" && !game.isPaused} isLow={game.blackTime.remainingTimeMs < 30000} />
                             </div>
-                        )}
-                        {(!game.whiteTime || !game.blackTime) && (
-                            <p style={{ color: "#b0b0b0" }}>
-                                <strong>Time:</strong> Unlimited
-                            </p>
-                        )}
-                    </div>
-
-                    <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                        <button onClick={handleSave} disabled={game.gameResult.status !== "ongoing"}>
-                            Save Game
-                        </button>
-                        <button onClick={() => setShowExportDialog(true)} disabled={game.gameResult.status !== "ongoing"}>
-                            Export PGN
-                        </button>
-                        <button onClick={refresh} className="secondary">
-                            Refresh
-                        </button>
-                        {game.gameResult.status === "ongoing" && (
-                            <>
-                                <button onClick={() => handleResign("white")} className="secondary">
-                                    Resign (White)
-                                </button>
-                                <button onClick={() => handleResign("black")} className="secondary">
-                                    Resign (Black)
-                                </button>
-                            </>
-                        )}
-                    </div>
-
-                    {/* Bot Control Section */}
-                    {game.gameResult.status === "ongoing" && (
-                        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginTop: "0.5rem", padding: "0.75rem", background: "#2C2C2C", borderRadius: "6px", border: "1px solid #444" }}>
-                            <span style={{ color: "#b0b0b0", fontSize: "0.875rem", alignSelf: "center" }}>Bot:</span>
-                            <select
-                                value={selectedBot}
-                                onChange={(e) => setSelectedBot(e.target.value)}
-                                disabled={isBotMoving}
-                                style={{
-                                    flex: 1,
-                                    padding: "0.5rem",
-                                    border: "1px solid #555",
-                                    borderRadius: "4px",
-                                    background: "#1E1E1E",
-                                    color: "#e0e0e0",
-                                    fontSize: "0.875rem"
-                                }}
-                            >
-                                {availableBots.map((bot) => (
-                                    <option key={bot.id} value={bot.id}>
-                                        {bot.name} ({bot.difficulty})
-                                    </option>
-                                ))}
-                            </select>
-                            <button
-                                onClick={() => handleBotMove()}
-                                disabled={isBotMoving}
-                                style={{
-                                    padding: "0.5rem 1rem",
-                                    background: isBotMoving ? "#666" : "#9C27B0",
-                                    color: "white",
-                                    border: "none",
-                                    borderRadius: "4px",
-                                    cursor: isBotMoving ? "not-allowed" : "pointer",
-                                    fontSize: "0.875rem"
-                                }}
-                            >
-                                {isBotMoving ? "Thinking..." : "Play Bot Move"}
-                            </button>
+                        </div>
+                    )}
+                    {(!game.whiteTime || !game.blackTime) && (
+                        <div className="card" style={{ padding: "0.625rem 1rem", textAlign: "center" }}>
+                            <span style={{ fontSize: "0.8rem", color: "var(--color-text-dim)" }}>∞ Unlimited time</span>
                         </div>
                     )}
 
-                    <div style={{ marginTop: "1rem", background: "#1E1E1E", padding: "1.5rem", borderRadius: "8px", border: "1px solid #444" }}>
-                        <h3 style={{ color: "#e0e0e0" }}>Move History</h3>
-                        <div 
-                            ref={moveHistoryRef}
-                            style={{ 
-                                height: "200px", 
-                                overflowY: "auto", 
-                                color: "#b0b0b0", 
-                                fontSize: "0.875rem",
-                                display: "flex",
-                                flexDirection: "column"
-                            }}
-                        >
-                            {game.moveHistory.length > 0 ? (
-                                game.moveHistory.map((move, i) => (
-                                    <div key={i} style={{ padding: "2px 0" }}>{move}</div>
-                                ))
-                            ) : (
-                                <div style={{ color: "#666", fontStyle: "italic" }}>No moves yet</div>
+                    {/* Captured pieces */}
+                    <CapturedPieces fen={game.fen} />
+
+                    {/* Action buttons */}
+                    <div className="card" style={{ padding: "0.75rem 1rem" }}>
+                        <p style={{ fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-text-dim)", marginBottom: "0.6rem" }}>Actions</p>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+                            <button onClick={handleSave} disabled={!isOngoing} style={{ fontSize: "0.8rem", padding: "0.4rem 0.75rem" }}>💾 Save</button>
+                            <button onClick={() => setShowExportDialog(true)} className="secondary" style={{ fontSize: "0.8rem", padding: "0.4rem 0.75rem" }}>📄 PGN</button>
+                            {isOngoing && (
+                                game.isPaused
+                                    ? <button onClick={handleResume} style={{ fontSize: "0.8rem", padding: "0.4rem 0.75rem", background: "var(--color-success)" }}>▶ Resume</button>
+                                    : <button onClick={handlePause} style={{ fontSize: "0.8rem", padding: "0.4rem 0.75rem", background: "var(--color-warning)", color: "#111" }}>⏸ Pause</button>
+                            )}
+                            {isOngoing && (
+                                <>
+                                    <button onClick={() => handleResign("white")} className="secondary" style={{ fontSize: "0.8rem", padding: "0.4rem 0.75rem" }}>🏳 White</button>
+                                    <button onClick={() => handleResign("black")} className="secondary" style={{ fontSize: "0.8rem", padding: "0.4rem 0.75rem" }}>🏳 Black</button>
+                                </>
                             )}
                         </div>
                     </div>
 
-                    <div style={{ marginTop: "1rem", background: "#1E1E1E", padding: "1.5rem", borderRadius: "8px", border: "1px solid #444" }}>
-                        <h3 style={{ color: "#e0e0e0" }}>Notifications</h3>
-                        <div style={{ color: "#e0e0e0", fontSize: "0.875rem" }}>
-                            {notification}
+                    {/* Bot controls */}
+                    {isOngoing && (
+                        <div className="card" style={{ padding: "0.75rem 1rem" }}>
+                            <p style={{ fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-text-dim)", marginBottom: "0.6rem" }}>🤖 Bot</p>
+                            <div style={{ display: "flex", gap: "0.5rem" }}>
+                                <select value={selectedBot} onChange={e => setSelectedBot(e.target.value)} disabled={isBotMoving} style={{ flex: 1, fontSize: "0.8rem" }}>
+                                    {availableBots.map(bot => (
+                                        <option key={bot.id} value={bot.id}>{bot.name} ({bot.difficulty})</option>
+                                    ))}
+                                </select>
+                                <button onClick={() => handleBotMove()} disabled={isBotMoving || game.isPaused} style={{ fontSize: "0.8rem", padding: "0.4rem 0.75rem", background: isBotMoving ? "var(--color-text-dim)" : "#7c3aed", flexShrink: 0 }}>
+                                    {isBotMoving ? "…" : "Play"}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Move history */}
+                    <div className="card" style={{ padding: "0.75rem 1rem" }}>
+                        <p style={{ fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-text-dim)", marginBottom: "0.6rem" }}>Move History</p>
+                        <div ref={moveHistoryRef} style={{ maxHeight: 200, overflowY: "auto", fontSize: "0.8rem" }}>
+                            {movePairs.length === 0
+                                ? <span style={{ color: "var(--color-text-dim)", fontStyle: "italic" }}>No moves yet</span>
+                                : movePairs.map(([w, b], i) => (
+                                    <div key={i} style={{ display: "flex", gap: "0.5rem", padding: "1px 0", borderBottom: "1px solid var(--color-border)" }}>
+                                        <span style={{ color: "var(--color-text-dim)", width: "1.5rem", flexShrink: 0 }}>{i + 1}.</span>
+                                        <span style={{ color: "var(--color-text)", flex: 1, fontFamily: "monospace" }}>{w}</span>
+                                        <span style={{ color: "var(--color-text-muted)", flex: 1, fontFamily: "monospace" }}>{b ?? ""}</span>
+                                    </div>
+                                ))
+                            }
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Export PGN Dialog */}
+            {/* Export PGN modal */}
             {showExportDialog && (
-                <div style={{
-                    position: "fixed",
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    backgroundColor: "rgba(0, 0, 0, 0.5)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    zIndex: 1000
-                }}>
-                    <div style={{
-                        background: "#1E1E1E",
-                        padding: "2rem",
-                        borderRadius: "8px",
-                        border: "1px solid #444",
-                        minWidth: "300px",
-                        maxWidth: "400px"
-                    }}>
-                        <h3 style={{ color: "#e0e0e0" }}>Export Game to PGN</h3>
-                        <div style={{ marginBottom: "1rem" }}>
-                            <label style={{ display: "block", marginBottom: "0.5rem", color: "#b0b0b0" }}>
-                                Event:
-                            </label>
-                            <input
-                                type="text"
-                                value={exportForm.event}
-                                onChange={(e) => setExportForm({ ...exportForm, event: e.target.value })}
-                                style={{
-                                    width: "100%",
-                                    padding: "0.5rem",
-                                    border: "1px solid #555",
-                                    borderRadius: "4px",
-                                    background: "#2C2C2C",
-                                    color: "#e0e0e0"
-                                }}
-                            />
+                <div onClick={e => { if (e.target === e.currentTarget) setShowExportDialog(false); }}
+                    style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "1rem" }}>
+                    <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-lg)", width: "100%", maxWidth: 380 }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1rem 1.25rem", borderBottom: "1px solid var(--color-border)" }}>
+                            <h3 style={{ margin: 0 }}>Export to PGN</h3>
+                            <button onClick={() => setShowExportDialog(false)} className="ghost" style={{ padding: "0.2rem 0.45rem" }}>✕</button>
                         </div>
-                        <div style={{ marginBottom: "1.5rem" }}>
-                            <label style={{ display: "block", marginBottom: "0.5rem", color: "#b0b0b0" }}>
-                                Site:
-                            </label>
-                            <input
-                                type="text"
-                                value={exportForm.site}
-                                onChange={(e) => setExportForm({ ...exportForm, site: e.target.value })}
-                                style={{
-                                    width: "100%",
-                                    padding: "0.5rem",
-                                    border: "1px solid #555",
-                                    borderRadius: "4px",
-                                    background: "#2C2C2C",
-                                    color: "#e0e0e0"
-                                }}
-                            />
+                        <div style={{ padding: "1.25rem" }}>
+                            <label style={{ display: "block", marginBottom: "0.35rem", fontSize: "0.8rem", color: "var(--color-text-muted)" }}>Event</label>
+                            <input type="text" value={exportForm.event} onChange={e => setExportForm({ ...exportForm, event: e.target.value })} style={{ marginBottom: "0.875rem" }} />
+                            <label style={{ display: "block", marginBottom: "0.35rem", fontSize: "0.8rem", color: "var(--color-text-muted)" }}>Site</label>
+                            <input type="text" value={exportForm.site} onChange={e => setExportForm({ ...exportForm, site: e.target.value })} />
                         </div>
-                        <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
-                            <button
-                                onClick={() => setShowExportDialog(false)}
-                                className="secondary"
-                                style={{ marginRight: "0.5rem" }}
-                            >
-                                Cancel
-                            </button>
-                            <button onClick={handleExportPgn}>
-                                Export
-                            </button>
+                        <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end", padding: "0.875rem 1.25rem", borderTop: "1px solid var(--color-border)" }}>
+                            <button onClick={() => setShowExportDialog(false)} className="secondary">Cancel</button>
+                            <button onClick={handleExportPgn}>Export ↓</button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* Game End Dialog */}
+            {/* Game end modal */}
             {showGameEndDialog && gameEnded && (
-                <div style={{
-                    position: "fixed",
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    backgroundColor: "rgba(0, 0, 0, 0.7)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    zIndex: 2000
-                }}>
-                    <div style={{
-                        background: "#1E1E1E",
-                        padding: "2.5rem",
-                        borderRadius: "12px",
-                        border: "2px solid #ff6b6b",
-                        minWidth: "350px",
-                        maxWidth: "500px",
-                        textAlign: "center"
-                    }}>
-                        <h2 style={{ color: "#ff6b6b", marginBottom: "1rem", fontSize: "1.75rem" }}>
-                            Game Over!
-                        </h2>
-                        <div style={{ marginBottom: "1.5rem", color: "#e0e0e0", fontSize: "1.1rem" }}>
-                            {gameEnded.status === "checkmate" && (
-                                <p>Checkmate! <strong style={{ color: "#4ec9b0" }}>{gameEnded.winner}</strong> wins!</p>
-                            )}
-                            {gameEnded.status === "resignation" && (
-                                <p>Resignation! <strong style={{ color: "#4ec9b0" }}>{gameEnded.winner}</strong> wins!</p>
-                            )}
-                            {gameEnded.status === "timeout" && (
-                                <p>Time out! <strong style={{ color: "#4ec9b0" }}>{gameEnded.winner}</strong> wins!</p>
-                            )}
-                            {gameEnded.status === "draw" && (
-                                <p>Draw! Reason: <strong style={{ color: "#ffd93d" }}>{gameEnded.reason}</strong></p>
-                            )}
+                <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000, padding: "1rem" }}>
+                    <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-lg)", padding: "2rem", maxWidth: 380, width: "100%", textAlign: "center" }}>
+                        <div style={{ fontSize: "3rem", marginBottom: "0.75rem" }}>
+                            {gameEnded.status === "draw" ? "🤝" : gameEnded.status === "checkmate" ? "♛" : "🏁"}
                         </div>
-                        <div style={{ display: "flex", gap: "1rem", justifyContent: "center" }}>
-                            <button
-                                onClick={() => {
-                                    setShowGameEndDialog(false);
-                                    clearGameEndNotification();
-                                }}
-                                style={{ minWidth: "120px" }}
-                            >
-                                Continue
-                            </button>
-                            <button
-                                onClick={() => navigate("/")}
-                                className="secondary"
-                                style={{ minWidth: "120px" }}
-                            >
-                                Back to Menu
-                            </button>
+                        <h2 style={{ marginBottom: "0.5rem" }}>
+                            {gameEnded.status === "draw" ? "Draw!" : `${gameEnded.winner} wins!`}
+                        </h2>
+                        <p style={{ color: "var(--color-text-muted)", marginBottom: "1.5rem", fontSize: "0.875rem" }}>
+                            {gameEnded.status === "checkmate" && "by Checkmate"}
+                            {gameEnded.status === "resignation" && "by Resignation"}
+                            {gameEnded.status === "timeout" && "by Timeout"}
+                            {gameEnded.status === "draw" && `Reason: ${gameEnded.reason}`}
+                        </p>
+                        <div style={{ display: "flex", gap: "0.75rem", justifyContent: "center" }}>
+                            <button onClick={() => { setShowGameEndDialog(false); clearGameEndNotification(); }}>Continue</button>
+                            <button onClick={() => navigate("/")} className="secondary">← Menu</button>
                         </div>
                     </div>
                 </div>

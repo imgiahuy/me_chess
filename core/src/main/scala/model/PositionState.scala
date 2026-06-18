@@ -20,5 +20,8 @@ case class PositionState(
   // Game status
   hasWhiteResigned: Boolean = false,
   hasBlackResigned: Boolean = false,
-  gameResult: GameResult = Ongoing
+  gameResult: GameResult = Ongoing,
+  // Pause state
+  isPaused: Boolean = false,
+  pausedAt: Option[Long] = None
 )

@@ -7,6 +7,7 @@ export type GameResponse = {
     whiteTime: TimeControlInfo | null;
     blackTime: TimeControlInfo | null;
     legalMoves: string[] | null;
+    isPaused: boolean;
 };
 
 export type GameResultInfo = {

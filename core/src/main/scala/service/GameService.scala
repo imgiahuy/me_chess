@@ -65,6 +65,10 @@ object GameService {
     if (snapshot.gameResult != Ongoing) {
       return Left(s"Game is already over: ${snapshot.gameResult}")
     }
+    // Check if game is paused
+    if (snapshot.isPaused) {
+      return Left("Game is paused. Resume the game before making a move.")
+    }
 
     // Normalize castling moves: UciParser always emits row 0 for 0-0/0-0-0 shorthand.
     // If the move is a castling special move but the from-square row doesn't match the
@@ -768,6 +772,56 @@ object GameService {
 
       case Left(err) =>
         throw new Exception(err)
+
+  // ── Pause / Resume ──────────────────────────────────────────────────────
+
+  /** Pause the game, freezing both clocks */
+  def pauseGame(snapshot: PositionState): Either[String, PositionState] = {
+    if (snapshot.gameResult != Ongoing) Left("Cannot pause a finished game")
+    else if (snapshot.isPaused) Left("Game is already paused")
+    else {
+      val now = System.currentTimeMillis()
+      // Freeze the active player's clock by capturing remaining time at this instant
+      val frozenWhiteTime = snapshot.whiteTime.map { wt =>
+        if (snapshot.turn == White) PlayerTime(wt.getCurrentTime, now)
+        else wt
+      }
+      val frozenBlackTime = snapshot.blackTime.map { bt =>
+        if (snapshot.turn == Black) PlayerTime(bt.getCurrentTime, now)
+        else bt
+      }
+      Right(snapshot.copy(
+        isPaused = true,
+        pausedAt = Some(now),
+        whiteTime = frozenWhiteTime,
+        blackTime = frozenBlackTime
+      ))
+    }
+  }
+
+  /** Resume the game, re-anchoring the active player's clock to now */
+  def resumeGame(snapshot: PositionState): Either[String, PositionState] = {
+    if (snapshot.gameResult != Ongoing) Left("Cannot resume a finished game")
+    else if (!snapshot.isPaused) Left("Game is not paused")
+    else {
+      val now = System.currentTimeMillis()
+      // Re-anchor the active player's lastUpdatedAt so no time was lost during pause
+      val resumedWhiteTime = snapshot.whiteTime.map { wt =>
+        if (snapshot.turn == White) wt.copy(lastUpdatedAt = now)
+        else wt
+      }
+      val resumedBlackTime = snapshot.blackTime.map { bt =>
+        if (snapshot.turn == Black) bt.copy(lastUpdatedAt = now)
+        else bt
+      }
+      Right(snapshot.copy(
+        isPaused = false,
+        pausedAt = None,
+        whiteTime = resumedWhiteTime,
+        blackTime = resumedBlackTime
+      ))
+    }
+  }
 
   // ── Resignation and Time Control ────────────────────────────────────────
 
