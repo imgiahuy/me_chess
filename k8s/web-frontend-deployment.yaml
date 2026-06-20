@@ -6,6 +6,7 @@ metadata:
 data:
   REACT_APP_API_URL: http://141.37.123.124/v1
   API_UPSTREAM: rest-api.chess.svc.cluster.local:8080
+  PLAYER_SERVICE_UPSTREAM: player-service.chess.svc.cluster.local:8090
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -86,6 +87,13 @@ spec:
   rules:
   - http:
       paths:
+      - path: /v1/players
+        pathType: Prefix
+        backend:
+          service:
+            name: player-service
+            port:
+              number: 8090
       - path: /v1
         pathType: Prefix
         backend:

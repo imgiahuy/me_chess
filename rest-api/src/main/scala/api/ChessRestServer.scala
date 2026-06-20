@@ -97,14 +97,28 @@ object ChessRestServer {
       println("[INFO] Setting up API routes...")
       val chessRoutes = new ChessApiRoutes(sessionController).routes
 
+      // Rate limiter: 100 requests per 60 seconds per client IP
+      val rateLimiter = new RateLimiter(maxRequests = 100, windowMs = 60000)
+      println("[INFO] Rate limiting enabled (100 req/min per IP)")
+
+      // Schedule periodic cleanup of stale rate limit buckets
+      import scala.concurrent.duration._
+      system.scheduler.scheduleAtFixedRate(
+        5.minutes,
+        5.minutes
+      )(() => rateLimiter.cleanup())(ec)
+
       // Add Kafka API routes if enabled
-      val allRoutes: Route = kafkaService match {
+      val combinedRoutes: Route = kafkaService match {
         case Some(service) =>
           val kafkaRoutes = new KafkaApiRoutes(service).routes
           Directives.concat(chessRoutes, kafkaRoutes)
         case None =>
           chessRoutes
       }
+
+      // Wrap all routes with rate limiting
+      val allRoutes: Route = rateLimiter.rateLimitByIp { combinedRoutes }
 
       println("[INFO] Starting HTTP server on $host:$port...")
       val bindingFuture = Http().newServerAt(host, port).bind(allRoutes)

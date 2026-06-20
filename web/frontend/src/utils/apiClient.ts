@@ -102,11 +102,6 @@ export async function getAvailableBots() {
     return res.json();
 }
 
-export async function getLeaderboard() {
-    const res = await fetch(`${BASE_URL}/leaderboard`);
-    if (!res.ok) throw new Error(`Failed to get leaderboard: ${res.status}`);
-    return res.json();
-}
 
 export async function pauseGame(gameId: string) {
     const res = await fetch(`${BASE_URL}/games/${gameId}/pause`, {

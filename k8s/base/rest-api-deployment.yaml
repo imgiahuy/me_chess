@@ -10,6 +10,7 @@ data:
   KAFKA_ENABLED: "true"
   KAFKA_BOOTSTRAP_SERVERS: kafka:29092
   SPARK_OUTPUT_PATH: /tmp/chess-analytics
+  PLAYER_SERVICE_URL: http://player-service:8090
 ---
 apiVersion: apps/v1
 kind: Deployment

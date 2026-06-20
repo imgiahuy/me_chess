@@ -168,7 +168,7 @@ export function PlayersPage() {
                                 className={view === v ? "" : "secondary"}
                                 style={{ fontSize: "0.8rem", padding: "0.35rem 0.75rem" }}
                             >
-                                {v === "list" ? "👥 All Players" : "🏆 Leaderboard"}
+                                {v === "list" ? "👥 All Players" : "📊 Player Stats"}
                             </button>
                         ))}
                     </div>
@@ -253,12 +253,12 @@ export function PlayersPage() {
                     </>
                 )}
 
-                {/* Leaderboard view */}
+                {/* Player Stats view */}
                 {!loading && view === "leaderboard" && (
                     <div className="card" style={{ padding: "1rem 1.25rem" }}>
                         {leaderboard.length === 0 ? (
                             <div style={{ padding: "2rem", textAlign: "center", color: "var(--color-text-muted)" }}>
-                                No players yet. Register some players to see the leaderboard!
+                                No players yet. Register some players to see their stats!
                             </div>
                         ) : (
                             <div style={{ overflowX: "auto" }}>

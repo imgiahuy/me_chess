@@ -158,8 +158,14 @@ services:
       - "8090:8090"
     networks:
       - chess-network
+    depends_on:
+      mongodb:
+        condition: service_healthy
     environment:
       - JAVA_OPTS=-Xmx256m
+      - MONGODB_HOST=mongodb
+      - MONGODB_PORT=27017
+      - MONGODB_DATABASE=chess
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8090/v1/players/health"]
       interval: 30s

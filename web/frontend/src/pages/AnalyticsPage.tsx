@@ -1,16 +1,16 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "../router/App";
-import { getLeaderboard } from "../utils/apiClient";
-
-interface LeaderboardEntry {
-    rank: number;
-    player: string;
-    totalGames: number;
-    victories: number;
-    defeats: number;
+interface PlayerStats {
+    playerId: string;
+    username: string;
+    rating: number;
+    gamesPlayed: number;
+    wins: number;
+    losses: number;
     draws: number;
     winRate: number;
+    rank: number;
 }
 
 interface MetricsData {
@@ -67,7 +67,7 @@ function BarChart({ data, maxVal, label }: { data: { name: string; value: number
 export function AnalyticsPage() {
     const navigate = useNavigate();
     const { theme, toggleTheme } = useTheme();
-    const [leaderboard, setLeaderboard] = React.useState<LeaderboardEntry[]>([]);
+    const [leaderboard, setLeaderboard] = React.useState<PlayerStats[]>([]);
     const [metrics, setMetrics] = React.useState<MetricsData | null>(null);
     const [health, setHealth] = React.useState<HealthData | null>(null);
     const [loading, setLoading] = React.useState(true);
@@ -79,11 +79,11 @@ export function AnalyticsPage() {
             setError(null);
             try {
                 const [lbRes, metricsRes, healthRes] = await Promise.allSettled([
-                    getLeaderboard(),
+                    fetch("/v1/players/leaderboard").then(r => r.json()),
                     fetch("/v1/chess/metrics").then(r => r.json()),
                     fetch("/v1/chess/health").then(r => r.json()),
                 ]);
-                if (lbRes.status === "fulfilled") setLeaderboard(lbRes.value.entries || []);
+                if (lbRes.status === "fulfilled") setLeaderboard(lbRes.value.stats || []);
                 if (metricsRes.status === "fulfilled") setMetrics(metricsRes.value);
                 if (healthRes.status === "fulfilled") setHealth(healthRes.value);
             } catch (e) {
@@ -98,8 +98,8 @@ export function AnalyticsPage() {
     }, []);
 
     const topPlayers = leaderboard.slice(0, 8);
-    const totalGames = leaderboard.reduce((s, e) => s + e.totalGames, 0);
-    const totalWins = leaderboard.reduce((s, e) => s + e.victories, 0);
+    const totalGames = leaderboard.reduce((s, e) => s + e.gamesPlayed, 0);
+    const totalWins = leaderboard.reduce((s, e) => s + e.wins, 0);
     const avgWinRate = leaderboard.length > 0
         ? (leaderboard.reduce((s, e) => s + e.winRate, 0) / leaderboard.length).toFixed(1)
         : "0.0";
@@ -177,7 +177,7 @@ export function AnalyticsPage() {
                 {/* Game Statistics */}
                 {leaderboard.length > 0 && (
                     <div style={{ marginBottom: "1.25rem" }}>
-                        <h3 style={{ fontSize: "0.875rem", marginBottom: "0.75rem", color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Game Statistics (from Spark)</h3>
+                        <h3 style={{ fontSize: "0.875rem", marginBottom: "0.75rem", color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Player Statistics</h3>
                         <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
                             <StatCard label="Total Games" value={totalGames} />
                             <StatCard label="Total Wins" value={totalWins} color="var(--color-success)" />
@@ -193,15 +193,15 @@ export function AnalyticsPage() {
                         <div className="card" style={{ flex: 1, minWidth: 280, padding: "1rem 1.25rem" }}>
                             <BarChart
                                 label="Top Players by Wins"
-                                data={topPlayers.map(p => ({ name: p.player, value: p.victories }))}
-                                maxVal={Math.max(...topPlayers.map(p => p.victories), 1)}
+                                data={topPlayers.map(p => ({ name: p.username, value: p.wins }))}
+                                maxVal={Math.max(...topPlayers.map(p => p.wins), 1)}
                             />
                         </div>
                         <div className="card" style={{ flex: 1, minWidth: 280, padding: "1rem 1.25rem" }}>
                             <BarChart
                                 label="Top Players by Games Played"
-                                data={topPlayers.map(p => ({ name: p.player, value: p.totalGames }))}
-                                maxVal={Math.max(...topPlayers.map(p => p.totalGames), 1)}
+                                data={topPlayers.map(p => ({ name: p.username, value: p.gamesPlayed }))}
+                                maxVal={Math.max(...topPlayers.map(p => p.gamesPlayed), 1)}
                             />
                         </div>
                     </div>
@@ -215,21 +215,22 @@ export function AnalyticsPage() {
                             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
                                 <thead>
                                     <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
-                                        {["#", "Player", "Games", "Wins", "Losses", "Draws", "Win %"].map(h => (
+                                        {["#", "Player", "Rating", "Games", "Wins", "Losses", "Draws", "Win %"].map(h => (
                                             <th key={h} style={{ padding: "0.4rem 0.5rem", textAlign: "left", color: "var(--color-text-dim)", fontWeight: 600 }}>{h}</th>
                                         ))}
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {leaderboard.map(e => (
-                                        <tr key={e.rank} style={{ borderBottom: "1px solid var(--color-border)" }}>
+                                        <tr key={e.playerId} style={{ borderBottom: "1px solid var(--color-border)" }}>
                                             <td style={{ padding: "0.4rem 0.5rem", color: e.rank <= 3 ? "var(--color-teal)" : "var(--color-text-muted)", fontWeight: e.rank <= 3 ? 700 : 400 }}>{e.rank}</td>
-                                            <td style={{ padding: "0.4rem 0.5rem", fontWeight: 600 }}>{e.player}</td>
-                                            <td style={{ padding: "0.4rem 0.5rem", color: "var(--color-text-muted)" }}>{e.totalGames}</td>
-                                            <td style={{ padding: "0.4rem 0.5rem", color: "var(--color-success)" }}>{e.victories}</td>
-                                            <td style={{ padding: "0.4rem 0.5rem", color: "var(--color-danger)" }}>{e.defeats}</td>
+                                            <td style={{ padding: "0.4rem 0.5rem", fontWeight: 600 }}>{e.username}</td>
+                                            <td style={{ padding: "0.4rem 0.5rem", color: "var(--color-teal)", fontWeight: 700, fontFamily: "monospace" }}>{e.rating}</td>
+                                            <td style={{ padding: "0.4rem 0.5rem", color: "var(--color-text-muted)" }}>{e.gamesPlayed}</td>
+                                            <td style={{ padding: "0.4rem 0.5rem", color: "var(--color-success)" }}>{e.wins}</td>
+                                            <td style={{ padding: "0.4rem 0.5rem", color: "var(--color-danger)" }}>{e.losses}</td>
                                             <td style={{ padding: "0.4rem 0.5rem", color: "var(--color-text-muted)" }}>{e.draws}</td>
-                                            <td style={{ padding: "0.4rem 0.5rem", color: "var(--color-teal)", fontWeight: 600 }}>{(e.winRate * 100).toFixed(1)}%</td>
+                                            <td style={{ padding: "0.4rem 0.5rem", color: "var(--color-teal)", fontWeight: 600 }}>{e.winRate.toFixed(1)}%</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -241,7 +242,7 @@ export function AnalyticsPage() {
                 {!loading && leaderboard.length === 0 && (
                     <div className="card" style={{ padding: "2rem", textAlign: "center", color: "var(--color-text-muted)" }}>
                         <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>📊</div>
-                        <p>No analytics data yet. Play some games and let Spark crunch the numbers!</p>
+                        <p>No analytics data yet. Register some players and play games to see stats!</p>
                     </div>
                 )}
             </div>

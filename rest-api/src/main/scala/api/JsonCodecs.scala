@@ -91,14 +91,16 @@ object JsonCodecs {
         val initial = state.timeControl.map(_.initialTimeMs).getOrElse(0L)
         val increment = state.timeControl.map(_.incrementMs).getOrElse(0L)
         val delay = state.timeControl.map(_.delayMs).getOrElse(0L)
-        TimeControlInfo(initial, increment, pt.getCurrentTime, delay)
+        val remaining = if (state.isPaused) pt.remainingTimeMs else pt.getCurrentTime
+        TimeControlInfo(initial, increment, remaining, delay)
       }
 
       val blackTimeInfo = if (isUnlimited) None else state.blackTime.map { pt =>
         val initial = state.timeControl.map(_.initialTimeMs).getOrElse(0L)
         val increment = state.timeControl.map(_.incrementMs).getOrElse(0L)
         val delay = state.timeControl.map(_.delayMs).getOrElse(0L)
-        TimeControlInfo(initial, increment, pt.getCurrentTime, delay)
+        val remaining = if (state.isPaused) pt.remainingTimeMs else pt.getCurrentTime
+        TimeControlInfo(initial, increment, remaining, delay)
       }
 
       val legalMovesStr = if (includeLegalMoves) {

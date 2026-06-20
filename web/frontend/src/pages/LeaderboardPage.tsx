@@ -1,22 +1,28 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { getLeaderboard } from "../utils/apiClient";
 import { useTheme } from "../router/App";
 
-interface LeaderboardEntry {
-    rank: number;
-    player: string;
-    totalGames: number;
-    victories: number;
-    defeats: number;
+interface PlayerStats {
+    playerId: string;
+    username: string;
+    rating: number;
+    gamesPlayed: number;
+    wins: number;
+    losses: number;
     draws: number;
     winRate: number;
+    rank: number;
 }
 
 interface LeaderboardResponse {
-    entries: LeaderboardEntry[];
+    stats: PlayerStats[];
     generatedAt: string;
-    source: string;
+}
+
+async function fetchLeaderboard(): Promise<LeaderboardResponse> {
+    const res = await fetch("/v1/players/leaderboard");
+    if (!res.ok) throw new Error(`Failed to fetch leaderboard: ${res.status}`);
+    return res.json();
 }
 
 const medalColor = (rank: number) => {
@@ -44,7 +50,7 @@ export function LeaderboardPage() {
     const fetchData = React.useCallback(() => {
         setLoading(true);
         setError(null);
-        getLeaderboard()
+        fetchLeaderboard()
             .then(setData)
             .catch((e) => setError(e.message))
             .finally(() => setLoading(false));
@@ -63,8 +69,8 @@ export function LeaderboardPage() {
     }, []);
 
     const winRateBadge = (wr: number) => {
-        if (wr >= 0.6) return { bg: "var(--color-success-bg)", color: "var(--color-success)" };
-        if (wr >= 0.4) return { bg: "var(--color-accent-bg)", color: "var(--color-accent)" };
+        if (wr >= 60) return { bg: "var(--color-success-bg)", color: "var(--color-success)" };
+        if (wr >= 40) return { bg: "var(--color-accent-bg)", color: "var(--color-accent)" };
         return { bg: "var(--color-danger-bg)", color: "var(--color-danger)" };
     };
 
@@ -80,9 +86,6 @@ export function LeaderboardPage() {
             }}>
                 <button onClick={() => navigate("/")} className="ghost" style={{ padding: "0.3rem 0.6rem" }}>← Menu</button>
                 <span style={{ fontSize: "1.0625rem", fontWeight: 700 }}>🏆 Leaderboard</span>
-                <span style={{ fontSize: "0.75rem", color: "var(--color-text-dim)", marginLeft: "0.25rem" }}>
-                    Powered by Apache Spark
-                </span>
                 <div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem", alignItems: "center" }}>
                     <span style={{ fontSize: "0.75rem", color: "var(--color-text-dim)" }}>
                         ↻ {countdown}s
@@ -98,29 +101,23 @@ export function LeaderboardPage() {
                 {loading && <div className="loading">Loading leaderboard…</div>}
                 {error && <div className="error">Failed to load leaderboard: {error}</div>}
 
-                {data && data.source === "no-spark-data" && (
+                {data && data.stats.length === 0 && (
                     <div className="card" style={{ textAlign: "center", padding: "3rem 2rem" }}>
                         <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>📊</div>
-                        <h3 style={{ marginBottom: "0.5rem" }}>No analytics data yet</h3>
+                        <h3 style={{ marginBottom: "0.5rem" }}>No players yet</h3>
                         <p style={{ color: "var(--color-text-muted)", marginBottom: "0.75rem" }}>
-                            Play some games and the leaderboard will appear here.
-                        </p>
-                        <p style={{ fontSize: "0.8rem", color: "var(--color-text-dim)" }}>
-                            Run:{" "}
-                            <code style={{ background: "var(--color-surface-2)", padding: "2px 7px", borderRadius: "4px", fontFamily: "monospace" }}>
-                                sbt "spark/run batch"
-                            </code>
+                            Register some players and play games to see the leaderboard.
                         </p>
                     </div>
                 )}
 
-                {data && data.entries.length > 0 && (
+                {data && data.stats.length > 0 && (
                     <>
                         <div style={{ overflowX: "auto" }}>
                             <table style={{ width: "100%", borderCollapse: "collapse" }}>
                                 <thead>
                                     <tr style={{ borderBottom: "2px solid var(--color-border)" }}>
-                                        {["Rank", "Player", "Games", "Wins", "Losses", "Draws", "Win Rate"].map(h => (
+                                        {["Rank", "Player", "Rating", "Games", "Wins", "Losses", "Draws", "Win Rate"].map(h => (
                                             <th key={h} style={{
                                                 padding: "0.6rem 0.875rem",
                                                 textAlign: h === "Rank" || h === "Player" ? "left" : "center",
@@ -132,8 +129,8 @@ export function LeaderboardPage() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {data.entries.map((entry, i) => (
-                                        <tr key={entry.player} style={{
+                                    {data.stats.map((entry, i) => (
+                                        <tr key={entry.playerId} style={{
                                             borderBottom: "1px solid var(--color-border)",
                                             background: i < 3 ? "var(--color-surface-2)" : "transparent",
                                             transition: "background 0.15s",
@@ -142,11 +139,12 @@ export function LeaderboardPage() {
                                                 {medalIcon(entry.rank)}
                                             </td>
                                             <td style={{ padding: "0.75rem 0.875rem", fontWeight: entry.rank <= 3 ? 700 : 400, color: "var(--color-text)" }}>
-                                                {entry.player}
+                                                {entry.username}
                                             </td>
-                                            <td style={{ padding: "0.75rem 0.875rem", textAlign: "center", color: "var(--color-text-muted)", fontSize: "0.875rem" }}>{entry.totalGames}</td>
-                                            <td style={{ padding: "0.75rem 0.875rem", textAlign: "center", color: "var(--color-success)", fontWeight: 600, fontSize: "0.875rem" }}>{entry.victories}</td>
-                                            <td style={{ padding: "0.75rem 0.875rem", textAlign: "center", color: "var(--color-danger)", fontSize: "0.875rem" }}>{entry.defeats}</td>
+                                            <td style={{ padding: "0.75rem 0.875rem", textAlign: "center", color: "var(--color-teal)", fontWeight: 700, fontFamily: "monospace", fontSize: "0.875rem" }}>{entry.rating}</td>
+                                            <td style={{ padding: "0.75rem 0.875rem", textAlign: "center", color: "var(--color-text-muted)", fontSize: "0.875rem" }}>{entry.gamesPlayed}</td>
+                                            <td style={{ padding: "0.75rem 0.875rem", textAlign: "center", color: "var(--color-success)", fontWeight: 600, fontSize: "0.875rem" }}>{entry.wins}</td>
+                                            <td style={{ padding: "0.75rem 0.875rem", textAlign: "center", color: "var(--color-danger)", fontSize: "0.875rem" }}>{entry.losses}</td>
                                             <td style={{ padding: "0.75rem 0.875rem", textAlign: "center", color: "var(--color-text-dim)", fontSize: "0.875rem" }}>{entry.draws}</td>
                                             <td style={{ padding: "0.75rem 0.875rem", textAlign: "center" }}>
                                                 <span style={{
@@ -156,7 +154,7 @@ export function LeaderboardPage() {
                                                     padding: "2px 9px", borderRadius: "999px",
                                                     fontWeight: 700, fontSize: "0.8rem",
                                                 }}>
-                                                    {(entry.winRate * 100).toFixed(1)}%
+                                                    {entry.winRate.toFixed(1)}%
                                                 </span>
                                             </td>
                                         </tr>
@@ -165,7 +163,7 @@ export function LeaderboardPage() {
                             </table>
                         </div>
                         <p style={{ marginTop: "1rem", fontSize: "0.72rem", color: "var(--color-text-dim)", textAlign: "right" }}>
-                            Updated {new Date(data.generatedAt).toLocaleString()} · {data.source}
+                            Updated {new Date(data.generatedAt).toLocaleString()}
                         </p>
                     </>
                 )}

@@ -289,14 +289,16 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
                         val initial = stateAfterTimeout.timeControl.map(_.initialTimeMs).getOrElse(0L)
                         val increment = stateAfterTimeout.timeControl.map(_.incrementMs).getOrElse(0L)
                         val delay = stateAfterTimeout.timeControl.map(_.delayMs).getOrElse(0L)
-                        JsonCodecs.TimeControlInfo(initial, increment, pt.getCurrentTime, delay)
+                        val remaining = if (stateAfterTimeout.isPaused) pt.remainingTimeMs else pt.getCurrentTime
+                        JsonCodecs.TimeControlInfo(initial, increment, remaining, delay)
                       }
 
                       val blackTimeInfo = if (isUnlimitedStatus) None else stateAfterTimeout.blackTime.map { pt =>
                         val initial = stateAfterTimeout.timeControl.map(_.initialTimeMs).getOrElse(0L)
                         val increment = stateAfterTimeout.timeControl.map(_.incrementMs).getOrElse(0L)
                         val delay = stateAfterTimeout.timeControl.map(_.delayMs).getOrElse(0L)
-                        JsonCodecs.TimeControlInfo(initial, increment, pt.getCurrentTime, delay)
+                        val remaining = if (stateAfterTimeout.isPaused) pt.remainingTimeMs else pt.getCurrentTime
+                        JsonCodecs.TimeControlInfo(initial, increment, remaining, delay)
                       }
 
                       val response = JsonCodecs.GameStatusResponse(

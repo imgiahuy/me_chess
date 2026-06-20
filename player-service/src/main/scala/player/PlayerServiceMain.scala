@@ -22,7 +22,35 @@ object PlayerServiceMain {
 
     println("[INFO] Starting Player microservice...")
 
-    val repo   = new PlayerRepository()
+    val mongoEnabled = sys.env.contains("MONGODB_HOST")
+    val repo: PlayerRepository = if (mongoEnabled) {
+      println("[INFO] MongoDB persistence enabled")
+      val maxRetries = 5
+      var attempt = 0
+      var connected: Option[MongoPlayerRepository] = None
+      while (attempt < maxRetries && connected.isEmpty) {
+        attempt += 1
+        try {
+          val mongoRepo = MongoPlayerRepository.fromEnv()
+          println(s"[INFO] Connected to MongoDB at ${sys.env.getOrElse("MONGODB_HOST", "localhost")}:${sys.env.getOrElse("MONGODB_PORT", "27017")}")
+          connected = Some(mongoRepo)
+        } catch {
+          case e: Exception =>
+            println(s"[WARN] MongoDB connection attempt $attempt/$maxRetries failed: ${e.getMessage}")
+            if (attempt < maxRetries) {
+              println(s"[INFO] Retrying in ${attempt * 2} seconds...")
+              Thread.sleep(attempt * 2000L)
+            }
+        }
+      }
+      connected.getOrElse {
+        println("[ERROR] All MongoDB connection attempts failed — PLAYER DATA WILL NOT PERSIST!")
+        new PlayerRepository()
+      }
+    } else {
+      println("[INFO] Using in-memory storage (set MONGODB_HOST to enable persistence)")
+      new PlayerRepository()
+    }
     val routes = new PlayerRoutes(repo).routes
 
     Http().newServerAt(host, port).bind(routes).onComplete {

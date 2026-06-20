@@ -41,6 +41,8 @@ class MongoGameDao(
         .append("timeControl", serializeTimeControl(game.timeControl))
         .append("whiteTime", serializePlayerTime(game.whiteTime))
         .append("blackTime", serializePlayerTime(game.blackTime))
+        .append("isPaused", game.isPaused)
+        .append("pausedAt", game.pausedAt.map(Long.box).orNull)
 
       collection.insertOne(doc)
       gameId
@@ -79,6 +81,9 @@ class MongoGameDao(
         // Deserialize game result
         val gameResult = parseGameResult(doc.getString("result"))
 
+        val isPaused = doc.getBoolean("isPaused", false)
+        val pausedAt = Option(doc.getLong("pausedAt")).map(_.toLong)
+
         Some(PositionState(
           board, turn, moves, whitePlayer, blackPlayer, creationDate, Some(id),
           timeControl, whiteTime, blackTime,
@@ -86,7 +91,9 @@ class MongoGameDao(
           positionHistory = List.empty,
           hasWhiteResigned = false,
           hasBlackResigned = false,
-          gameResult = gameResult
+          gameResult = gameResult,
+          isPaused = isPaused,
+          pausedAt = pausedAt
         ))
       } else {
         None
@@ -113,7 +120,9 @@ class MongoGameDao(
           .append("lastModified", new java.util.Date())
           .append("timeControl", serializeTimeControl(game.timeControl))
           .append("whiteTime", serializePlayerTime(game.whiteTime))
-          .append("blackTime", serializePlayerTime(game.blackTime)))
+          .append("blackTime", serializePlayerTime(game.blackTime))
+          .append("isPaused", game.isPaused)
+          .append("pausedAt", game.pausedAt.map(Long.box).orNull))
       )
 
       if (result.getModifiedCount > 0) {
@@ -184,6 +193,9 @@ class MongoGameDao(
         val blackTime = deserializePlayerTime(doc.getString("blackTime"))
         val gameResult = parseGameResult(doc.getString("result"))
 
+        val isPaused = doc.getBoolean("isPaused", false)
+        val pausedAt = Option(doc.getLong("pausedAt")).map(_.toLong)
+
         PositionState(
           board, turn, moves, whitePlayer, blackPlayer, creationDate, Some(gameId),
           timeControl = timeControl, whiteTime = whiteTime, blackTime = blackTime,
@@ -191,7 +203,9 @@ class MongoGameDao(
           positionHistory = List.empty,
           hasWhiteResigned = false,
           hasBlackResigned = false,
-          gameResult = gameResult
+          gameResult = gameResult,
+          isPaused = isPaused,
+          pausedAt = pausedAt
         )
       }.toList
     }
@@ -220,6 +234,9 @@ class MongoGameDao(
         val blackTime = deserializePlayerTime(doc.getString("blackTime"))
         val gameResult = parseGameResult(doc.getString("result"))
 
+        val isPaused = doc.getBoolean("isPaused", false)
+        val pausedAt = Option(doc.getLong("pausedAt")).map(_.toLong)
+
         Some(PositionState(
           board, turn, moves, whitePlayer, blackPlayer, creationDate, Some(gameId),
           timeControl = timeControl, whiteTime = whiteTime, blackTime = blackTime,
@@ -227,7 +244,9 @@ class MongoGameDao(
           positionHistory = List.empty,
           hasWhiteResigned = false,
           hasBlackResigned = false,
-          gameResult = gameResult
+          gameResult = gameResult,
+          isPaused = isPaused,
+          pausedAt = pausedAt
         ))
       } else {
         None

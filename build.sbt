@@ -212,7 +212,8 @@ lazy val playerService = project
       ("com.typesafe.akka" % "akka-stream_3" % "2.8.5")
         .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
       "com.lihaoyi" %% "upickle" % "3.1.0",
-      "org.scala-lang.modules" % "scala-java8-compat_3" % "1.0.2"
+      "org.scala-lang.modules" % "scala-java8-compat_3" % "1.0.2",
+      "org.mongodb" % "mongodb-driver-sync" % "4.11.0"
     ),
     sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyJarName := "chess-player-service.jar",
     sbtassembly.AssemblyPlugin.autoImport.assembly / mainClass := Some("player.PlayerServiceMain"),

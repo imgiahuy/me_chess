@@ -8,6 +8,7 @@ resources:
   - keycloak-realm-config.yaml
   - keycloak-deployment.yaml
   - kafka-deployment.yaml
+  - player-service-deployment.yaml
   - rest-api-deployment.yaml
   - web-frontend-deployment.yaml
   - kafka-ui-deployment.yaml

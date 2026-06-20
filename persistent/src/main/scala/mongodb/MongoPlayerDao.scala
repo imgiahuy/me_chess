@@ -15,7 +15,7 @@ import scala.jdk.CollectionConverters._
 class MongoPlayerDao(client: MongoClient, databaseName: String)(implicit ec: ExecutionContext) extends PlayerDao {
 
   private val database = client.getDatabase(databaseName)
-  private val collection: MongoCollection[Document] = database.getCollection("players")
+  private val collection: MongoCollection[Document] = database.getCollection("game_players")
 
   override def create(player: Player): Future[Int] = {
     Future {

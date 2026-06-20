@@ -51,6 +51,7 @@ kubectl apply -f k8s/namespace.yaml
 echo -e "${GREEN}Building Docker images for k3d...${NC}"
 docker build -t chess-rest-api:latest -f rest-api/Dockerfile .
 docker build -t chess-web-frontend:latest -f web/frontend/Dockerfile web/frontend
+docker build -t chess-player-service:latest -f player-service/Dockerfile .
 
 # Build Spark analytics image (multi-stage Dockerfile assembles JAR internally)
 echo -e "${GREEN}Building Spark analytics image...${NC}"
@@ -60,6 +61,7 @@ docker build -t chess-spark:latest -f spark/Dockerfile .
 echo -e "${GREEN}Importing images into k3d...${NC}"
 k3d image import chess-rest-api:latest -c chess-cluster
 k3d image import chess-web-frontend:latest -c chess-cluster
+k3d image import chess-player-service:latest -c chess-cluster
 k3d image import chess-spark:latest -c chess-cluster
 
 # Deploy Kubernetes manifests (local overlay with chess.local hostnames)
@@ -74,6 +76,7 @@ kubectl wait --for=condition=available deployment/zookeeper -n chess --timeout=3
 kubectl wait --for=condition=available deployment/kafka -n chess --timeout=300s
 kubectl wait --for=condition=available deployment/keycloak -n chess --timeout=300s
 kubectl wait --for=condition=available deployment/rest-api -n chess --timeout=300s
+kubectl wait --for=condition=available deployment/player-service -n chess --timeout=300s
 kubectl wait --for=condition=available deployment/web-frontend -n chess --timeout=300s
 
 # Add chess.local to /etc/hosts

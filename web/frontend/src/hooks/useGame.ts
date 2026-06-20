@@ -103,18 +103,58 @@ export function useGame(gameId: string) {
         refresh().finally(() => setLoading(false));
     }, [gameId]);
 
-    // Poll for game state updates every 2 seconds
+    // Auto-pause when user leaves the page (browser close, tab close, or navigation)
+    useEffect(() => {
+        const currentGame = gameRef.current;
+        if (!currentGame || currentGame.gameResult.status !== "ongoing" || currentGame.isPaused) return;
+        if (!currentGame.whiteTime && !currentGame.blackTime) return; // No time control
+
+        const handleBeforeUnload = () => {
+            // Use sendBeacon for reliable delivery during page unload
+            navigator.sendBeacon(`/v1/chess/games/${gameId}/pause`, "");
+        };
+
+        window.addEventListener("beforeunload", handleBeforeUnload);
+
+        return () => {
+            window.removeEventListener("beforeunload", handleBeforeUnload);
+            // Also pause when navigating away within the app (React cleanup)
+            const g = gameRef.current;
+            if (g && g.gameResult.status === "ongoing" && !g.isPaused && (g.whiteTime || g.blackTime)) {
+                navigator.sendBeacon(`/v1/chess/games/${gameId}/pause`, "");
+            }
+        };
+    }, [game?.gameResult.status, game?.isPaused, gameId]);
+
+    // SSE: subscribe to real-time game state events instead of polling
     useEffect(() => {
         if (!game || game.gameResult.status !== "ongoing") return;
+        if (game.isPaused) return;
 
-        const interval = setInterval(() => {
+        const eventSource = new EventSource(`/v1/chess/games/${gameId}/events`);
+
+        eventSource.addEventListener("game-state", (event: MessageEvent) => {
+            try {
+                const data = JSON.parse(event.data) as GameResponse;
+                serverTimestampRef.current = Date.now();
+                detectGameEnd(data);
+                setGame(data);
+            } catch {
+                // Ignore malformed events
+            }
+        });
+
+        eventSource.addEventListener("error", () => {
+            // EventSource reconnects automatically; fall back to a single poll
             checkTimeout();
-        }, 2000);
+        });
 
-        return () => clearInterval(interval);
-    }, [game?.gameResult.status, gameId, checkTimeout]);
+        return () => eventSource.close();
+    }, [game?.gameResult.status, game?.isPaused, gameId, checkTimeout]);
 
     async function pause() {
+        if (fetchingRef.current) return;
+        fetchingRef.current = true;
         setError(null);
         try {
             const data = await pauseGame(gameId);
@@ -123,10 +163,14 @@ export function useGame(gameId: string) {
         } catch (e) {
             setError(e instanceof Error ? e.message : "Failed to pause game");
             throw e;
+        } finally {
+            fetchingRef.current = false;
         }
     }
 
     async function resume() {
+        if (fetchingRef.current) return;
+        fetchingRef.current = true;
         setError(null);
         try {
             const data = await resumeGame(gameId);
@@ -135,6 +179,8 @@ export function useGame(gameId: string) {
         } catch (e) {
             setError(e instanceof Error ? e.message : "Failed to resume game");
             throw e;
+        } finally {
+            fetchingRef.current = false;
         }
     }
 

@@ -312,6 +312,9 @@ class GameSessionController(
         if (state.gameResult != model.Ongoing) {
           // Game already over, just return current state
           Right(state)
+        } else if (state.isPaused) {
+          // Don't check timeout while paused — clocks are frozen
+          Right(state)
         } else {
           // Check if current player's time has expired using real-time calculation
           val currentPlayer = state.turn
