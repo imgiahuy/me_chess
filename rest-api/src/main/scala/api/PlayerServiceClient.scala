@@ -87,21 +87,8 @@ class PlayerServiceClient(baseUrl: String = "http://player-service:8090")(implic
 // JSON request/response models for player-service
 case class CreatePlayerRequest(username: String, email: Option[String], initialRating: Int)
 case class RecordGameRequest(opponentId: String, result: String, ratingChange: Int)
-case class PlayerListResponse(players: List[Player])
+case class PlayerListResponse(players: List[Player], total: Int = 0)
 case class Player(id: String, username: String, email: Option[String], rating: Int, gamesPlayed: Int, wins: Int, losses: Int, draws: Int, createdAt: String, lastSeenAt: String)
-
-// Custom Option[String] codec to serialize None as null instead of []
-given optionStringRW: ReadWriter[Option[String]] = readwriter[ujson.Value].bimap(
-  {
-    case Some(s) => ujson.Str(s)
-    case None    => ujson.Null
-  },
-  {
-    case ujson.Null   => None
-    case ujson.Str(s) => Some(s)
-    case other        => Some(other.str)
-  }
-)
 
 given ReadWriter[CreatePlayerRequest] = macroRW
 given ReadWriter[RecordGameRequest] = macroRW

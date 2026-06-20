@@ -1,7 +1,7 @@
 package mongodb
 
 import dao.MoveDao
-import _root_.model.{Move, Position}
+import _root_.model.{Bishop, CastlingKingSide, CastlingQueenSide, EnPassant, Knight, Move, Position, Promotion, Queen, Rook, SpecialMoveType}
 import com.mongodb.client.MongoCollection
 import com.mongodb.client.model.Filters
 import com.mongodb.client.model.Sorts.ascending
@@ -26,6 +26,7 @@ class MongoMoveDao(client: MongoClient, databaseName: String)(implicit ec: Execu
         .append("fromRow", move.from.row)
         .append("toCol", move.to.col)
         .append("toRow", move.to.row)
+        .append("specialMove", serializeSpecialMove(move.specialMove))
       collection.insertOne(doc)
       Math.abs((gameId + moveIndex).hashCode)
     }
@@ -44,10 +45,35 @@ class MongoMoveDao(client: MongoClient, databaseName: String)(implicit ec: Execu
         .map { doc =>
           Move(
             Position(doc.getInteger("fromCol"), doc.getInteger("fromRow")),
-            Position(doc.getInteger("toCol"), doc.getInteger("toRow"))
+            Position(doc.getInteger("toCol"), doc.getInteger("toRow")),
+            deserializeSpecialMove(doc.getString("specialMove"))
           )
         }.toList
     }
+  }
+
+  private def serializeSpecialMove(sm: Option[SpecialMoveType]): String = sm match {
+    case None => null
+    case Some(CastlingKingSide)  => "castling_kingside"
+    case Some(CastlingQueenSide) => "castling_queenside"
+    case Some(EnPassant)         => "en_passant"
+    case Some(Promotion(Queen))  => "promotion_queen"
+    case Some(Promotion(Rook))   => "promotion_rook"
+    case Some(Promotion(Bishop)) => "promotion_bishop"
+    case Some(Promotion(Knight)) => "promotion_knight"
+    case Some(Promotion(_))      => "promotion_queen"
+  }
+
+  private def deserializeSpecialMove(s: String): Option[SpecialMoveType] = s match {
+    case null | ""              => None
+    case "castling_kingside"    => Some(CastlingKingSide)
+    case "castling_queenside"   => Some(CastlingQueenSide)
+    case "en_passant"           => Some(EnPassant)
+    case "promotion_queen"      => Some(Promotion(Queen))
+    case "promotion_rook"       => Some(Promotion(Rook))
+    case "promotion_bishop"     => Some(Promotion(Bishop))
+    case "promotion_knight"     => Some(Promotion(Knight))
+    case _                      => None
   }
 
   override def deleteByGameId(gameId: String): Future[Int] = {

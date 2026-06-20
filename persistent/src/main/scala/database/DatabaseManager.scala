@@ -1,33 +1,65 @@
 package database
 
-import dao.{GameDao, MoveDao, PlayerDao}
-import mongodb.{MongoGameDao, MongoMoveDao, MongoPlayerDao}
+import dao.{GameDao, GameEventDao, MoveDao, PlayerDao}
+import mongodb.{MongoGameDao, MongoGameEventDao, MongoMoveDao, MongoPlayerDao}
 import com.mongodb.client.MongoClient as JavaMongoClient
 import com.mongodb.MongoClientSettings
 import com.mongodb.client.MongoClients
 import com.mongodb.ServerAddress
-import slick.{H2Tables, PostgresTables, SlickGameDao, SlickMoveDao, SlickPlayerDao, Tables}
+import slick.{H2Tables, PostgresTables, SlickGameDao, SlickGameEventDao, SlickMoveDao, SlickPlayerDao, Tables}
 import slick.jdbc.JdbcBackend.Database
 
 import scala.concurrent.{ExecutionContext, Future}
-import slick.jdbc.JdbcProfile
 
 /** Manages database connections and provides DAO instances. */
-class DatabaseManager(db: Database, tables: Tables)(implicit ec: ExecutionContext) {
+class DatabaseManager(
+  db: Database,
+  tables: Tables,
+  flywayCredentials: Option[(String, String, String)] = None,
+  redisPool: Option[redis.clients.jedis.JedisPool] = None
+)(implicit ec: ExecutionContext) {
   import tables.profile.api._
 
-  private val _playerDao = new SlickPlayerDao(db, tables)
+  private val _rawPlayerDao = new SlickPlayerDao(db, tables)
+  private val _playerDao: PlayerDao = redisPool match {
+    case Some(pool) => new redis.CachedPlayerDao(_rawPlayerDao, pool)
+    case None => _rawPlayerDao
+  }
   private val _moveDao = new SlickMoveDao(db, tables)
-  private val _gameDao = new SlickGameDao(db, tables, _playerDao, _moveDao)
+  private val _rawGameDao = new SlickGameDao(db, tables, _rawPlayerDao, _moveDao)
+  private val _gameDao: GameDao = redisPool match {
+    case Some(pool) => new redis.CachedGameDao(_rawGameDao, pool)
+    case None => _rawGameDao
+  }
 
-  /** Initializes the database schema. */
+  /** Initializes the database schema using Slick DDL (for H2 in-memory tests only). */
   def initializeSchema(): Future[Unit] = {
     db.run(tables.schema.create)
   }
 
-  /** Drops all tables and recreates the schema. */
+  /** Initializes the database schema using Flyway versioned migrations.
+    *
+    * This is the preferred approach for production PostgreSQL and H2 file-based databases.
+    */
+  def initializeSchemaWithMigrations(jdbcUrl: String, user: String, password: String): Future[Unit] = {
+    Future {
+      FlywayMigrationRunner.migrate(jdbcUrl, user, password)
+    }
+  }
+
+  /** Resets the schema.
+    *
+    * For Flyway-managed databases (Postgres) this runs Flyway clean + migrate so the
+    * schema is always consistent with the versioned migration scripts.
+    * For H2 in-memory databases this falls back to Slick DDL drop + create.
+    */
   def resetSchema(): Future[Unit] = {
-    db.run(tables.schema.drop).flatMap(_ => initializeSchema())
+    flywayCredentials match {
+      case Some((url, user, password)) =>
+        Future { FlywayMigrationRunner.cleanAndMigrate(url, user, password) }.map(_ => ())
+      case None =>
+        db.run(tables.schema.dropIfExists).flatMap(_ => initializeSchema())
+    }
   }
 
   /** Closes the database connection. */
@@ -44,17 +76,29 @@ class DatabaseManager(db: Database, tables: Tables)(implicit ec: ExecutionContex
 
   /** Returns the GameDao instance. */
   def gameDao: GameDao = _gameDao
+
+  /** Returns the GameEventDao for the transactional outbox pattern. */
+  lazy val gameEventDao: GameEventDao = new SlickGameEventDao(db, tables)
 }
 
 /** MongoDB database manager. */
 class MongoDatabaseManager(
   client: JavaMongoClient,
-  databaseName: String
+  databaseName: String,
+  redisPool: Option[redis.clients.jedis.JedisPool] = None
 )(implicit ec: ExecutionContext) {
 
-  private val _playerDao = new MongoPlayerDao(client, databaseName)
+  private val _rawPlayerDao = new MongoPlayerDao(client, databaseName)
+  private val _playerDao: PlayerDao = redisPool match {
+    case Some(pool) => new redis.CachedPlayerDao(_rawPlayerDao, pool)
+    case None => _rawPlayerDao
+  }
   private val _moveDao = new MongoMoveDao(client, databaseName)
-  private val _gameDao = new MongoGameDao(client, databaseName, _playerDao, _moveDao)
+  private val _rawGameDao = new MongoGameDao(client, databaseName, _playerDao, _moveDao)
+  private val _gameDao: GameDao = redisPool match {
+    case Some(pool) => new redis.CachedGameDao(_rawGameDao, pool)
+    case None => _rawGameDao
+  }
 
   /** MongoDB doesn't require schema initialization - collections are created on demand. */
   def initializeSchema(): Future[Unit] = {
@@ -66,8 +110,9 @@ class MongoDatabaseManager(
     Future {
       val db = client.getDatabase(databaseName)
       db.getCollection("games").drop()
-      db.getCollection("players").drop()
+      db.getCollection("game_players").drop()
       db.getCollection("moves").drop()
+      db.getCollection("game_events").drop()
     }
   }
 
@@ -86,6 +131,9 @@ class MongoDatabaseManager(
 
   /** Returns the GameDao instance. */
   def gameDao: GameDao = _gameDao
+
+  /** Returns the GameEventDao for the transactional outbox pattern. */
+  lazy val gameEventDao: GameEventDao = new MongoGameEventDao(client, databaseName)
 }
 
 /** Factory for creating DatabaseManager instances. */
@@ -109,35 +157,60 @@ object DatabaseManager {
     new DatabaseManager(db, H2Tables)
   }
 
-  /** Creates a DatabaseManager with a PostgreSQL database. */
+  /** Creates a DatabaseManager for PostgreSQL from a full JDBC URL.
+    *
+    * Useful in tests where the JDBC URL is provided directly (e.g. Testcontainers).
+    */
+  def postgresqlFromUrl(
+    jdbcUrl: String,
+    user: String,
+    password: String,
+    maxConnections: Int = 20,
+    redisPool: Option[redis.clients.jedis.JedisPool] = None
+  )(implicit ec: ExecutionContext): DatabaseManager = {
+    val db = Database.forURL(
+      url = jdbcUrl,
+      driver = "org.postgresql.Driver",
+      user = user,
+      password = password,
+      executor = slick.util.AsyncExecutor("postgresql", numThreads = maxConnections, queueSize = 1000)
+    )
+    new DatabaseManager(db, PostgresTables, flywayCredentials = Some((jdbcUrl, user, password)), redisPool = redisPool)
+  }
+
+  /** Creates a DatabaseManager with a PostgreSQL database backed by HikariCP. */
   def postgresql(
     host: String = "localhost",
     port: Int = 5432,
     database: String,
     user: String,
-    password: String
+    password: String,
+    maxConnections: Int = 20,
+    redisPool: Option[redis.clients.jedis.JedisPool] = None
   )(implicit ec: ExecutionContext): DatabaseManager = {
     val url = s"jdbc:postgresql://$host:$port/$database"
     val db = Database.forURL(
       url = url,
       driver = "org.postgresql.Driver",
       user = user,
-      password = password
+      password = password,
+      executor = slick.util.AsyncExecutor("postgresql", numThreads = maxConnections, queueSize = 1000)
     )
-    new DatabaseManager(db, PostgresTables)
+    new DatabaseManager(db, PostgresTables, flywayCredentials = Some((url, user, password)), redisPool = redisPool)
   }
 
   /** Creates a DatabaseManager with a MongoDB database. */
   def mongodb(
     host: String = "localhost",
     port: Int = 27017,
-    database: String = "chess"
+    database: String = "chess",
+    redisPool: Option[redis.clients.jedis.JedisPool] = None
   )(implicit ec: ExecutionContext): MongoDatabaseManager = {
     val settings = MongoClientSettings.builder()
       .applyToClusterSettings(builder => builder.hosts(java.util.List.of(new ServerAddress(host, port))))
       .build()
     val client = MongoClients.create(settings)
-    new MongoDatabaseManager(client, database)
+    new MongoDatabaseManager(client, database, redisPool)
   }
 
   /** Creates a DatabaseManager with a custom Database instance and Tables. */

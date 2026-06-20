@@ -93,10 +93,10 @@ object GameService {
         .pieceAt(normalizedMove.from)
         .toRight(s"No piece at source square")
       _ <- isLegalMove(snapshot, normalizedMove, piece)
-      newBoard <- applyMoveToBoard(snapshot.board, normalizedMove, piece, snapshot)
+      newBoard <- applyMoveToBoard(snapshot.board, normalizedMove, piece, Some(snapshot))
       nextTurn = if (snapshot.turn == White) Black else White
       // Track halfmoves for fifty-move rule
-      isEnPassantCapture = piece.pieceType == Pawn && 
+      isEnPassantCapture = piece.pieceType == Pawn &&
         (normalizedMove.to.col - normalizedMove.from.col).abs == 1 &&
         snapshot.board.isEmpty(normalizedMove.to) &&
         snapshot.moveHistory.nonEmpty
@@ -156,8 +156,8 @@ object GameService {
    /** Checks if the move is legal according to piece movement rules and doesn't leave king in check. */
   def isLegalMove(snapshot: PositionState, move: Move, piece: Piece): Either[String, Unit] = {
     for {
-      _ <- isPieceMoveLegal(snapshot.board, move, piece, snapshot)
-      boardAfterMove <- applyMoveToBoard(snapshot.board, move, piece, snapshot)
+      _ <- isPieceMoveLegal(snapshot.board, move, piece, Some(snapshot))
+      boardAfterMove <- applyMoveToBoard(snapshot.board, move, piece, Some(snapshot))
       _ <- Either.cond(
         !isKingInCheck(boardAfterMove, piece.color),
         (),
@@ -167,9 +167,9 @@ object GameService {
   }
 
   /** Validates that a move follows the piece's movement rules. */
-  def isPieceMoveLegal(board: Board, move: Move, piece: Piece, snapshot: PositionState = null): Either[String, Unit] = {
+  def isPieceMoveLegal(board: Board, move: Move, piece: Piece, snapshot: Option[PositionState] = None): Either[String, Unit] = {
     piece.pieceType match {
-      case Pawn   => isPawnMoveLegal(board, move, piece, if (snapshot != null) snapshot else PositionState(board, White, List(), Player(""), Player(""), timeControl = None))
+      case Pawn   => isPawnMoveLegal(board, move, piece, snapshot.getOrElse(PositionState(board, White, List(), Player(""), Player(""), timeControl = None)))
       case Knight => isKnightMoveLegal(board, move)
       case Bishop => isBishopMoveLegal(board, move)
       case Rook   => isRookMoveLegal(board, move)
@@ -181,7 +181,7 @@ object GameService {
   /** Simplified version for attack detection - doesn't check castling to avoid infinite recursion */
   private def isPieceMoveLegalForAttack(board: Board, move: Move, piece: Piece): Either[String, Unit] = {
     piece.pieceType match {
-      case Pawn   => isPawnMoveLegal(board, move, piece, PositionState(board, White, List(), Player(""), Player(""), timeControl = None))
+      case Pawn   => isPawnMoveLegal(board, move, piece, PositionState(board, White, List(), Player(""), Player("")))
       case Knight => isKnightMoveLegal(board, move)
       case Bishop => isBishopMoveLegal(board, move)
       case Rook   => isRookMoveLegal(board, move)
@@ -321,7 +321,7 @@ object GameService {
 
   // ── King movement ───────────────────────────────────────────────────────
 
-  private def isKingMoveLegal(board: Board, move: Move, snapshot: PositionState = null): Either[String, Unit] = {
+  private def isKingMoveLegal(board: Board, move: Move, snapshot: Option[PositionState] = None): Either[String, Unit] = {
     val deltaCol = (move.to.col - move.from.col).abs
     val deltaRow = (move.to.row - move.from.row).abs
 
@@ -331,10 +331,9 @@ object GameService {
     }
     // Castling
     else if (deltaRow == 0 && deltaCol == 2 && move.specialMove.isDefined) {
-      if (snapshot == null) {
-        Left("Cannot validate castling without game snapshot")
-      } else {
-        isCastlingLegal(board, move, snapshot)
+      snapshot match {
+        case None    => Left("Cannot validate castling without game snapshot")
+        case Some(s) => isCastlingLegal(board, move, s)
       }
     }
     else {
@@ -430,7 +429,7 @@ object GameService {
   // ── Board updates ───────────────────────────────────────────────────────
 
   /** Applies a move to the board, handling captures and piece removal. */
-  private def applyMoveToBoard(board: Board, move: Move, piece: Piece, snapshot: PositionState = null): Either[String, Board] = {
+  private def applyMoveToBoard(board: Board, move: Move, piece: Piece, snapshot: Option[PositionState] = None): Either[String, Board] = {
     move.specialMove match {
       // Handle pawn promotion
       case Some(Promotion(promotionPiece)) =>
@@ -467,11 +466,10 @@ object GameService {
       // Regular move (with possible capture) - auto-detect en passant
       case None =>
         // Check if this is an en passant capture (diagonal pawn move to empty square)
-        val isEnPassant = piece.pieceType == Pawn && 
+        val isEnPassant = piece.pieceType == Pawn &&
           (move.to.col - move.from.col).abs == 1 &&
           board.isEmpty(move.to) &&
-          snapshot != null &&
-          snapshot.moveHistory.nonEmpty
+          snapshot.exists(_.moveHistory.nonEmpty)
 
         if (isEnPassant) {
           val capturedPawnPos = Position(move.to.col, move.from.row)
@@ -663,9 +661,9 @@ object GameService {
         .pieceAt(normalizedMove.from)
         .toRight(s"No piece at source square")
       _ <- isLegalMove(snapshot, normalizedMove, piece)
-      newBoard <- applyMoveToBoard(snapshot.board, normalizedMove, piece, snapshot)
+      newBoard <- applyMoveToBoard(snapshot.board, normalizedMove, piece, Some(snapshot))
       nextTurn = if (snapshot.turn == White) Black else White
-      isEnPassantCapture = piece.pieceType == Pawn && 
+      isEnPassantCapture = piece.pieceType == Pawn &&
         (normalizedMove.to.col - normalizedMove.from.col).abs == 1 &&
         snapshot.board.isEmpty(normalizedMove.to) &&
         snapshot.moveHistory.nonEmpty

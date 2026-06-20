@@ -113,6 +113,20 @@ services:
       retries: 5
       start_period: 30s
 
+  # Redis Cache Service
+  redis:
+    image: redis:7-alpine
+    container_name: chess-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - chess-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # REST API Service
   rest-api:
     build:
@@ -130,11 +144,16 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       - JAVA_OPTS=-Xmx512m
       - MONGODB_HOST=mongodb
       - MONGODB_PORT=27017
       - MONGODB_DATABASE=chess
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_ENABLED=true
       - KAFKA_ENABLED=true
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - SPARK_OUTPUT_PATH=/tmp/chess-analytics

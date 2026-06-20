@@ -74,7 +74,17 @@ lazy val persistent = project
       "org.postgresql" % "postgresql" % "42.7.4",
       "org.mongodb" % "mongodb-driver-sync" % "4.11.0",
       "ch.qos.logback" % "logback-classic" % "1.4.14",
-      "com.lihaoyi" %% "upickle" % "3.1.0"
+      "com.lihaoyi" %% "upickle" % "3.1.0",
+      // Flyway for database migrations
+      "org.flywaydb" % "flyway-core" % "9.22.3",
+      // Redis client for caching
+      "redis.clients" % "jedis" % "5.0.0",
+      // Testcontainers for integration testing
+      "org.testcontainers" % "testcontainers" % "1.19.8" % Test,
+      "org.testcontainers" % "postgresql" % "1.19.8" % Test,
+      "org.testcontainers" % "mongodb" % "1.19.8" % Test,
+      "org.testcontainers" % "junit-jupiter" % "1.19.8" % Test,
+      "org.slf4j" % "slf4j-simple" % "2.0.9" % Test
     )
   )
   .dependsOn(core, shared)
@@ -231,6 +241,7 @@ lazy val root = project
   .aggregate(
     tui,
     gui,
+    persistent,
     restApi,
     spark,
     playerService

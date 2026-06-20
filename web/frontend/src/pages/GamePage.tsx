@@ -233,6 +233,13 @@ export function GamePage() {
         }
     }
 
+    async function handleBackToMenu() {
+        if (game && game.gameResult.status === "ongoing" && !game.isPaused && (game.whiteTime || game.blackTime)) {
+            try { await pause(); } catch { /* best-effort */ }
+        }
+        navigate("/");
+    }
+
     async function handlePause() {
         setMoveError(null);
         setSaveMessage(null);
@@ -314,7 +321,7 @@ export function GamePage() {
                 borderBottom: "1px solid var(--color-border)",
                 position: "sticky", top: 0, zIndex: 50,
             }}>
-                <button onClick={() => navigate("/")} className="ghost" style={{ padding: "0.3rem 0.6rem" }}>← Menu</button>
+                <button onClick={handleBackToMenu} className="ghost" style={{ padding: "0.3rem 0.6rem" }}>← Menu</button>
                 <span style={{ fontSize: "0.875rem", color: "var(--color-text-muted)", fontFamily: "monospace" }}>
                     #{game.gameId.slice(0, 8)}
                 </span>
@@ -499,7 +506,7 @@ export function GamePage() {
                         </p>
                         <div style={{ display: "flex", gap: "0.75rem", justifyContent: "center" }}>
                             <button onClick={() => { setShowGameEndDialog(false); clearGameEndNotification(); }}>Continue</button>
-                            <button onClick={() => navigate("/")} className="secondary">← Menu</button>
+                            <button onClick={handleBackToMenu} className="secondary">← Menu</button>
                         </div>
                     </div>
                 </div>

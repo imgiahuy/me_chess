@@ -6,6 +6,7 @@ import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.{Directives, Route}
 import controller.GameController
 import database.DatabaseManager
+import redis.{RedisClientFactory, RedisConfig}
 import repository.DatabaseGameRepository
 import kafka.{KafkaGameEventService, KafkaApiRoutes}
 
@@ -48,10 +49,25 @@ object ChessRestServer {
      // println("[INFO] Initializing database schema...")
      // dbManager.initializeSchema()
 
+      // Initialize optional Redis cache pool
+      val redisEnabled = sys.env.getOrElse("REDIS_ENABLED", "false").toBoolean
+      val redisPool = if (redisEnabled) {
+        val redisHost = sys.env.getOrElse("REDIS_HOST", "localhost")
+        val redisPort = sys.env.getOrElse("REDIS_PORT", "6379").toInt
+        println(s"[INFO] Redis caching enabled at $redisHost:$redisPort")
+        Some(RedisClientFactory.createPool(
+          RedisConfig.fromConfig().copy(host = redisHost, port = redisPort)
+        ))
+      } else {
+        println("[INFO] Redis caching disabled (set REDIS_ENABLED=true to enable)")
+        None
+      }
+
       val dbManager = DatabaseManager.mongodb(
         host = sys.env.getOrElse("MONGODB_HOST", "localhost"),
         port = sys.env.getOrElse("MONGODB_PORT", "27017").toInt,
-        database = sys.env.getOrElse("MONGODB_DATABASE", "chess")
+        database = sys.env.getOrElse("MONGODB_DATABASE", "chess"),
+        redisPool = redisPool
       )
 
       // Initialize database schema
@@ -135,6 +151,11 @@ object ChessRestServer {
           println("[INFO] Create Game: POST " + serverUrl + "/v1/chess/games")
           println("[INFO] List Games: GET " + serverUrl + "/v1/chess/games")
           println("[INFO] Database: MongoDB (games will persist in database)")
+          if (redisEnabled) {
+            println("[INFO] Redis caching enabled for player lookups and game summaries")
+          } else {
+            println("[INFO] Redis caching disabled")
+          }
           if (kafkaEnabled) {
             println("[INFO] Kafka Events: Enabled - streaming to " + sys.env.getOrElse("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"))
             println("[INFO] Kafka Health: GET " + serverUrl + "/v1/kafka/health")
@@ -150,6 +171,10 @@ object ChessRestServer {
               kafkaService.foreach { service =>
                 println("[INFO] Shutting down Kafka service...")
                 service.shutdown()
+              }
+              redisPool.foreach { pool =>
+                println("[INFO] Shutting down Redis pool...")
+                pool.close()
               }
               dbManager.close()
               println("[INFO] Database closed")

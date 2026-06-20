@@ -289,7 +289,8 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
                         val initial = stateAfterTimeout.timeControl.map(_.initialTimeMs).getOrElse(0L)
                         val increment = stateAfterTimeout.timeControl.map(_.incrementMs).getOrElse(0L)
                         val delay = stateAfterTimeout.timeControl.map(_.delayMs).getOrElse(0L)
-                        val remaining = if (stateAfterTimeout.isPaused) pt.remainingTimeMs else pt.getCurrentTime
+                        val isWhiteActive = stateAfterTimeout.turn == model.White
+                        val remaining = if (stateAfterTimeout.isPaused || !isWhiteActive) pt.remainingTimeMs else pt.getCurrentTime
                         JsonCodecs.TimeControlInfo(initial, increment, remaining, delay)
                       }
 
@@ -297,7 +298,8 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
                         val initial = stateAfterTimeout.timeControl.map(_.initialTimeMs).getOrElse(0L)
                         val increment = stateAfterTimeout.timeControl.map(_.incrementMs).getOrElse(0L)
                         val delay = stateAfterTimeout.timeControl.map(_.delayMs).getOrElse(0L)
-                        val remaining = if (stateAfterTimeout.isPaused) pt.remainingTimeMs else pt.getCurrentTime
+                        val isBlackActive = stateAfterTimeout.turn == model.Black
+                        val remaining = if (stateAfterTimeout.isPaused || !isBlackActive) pt.remainingTimeMs else pt.getCurrentTime
                         JsonCodecs.TimeControlInfo(initial, increment, remaining, delay)
                       }
 

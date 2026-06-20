@@ -1,6 +1,6 @@
 package mongodb
 
-import dao.GameDao
+import dao.{GameDao, MoveDao, PlayerDao}
 import _root_.model.{Board, Black, Bishop, Checkmate, Color, DeadPosition, Draw, DrawReason, FiftyMoveRule, InsufficientMaterial, King, Knight, Move, MutualAgreement, Ongoing, Pawn, Piece, PieceType, Player, PlayerTime, Position, PositionState, Queen, Resignation, Rook, Stalemate, ThreefoldRepetition, TimeControl, TimeOut, White}
 import com.mongodb.client.MongoCollection
 import com.mongodb.client.model.Filters
@@ -15,8 +15,8 @@ import scala.jdk.CollectionConverters._
 class MongoGameDao(
   client: MongoClient,
   databaseName: String,
-  playerDao: MongoPlayerDao,
-  moveDao: MongoMoveDao
+  playerDao: PlayerDao,
+  moveDao: MoveDao
 )(implicit ec: ExecutionContext) extends GameDao {
 
   private val database = client.getDatabase(databaseName)
@@ -34,6 +34,8 @@ class MongoGameDao(
         .append("id", gameId)
         .append("whitePlayerId", whiteId)
         .append("blackPlayerId", blackId)
+        .append("whiteName", game.whitePlayer.name)
+        .append("blackName", game.blackPlayer.name)
         .append("turn", game.turn.toString)
         .append("creationDate", java.util.Date.from(game.creationDate.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant))
         .append("lastModified", new java.util.Date())
@@ -41,6 +43,8 @@ class MongoGameDao(
         .append("timeControl", serializeTimeControl(game.timeControl))
         .append("whiteTime", serializePlayerTime(game.whiteTime))
         .append("blackTime", serializePlayerTime(game.blackTime))
+        .append("moveCount", game.moveHistory.length)
+        .append("isGameOver", game.gameResult != Ongoing)
         .append("isPaused", game.isPaused)
         .append("pausedAt", game.pausedAt.map(Long.box).orNull)
 
@@ -56,62 +60,51 @@ class MongoGameDao(
 
   override def findById(id: String): Future[Option[PositionState]] = {
     Future {
-      val doc = collection.find(Filters.eq("id", id)).first()
-      if (doc != null) {
-        val whitePlayerId = doc.getInteger("whitePlayerId")
-        val blackPlayerId = doc.getInteger("blackPlayerId")
-
-        // Note: This is a simplification - in production you'd store actual player names
-        val whitePlayer = Player(s"Player$whitePlayerId")
-        val blackPlayer = Player(s"Player$blackPlayerId")
-
-        val board = deserializeBoard(doc.getString("boardState"))
-        val turn = parseColor(doc.getString("turn"))
-        val creationDate = doc.getDate("creationDate").toInstant
-          .atZone(java.time.ZoneId.systemDefault()).toLocalDate
-
-        // Get moves
-        val moves = scala.concurrent.Await.result(moveDao.findByGameId(id), scala.concurrent.duration.Duration(5, "seconds"))
-
-        // Deserialize time control and player times
-        val timeControl = deserializeTimeControl(doc.getString("timeControl"))
-        val whiteTime = deserializePlayerTime(doc.getString("whiteTime"))
-        val blackTime = deserializePlayerTime(doc.getString("blackTime"))
-
-        // Deserialize game result
-        val gameResult = parseGameResult(doc.getString("result"))
-
-        val isPaused = doc.getBoolean("isPaused", false)
-        val pausedAt = Option(doc.getLong("pausedAt")).map(_.toLong)
-
-        Some(PositionState(
-          board, turn, moves, whitePlayer, blackPlayer, creationDate, Some(id),
-          timeControl, whiteTime, blackTime,
-          halfmovesSinceLastCaptureOrPawn = 0,
-          positionHistory = List.empty,
-          hasWhiteResigned = false,
-          hasBlackResigned = false,
-          gameResult = gameResult,
-          isPaused = isPaused,
-          pausedAt = pausedAt
-        ))
-      } else {
-        None
-      }
+      Option(collection.find(Filters.eq("id", id)).first())
+    }.flatMap {
+      case None => Future.successful(None)
+      case Some(doc) =>
+        val whiteName = Option(doc.getString("whiteName")).getOrElse(s"Player${doc.getInteger("whitePlayerId")}")
+        val blackName = Option(doc.getString("blackName")).getOrElse(s"Player${doc.getInteger("blackPlayerId")}")
+        for {
+          moves <- moveDao.findByGameId(id)
+        } yield {
+          val board = deserializeBoard(doc.getString("boardState"))
+          val turn = parseColor(doc.getString("turn"))
+          val creationDate = doc.getDate("creationDate").toInstant
+            .atZone(java.time.ZoneId.systemDefault()).toLocalDate
+          val timeControl = deserializeTimeControl(doc.getString("timeControl"))
+          val whiteTime = deserializePlayerTime(doc.getString("whiteTime"))
+          val blackTime = deserializePlayerTime(doc.getString("blackTime"))
+          val gameResult = parseGameResult(doc.getString("result"))
+          val isPaused = doc.getBoolean("isPaused", false)
+          val pausedAt = Option(doc.getLong("pausedAt")).map(_.toLong)
+          Some(PositionState(
+            board, turn, moves, Player(whiteName), Player(blackName), creationDate, Some(id),
+            timeControl, whiteTime, blackTime,
+            halfmovesSinceLastCaptureOrPawn = 0,
+            positionHistory = List.empty,
+            hasWhiteResigned = false,
+            hasBlackResigned = false,
+            gameResult = gameResult,
+            isPaused = isPaused,
+            pausedAt = pausedAt
+          ))
+        }
     }
   }
 
   override def update(id: String, game: PositionState): Future[Boolean] = {
+    val boardJson = serializeBoard(game.board)
+    val resultStr = game.gameResult match {
+      case Ongoing => null
+      case Checkmate(winner) => s"checkmate:$winner"
+      case Draw(reason) => s"draw:${drawReasonToString(reason)}"
+      case Resignation(winner) => s"resignation:$winner"
+      case TimeOut(winner) => s"timeout:$winner"
+    }
     Future {
-      val boardJson = serializeBoard(game.board)
-      val resultStr = game.gameResult match {
-        case Ongoing => null
-        case Checkmate(winner) => s"checkmate:$winner"
-        case Draw(reason) => s"draw:${drawReasonToString(reason)}"
-        case Resignation(winner) => s"resignation:$winner"
-        case TimeOut(winner) => s"timeout:$winner"
-      }
-      val result = collection.updateOne(
+      collection.updateOne(
         Filters.eq("id", id),
         new Document("$set", new Document()
           .append("turn", game.turn.toString)
@@ -121,28 +114,28 @@ class MongoGameDao(
           .append("timeControl", serializeTimeControl(game.timeControl))
           .append("whiteTime", serializePlayerTime(game.whiteTime))
           .append("blackTime", serializePlayerTime(game.blackTime))
+          .append("moveCount", game.moveHistory.length)
+          .append("isGameOver", game.gameResult != Ongoing)
           .append("isPaused", game.isPaused)
           .append("pausedAt", game.pausedAt.map(Long.box).orNull))
-      )
-
-      if (result.getModifiedCount > 0) {
-        // Update moves: delete old ones and insert new ones
-        scala.concurrent.Await.result(moveDao.deleteByGameId(id), scala.concurrent.duration.Duration(5, "seconds"))
-        val moveFutures = game.moveHistory.zipWithIndex.map { case (move, index) =>
-          moveDao.create(move, id, index)
+      ).getModifiedCount > 0
+    }.flatMap { modified =>
+      if (modified) {
+        moveDao.deleteByGameId(id).flatMap { _ =>
+          val moveFutures = game.moveHistory.zipWithIndex.map { case (move, index) =>
+            moveDao.create(move, id, index)
+          }
+          Future.sequence(moveFutures).map(_ => true)
         }
-        scala.concurrent.Await.result(Future.sequence(moveFutures), scala.concurrent.duration.Duration(5, "seconds"))
-        true
       } else {
-        false
+        Future.successful(false)
       }
     }
   }
 
   override def delete(id: String): Future[Boolean] = {
-    Future {
-      scala.concurrent.Await.result(moveDao.deleteByGameId(id), scala.concurrent.duration.Duration(5, "seconds"))
-      collection.deleteOne(Filters.eq("id", id)).getDeletedCount > 0
+    moveDao.deleteByGameId(id).flatMap { _ =>
+      Future { collection.deleteOne(Filters.eq("id", id)).getDeletedCount > 0 }
     }
   }
 
@@ -154,103 +147,88 @@ class MongoGameDao(
 
   override def listSummaries(): Future[List[(String, String, Int, Boolean)]] = {
     Future {
-      // Use projection to only fetch id and turn, not boardState or other large fields
       val projection = new Document()
         .append("id", 1)
         .append("turn", 1)
+        .append("moveCount", 1)
+        .append("isGameOver", 1)
         .append("_id", 0)
       collection.find().projection(projection).asScala.map { doc =>
         val gameId = doc.getString("id")
         val turn = doc.getString("turn")
-        // Count moves without fetching them - use move count from metadata if available
-        // For now, we'll estimate from the document or return 0
-        val moveCount = 0 // TODO: Store move count in game document for efficiency
-        val isGameOver = false // TODO: Store game over status in game document for efficiency
+        val moveCount = Option(doc.getInteger("moveCount")).map(_.toInt).getOrElse(0)
+        val isGameOver = doc.getBoolean("isGameOver", false)
         (gameId, turn, moveCount, isGameOver)
       }.toList
     }
   }
 
   override def findAll(): Future[List[PositionState]] = {
-    Future {
-      collection.find().asScala.map { doc =>
+    val docs = Future { collection.find().asScala.toList }
+    docs.flatMap { docList =>
+      Future.sequence(docList.map { doc =>
         val gameId = doc.getString("id")
-        val whitePlayerId = doc.getInteger("whitePlayerId")
-        val blackPlayerId = doc.getInteger("blackPlayerId")
-
-        val whitePlayer = Player(s"Player$whitePlayerId")
-        val blackPlayer = Player(s"Player$blackPlayerId")
-
-        val board = deserializeBoard(doc.getString("boardState"))
-        val turn = parseColor(doc.getString("turn"))
-        val creationDate = doc.getDate("creationDate").toInstant
-          .atZone(java.time.ZoneId.systemDefault()).toLocalDate
-
-        val moves = scala.concurrent.Await.result(moveDao.findByGameId(gameId), scala.concurrent.duration.Duration(5, "seconds"))
-
-        val timeControl = deserializeTimeControl(doc.getString("timeControl"))
-        val whiteTime = deserializePlayerTime(doc.getString("whiteTime"))
-        val blackTime = deserializePlayerTime(doc.getString("blackTime"))
-        val gameResult = parseGameResult(doc.getString("result"))
-
-        val isPaused = doc.getBoolean("isPaused", false)
-        val pausedAt = Option(doc.getLong("pausedAt")).map(_.toLong)
-
-        PositionState(
-          board, turn, moves, whitePlayer, blackPlayer, creationDate, Some(gameId),
-          timeControl = timeControl, whiteTime = whiteTime, blackTime = blackTime,
-          halfmovesSinceLastCaptureOrPawn = 0,
-          positionHistory = List.empty,
-          hasWhiteResigned = false,
-          hasBlackResigned = false,
-          gameResult = gameResult,
-          isPaused = isPaused,
-          pausedAt = pausedAt
-        )
-      }.toList
+        val whiteName = Option(doc.getString("whiteName")).getOrElse(s"Player${doc.getInteger("whitePlayerId")}")
+        val blackName = Option(doc.getString("blackName")).getOrElse(s"Player${doc.getInteger("blackPlayerId")}")
+        moveDao.findByGameId(gameId).map { moves =>
+          val board = deserializeBoard(doc.getString("boardState"))
+          val turn = parseColor(doc.getString("turn"))
+          val creationDate = doc.getDate("creationDate").toInstant
+            .atZone(java.time.ZoneId.systemDefault()).toLocalDate
+          val timeControl = deserializeTimeControl(doc.getString("timeControl"))
+          val whiteTime = deserializePlayerTime(doc.getString("whiteTime"))
+          val blackTime = deserializePlayerTime(doc.getString("blackTime"))
+          val gameResult = parseGameResult(doc.getString("result"))
+          val isPaused = doc.getBoolean("isPaused", false)
+          val pausedAt = Option(doc.getLong("pausedAt")).map(_.toLong)
+          PositionState(
+            board, turn, moves, Player(whiteName), Player(blackName), creationDate, Some(gameId),
+            timeControl = timeControl, whiteTime = whiteTime, blackTime = blackTime,
+            halfmovesSinceLastCaptureOrPawn = 0,
+            positionHistory = List.empty,
+            hasWhiteResigned = false,
+            hasBlackResigned = false,
+            gameResult = gameResult,
+            isPaused = isPaused,
+            pausedAt = pausedAt
+          )
+        }
+      })
     }
   }
 
   override def findLatest(): Future[Option[PositionState]] = {
     Future {
-      val doc = collection.find().sort(new Document("lastModified", -1)).first()
-      if (doc != null) {
+      Option(collection.find().sort(new Document("lastModified", -1)).first())
+    }.flatMap {
+      case None => Future.successful(None)
+      case Some(doc) =>
         val gameId = doc.getString("id")
-        val whitePlayerId = doc.getInteger("whitePlayerId")
-        val blackPlayerId = doc.getInteger("blackPlayerId")
-
-        val whitePlayer = Player(s"Player$whitePlayerId")
-        val blackPlayer = Player(s"Player$blackPlayerId")
-
-        val board = deserializeBoard(doc.getString("boardState"))
-        val turn = parseColor(doc.getString("turn"))
-        val creationDate = doc.getDate("creationDate").toInstant
-          .atZone(java.time.ZoneId.systemDefault()).toLocalDate
-
-        val moves = scala.concurrent.Await.result(moveDao.findByGameId(gameId), scala.concurrent.duration.Duration(5, "seconds"))
-
-        val timeControl = deserializeTimeControl(doc.getString("timeControl"))
-        val whiteTime = deserializePlayerTime(doc.getString("whiteTime"))
-        val blackTime = deserializePlayerTime(doc.getString("blackTime"))
-        val gameResult = parseGameResult(doc.getString("result"))
-
-        val isPaused = doc.getBoolean("isPaused", false)
-        val pausedAt = Option(doc.getLong("pausedAt")).map(_.toLong)
-
-        Some(PositionState(
-          board, turn, moves, whitePlayer, blackPlayer, creationDate, Some(gameId),
-          timeControl = timeControl, whiteTime = whiteTime, blackTime = blackTime,
-          halfmovesSinceLastCaptureOrPawn = 0,
-          positionHistory = List.empty,
-          hasWhiteResigned = false,
-          hasBlackResigned = false,
-          gameResult = gameResult,
-          isPaused = isPaused,
-          pausedAt = pausedAt
-        ))
-      } else {
-        None
-      }
+        val whiteName = Option(doc.getString("whiteName")).getOrElse(s"Player${doc.getInteger("whitePlayerId")}")
+        val blackName = Option(doc.getString("blackName")).getOrElse(s"Player${doc.getInteger("blackPlayerId")}")
+        moveDao.findByGameId(gameId).map { moves =>
+          val board = deserializeBoard(doc.getString("boardState"))
+          val turn = parseColor(doc.getString("turn"))
+          val creationDate = doc.getDate("creationDate").toInstant
+            .atZone(java.time.ZoneId.systemDefault()).toLocalDate
+          val timeControl = deserializeTimeControl(doc.getString("timeControl"))
+          val whiteTime = deserializePlayerTime(doc.getString("whiteTime"))
+          val blackTime = deserializePlayerTime(doc.getString("blackTime"))
+          val gameResult = parseGameResult(doc.getString("result"))
+          val isPaused = doc.getBoolean("isPaused", false)
+          val pausedAt = Option(doc.getLong("pausedAt")).map(_.toLong)
+          Some(PositionState(
+            board, turn, moves, Player(whiteName), Player(blackName), creationDate, Some(gameId),
+            timeControl = timeControl, whiteTime = whiteTime, blackTime = blackTime,
+            halfmovesSinceLastCaptureOrPawn = 0,
+            positionHistory = List.empty,
+            hasWhiteResigned = false,
+            hasBlackResigned = false,
+            gameResult = gameResult,
+            isPaused = isPaused,
+            pausedAt = pausedAt
+          ))
+        }
     }
   }
 

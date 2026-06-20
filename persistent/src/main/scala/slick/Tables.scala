@@ -7,17 +7,18 @@ class Tables(val profile: JdbcProfile) {
   import profile.api._
 
   /** Players table - stores player information. */
-  class Players(tag: Tag) extends Table[(Int, String)](tag, "players") {
+  class Players(tag: Tag) extends Table[(Int, String, Int)](tag, "players") {
     def id = column[Int]("id", O.PrimaryKey, O.AutoInc)
     def name = column[String]("name")
+    def elo = column[Int]("elo", O.Default(1200))
 
-    def * = (id, name)
+    def * = (id, name, elo)
   }
 
   val players = TableQuery[Players]
 
   /** Games table - stores game state and metadata. */
-  class Games(tag: Tag) extends Table[(String, Int, Int, String, java.time.LocalDate, String, Option[String], Option[String], Option[String], Option[String])](tag, "games") {
+  class Games(tag: Tag) extends Table[(String, Int, Int, String, java.time.LocalDate, String, Option[String], Option[String], Option[String], Option[String], Int, Boolean)](tag, "games") {
     def id = column[String]("id", O.PrimaryKey)
     def whitePlayerId = column[Int]("white_player_id")
     def blackPlayerId = column[Int]("black_player_id")
@@ -28,8 +29,10 @@ class Tables(val profile: JdbcProfile) {
     def timeControl = column[Option[String]]("time_control") // JSON serialized TimeControl
     def whiteTime = column[Option[String]]("white_time") // JSON serialized PlayerTime
     def blackTime = column[Option[String]]("black_time") // JSON serialized PlayerTime
+    def moveCount = column[Int]("move_count", O.Default(0))
+    def isGameOver = column[Boolean]("is_game_over", O.Default(false))
 
-    def * = (id, whitePlayerId, blackPlayerId, turn, creationDate, boardState, result, timeControl, whiteTime, blackTime)
+    def * = (id, whitePlayerId, blackPlayerId, turn, creationDate, boardState, result, timeControl, whiteTime, blackTime, moveCount, isGameOver)
 
     // Foreign key relationships
     def whitePlayer = foreignKey("white_player_fk", whitePlayerId, players)(_.id)
@@ -39,7 +42,7 @@ class Tables(val profile: JdbcProfile) {
   val games = TableQuery[Games]
 
   /** Moves table - stores move history for games. */
-  class Moves(tag: Tag) extends Table[(Int, String, Int, Int, Int, Int, Int)](tag, "moves") {
+  class Moves(tag: Tag) extends Table[(Int, String, Int, Int, Int, Int, Int, Option[String])](tag, "moves") {
     def id = column[Int]("id", O.PrimaryKey, O.AutoInc)
     def gameId = column[String]("game_id")
     def moveIndex = column[Int]("move_index") // Order of moves in the game
@@ -47,8 +50,9 @@ class Tables(val profile: JdbcProfile) {
     def fromRow = column[Int]("from_row")
     def toCol = column[Int]("to_col")
     def toRow = column[Int]("to_row")
+    def specialMove = column[Option[String]]("special_move")
 
-    def * = (id, gameId, moveIndex, fromCol, fromRow, toCol, toRow)
+    def * = (id, gameId, moveIndex, fromCol, fromRow, toCol, toRow, specialMove)
 
     // Foreign key relationship
     def game = foreignKey("game_fk", gameId, games)(_.id)

@@ -91,7 +91,8 @@ object JsonCodecs {
         val initial = state.timeControl.map(_.initialTimeMs).getOrElse(0L)
         val increment = state.timeControl.map(_.incrementMs).getOrElse(0L)
         val delay = state.timeControl.map(_.delayMs).getOrElse(0L)
-        val remaining = if (state.isPaused) pt.remainingTimeMs else pt.getCurrentTime
+        val isWhiteActive = state.turn == model.White
+        val remaining = if (state.isPaused || !isWhiteActive) pt.remainingTimeMs else pt.getCurrentTime
         TimeControlInfo(initial, increment, remaining, delay)
       }
 
@@ -99,7 +100,8 @@ object JsonCodecs {
         val initial = state.timeControl.map(_.initialTimeMs).getOrElse(0L)
         val increment = state.timeControl.map(_.incrementMs).getOrElse(0L)
         val delay = state.timeControl.map(_.delayMs).getOrElse(0L)
-        val remaining = if (state.isPaused) pt.remainingTimeMs else pt.getCurrentTime
+        val isBlackActive = state.turn == model.Black
+        val remaining = if (state.isPaused || !isBlackActive) pt.remainingTimeMs else pt.getCurrentTime
         TimeControlInfo(initial, increment, remaining, delay)
       }
 

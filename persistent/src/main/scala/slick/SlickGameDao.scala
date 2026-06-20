@@ -24,8 +24,10 @@ class SlickGameDao(db: Database, tables: Tables, playerDao: SlickPlayerDao, move
       val whiteTimeStr = serializePlayerTime(game.whiteTime)
       val blackTimeStr = serializePlayerTime(game.blackTime)
 
+      val moveCount = game.moveHistory.length
+      val isGameOver = game.gameResult != Ongoing
       val action = (tables.games returning tables.games.map(_.id)) +=
-        (gameId, whiteId, blackId, game.turn.toString, game.creationDate, boardJson, None, timeControlStr, whiteTimeStr, blackTimeStr)
+        (gameId, whiteId, blackId, game.turn.toString, game.creationDate, boardJson, None, timeControlStr, whiteTimeStr, blackTimeStr, moveCount, isGameOver)
 
       db.run(action).flatMap { _ =>
         // Insert moves
@@ -40,7 +42,7 @@ class SlickGameDao(db: Database, tables: Tables, playerDao: SlickPlayerDao, move
   override def findById(id: String): Future[Option[PositionState]] = {
     val action = tables.games.filter(_.id === id).result.headOption
     db.run(action).flatMap {
-      case Some((_, whiteId, blackId, turnStr, creationDate, boardJson, resultOpt, timeControlStr, whiteTimeStr, blackTimeStr)) =>
+      case Some((_, whiteId, blackId, turnStr, creationDate, boardJson, resultOpt, timeControlStr, whiteTimeStr, blackTimeStr, _, _)) =>
         for {
           whitePlayerOpt <- playerDao.findById(whiteId)
           blackPlayerOpt <- playerDao.findById(blackId)
@@ -81,10 +83,12 @@ class SlickGameDao(db: Database, tables: Tables, playerDao: SlickPlayerDao, move
     val timeControlStr = serializeTimeControl(game.timeControl)
     val whiteTimeStr = serializePlayerTime(game.whiteTime)
     val blackTimeStr = serializePlayerTime(game.blackTime)
+    val moveCount = game.moveHistory.length
+    val isGameOver = game.gameResult != Ongoing
     val action = tables.games
       .filter(_.id === id)
-      .map(g => (g.turn, g.boardState, g.result, g.timeControl, g.whiteTime, g.blackTime))
-      .update((game.turn.toString, boardJson, resultStr, timeControlStr, whiteTimeStr, blackTimeStr))
+      .map(g => (g.turn, g.boardState, g.result, g.timeControl, g.whiteTime, g.blackTime, g.moveCount, g.isGameOver))
+      .update((game.turn.toString, boardJson, resultStr, timeControlStr, whiteTimeStr, blackTimeStr, moveCount, isGameOver))
 
     db.run(action).flatMap { updated =>
       if (updated > 0) {
@@ -115,21 +119,16 @@ class SlickGameDao(db: Database, tables: Tables, playerDao: SlickPlayerDao, move
   }
 
   override def listSummaries(): Future[List[(String, String, Int, Boolean)]] = {
-    val action = tables.games.map(g => (g.id, g.turn)).result
-    db.run(action).map { rows =>
-      rows.map { case (id, turn) =>
-        // TODO: Store move count and game over status in game document for efficiency
-        val moveCount = 0
-        val isGameOver = false
-        (id, turn, moveCount, isGameOver)
-      }.toList
-    }
+    val action = tables.games.map(g => (g.id, g.turn, g.moveCount, g.isGameOver)).result
+    db.run(action).map(_.map { case (id, turn, moveCount, isGameOver) =>
+      (id, turn, moveCount, isGameOver)
+    }.toList)
   }
 
   override def findAll(): Future[List[PositionState]] = {
     val action = tables.games.result
     db.run(action).flatMap { gameRows =>
-      Future.sequence(gameRows.map { case (id, whiteId, blackId, turnStr, creationDate, boardJson, resultOpt, timeControlStr, whiteTimeStr, blackTimeStr) =>
+      Future.sequence(gameRows.map { case (id, whiteId, blackId, turnStr, creationDate, boardJson, resultOpt, timeControlStr, whiteTimeStr, blackTimeStr, _, _) =>
         for {
           whitePlayerOpt <- playerDao.findById(whiteId)
           blackPlayerOpt <- playerDao.findById(blackId)
@@ -161,7 +160,7 @@ class SlickGameDao(db: Database, tables: Tables, playerDao: SlickPlayerDao, move
   override def findLatest(): Future[Option[PositionState]] = {
     val action = tables.games.sortBy(_.creationDate.desc).result.headOption
     db.run(action).flatMap {
-      case Some((id, whiteId, blackId, turnStr, creationDate, boardJson, resultOpt, timeControlStr, whiteTimeStr, blackTimeStr)) =>
+      case Some((id, whiteId, blackId, turnStr, creationDate, boardJson, resultOpt, timeControlStr, whiteTimeStr, blackTimeStr, _, _)) =>
         for {
           whitePlayerOpt <- playerDao.findById(whiteId)
           blackPlayerOpt <- playerDao.findById(blackId)

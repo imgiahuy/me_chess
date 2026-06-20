@@ -32,4 +32,10 @@ trait PlayerDao {
 
   /** Gets or creates a player ID by name. Returns the database ID. */
   def getOrCreateId(name: String): Future[Int]
+
+  /** Updates the ELO rating for the player with the given ID. */
+  def updateElo(id: Int, newElo: Int): Future[Boolean]
+
+  /** Returns all players sorted by ELO descending (leaderboard). */
+  def findLeaderboard(): Future[List[(Player, Int)]]
 }
