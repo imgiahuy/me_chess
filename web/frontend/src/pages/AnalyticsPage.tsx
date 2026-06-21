@@ -141,6 +141,25 @@ export function AnalyticsPage() {
                 {loading && <div style={{ color: "var(--color-text-muted)", textAlign: "center", padding: "2rem" }}>Loading analytics…</div>}
                 {error && <div style={{ color: "var(--color-danger)", marginBottom: "1rem" }}>⚠ {error}</div>}
 
+                {/* Export Button */}
+                <div style={{ marginBottom: "1.25rem" }}>
+                    <button
+                        onClick={() => navigate("/analytics/export")}
+                        style={{
+                            padding: "0.75rem 1.25rem",
+                            background: "var(--color-teal)",
+                            color: "white",
+                            border: "none",
+                            borderRadius: "0.5rem",
+                            fontSize: "0.9rem",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                        }}
+                    >
+                        📦 Export Analytics
+                    </button>
+                </div>
+
                 {/* Service Health */}
                 {health && (
                     <div style={{ marginBottom: "1.25rem" }}>

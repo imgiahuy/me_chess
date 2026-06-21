@@ -102,6 +102,11 @@ export function GameList() {
                                     <button onClick={() => navigate(`/game/${game.gameId}`)} style={{ fontSize: "0.8rem", padding: "0.35rem 0.75rem" }}>
                                         Open
                                     </button>
+                                    {!game.isGameOver && (
+                                        <button onClick={() => navigate(`/spectate/${game.gameId}`)} style={{ fontSize: "0.8rem", padding: "0.35rem 0.75rem" }}>
+                                            👁
+                                        </button>
+                                    )}
                                     <button onClick={() => handleDelete(game.gameId)} className="danger" style={{ fontSize: "0.8rem", padding: "0.35rem 0.75rem" }}>
                                         ✕
                                     </button>

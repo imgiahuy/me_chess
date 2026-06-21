@@ -8,7 +8,8 @@ import akka.http.scaladsl.server.{RejectionHandler, Route}
 import akka.http.scaladsl.marshalling.sse.EventStreamMarshalling
 import akka.stream.scaladsl.Source
 import scala.concurrent.duration._
-import api.JsonCodecs.{ActionResponse, CreateGameRequest, CreatedGameResponse, ErrorResponse, GameInfos, GameStateResponse, GameSummary, GamesListResponse, MoveRequest, ResignRequest, BotMoveRequest, BotInfoResponse, AvailableBotsResponse, LeaderboardEntry, LeaderboardResponse, HealthStatus, MetricsResponse}
+import api.JsonCodecs.{ActionResponse, CreateGameRequest, CreatedGameResponse, ErrorResponse, GameInfos, GameStateResponse, GameSummary, GamesListResponse, MoveRequest, ResignRequest, BotMoveRequest, BotInfoResponse, AvailableBotsResponse, LeaderboardEntry, LeaderboardResponse, HealthStatus, MetricsResponse, AnalyticsExportRequest, AnalyticsExportResponse, GameAnalytics, OpeningInfo, OpeningMatchInfo, OpeningsListResponse, OpeningLookupRequest, OpeningSearchRequest, OpeningCategoryResponse}
+import openings.OpeningCatalog
 import java.io.File
 import java.time.Instant
 import java.lang.management.ManagementFactory
@@ -631,8 +632,201 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
               complete(jsonResponse(metrics))
             }
           }
+          ) ~ (
+          // ─── Analytics Export ────────────────────────────────────────────────────
+
+          /** POST /v1/chess/analytics/export - Export game analytics */
+          post {
+            path("analytics" / "export") {
+              entity(as[String]) { body =>
+                parseJson[AnalyticsExportRequest](body) match {
+                  case Right(request) =>
+                    try {
+                      val exportId = java.util.UUID.randomUUID().toString
+                      val games = sessionController.listGames()
+                      
+                      val analytics = games.flatMap { gameId =>
+                        sessionController.getGame(gameId).map { state =>
+                          val result = state.gameResult match {
+                            case model.Ongoing => "ongoing"
+                            case model.Checkmate(winner) => s"checkmate-${winner.toString}"
+                            case model.Draw(reason) => s"draw-${reason.toString}"
+                            case model.Resignation(winner) => s"resignation-${winner.toString}"
+                            case model.TimeOut(winner) => s"timeout-${winner.toString}"
+                          }
+                          GameAnalytics(
+                            gameId = gameId,
+                            whitePlayer = state.whitePlayer.name,
+                            blackPlayer = state.blackPlayer.name,
+                            result = result,
+                            moveCount = state.moveHistory.length,
+                            timeControl = state.timeControl.map(_.toString),
+                            createdAt = state.creationDate.toString,
+                            durationSeconds = None,
+                            averageMoveTime = None
+                          )
+                        }
+                      }.toList
+                      
+                      val format = request.format.toLowerCase
+                      val content = format match {
+                        case "json" => analyticsToJson(analytics)
+                        case "csv" => analyticsToCsv(analytics)
+                        case "pgn" => analyticsToPgn(analytics)
+                        case _ => analyticsToJson(analytics)
+                      }
+                      
+                      val exportDir = new File(System.getProperty("java.io.tmpdir"), "chess-exports")
+                      exportDir.mkdirs()
+                      val filename = s"analytics-$exportId.$format"
+                      val exportFile = new File(exportDir, filename)
+                      java.nio.file.Files.write(exportFile.toPath, content.getBytes("UTF-8"))
+                      
+                      val expiresAt = Instant.now().plusSeconds(3600).toString
+                      val response = AnalyticsExportResponse(
+                        exportId = exportId,
+                        format = format,
+                        recordCount = analytics.length,
+                        downloadUrl = s"/v1/chess/analytics/download/$exportId",
+                        expiresAt = expiresAt
+                      )
+                      
+                      complete(StatusCodes.OK, jsonResponse(response))
+                    } catch {
+                      case e: Exception =>
+                        complete(StatusCodes.InternalServerError, jsonResponse(ErrorResponse(s"Failed to export analytics: ${e.getMessage}")))
+                    }
+                  case Left(error) =>
+                    complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+                }
+              }
+            }
+          }
+          ) ~ (
+          /** GET /v1/chess/analytics/download/{exportId} - Download exported analytics */
+          get {
+            path("analytics" / "download" / Segment) { exportId =>
+              val exportDir = new File(System.getProperty("java.io.tmpdir"), "chess-exports")
+              val files = exportDir.listFiles().filter(_.getName.startsWith(s"analytics-$exportId"))
+              files.headOption match {
+                case Some(file) =>
+                  val content = scala.io.Source.fromFile(file).mkString
+                  val contentType = file.getName.split("\\.").last match {
+                    case "json" => ContentTypes.`application/json`
+                    case "csv" => ContentTypes.`text/csv(UTF-8)`
+                    case "pgn" => ContentTypes.`text/plain(UTF-8)`
+                    case _ => ContentTypes.`application/octet-stream`
+                  }
+                  complete(HttpEntity(contentType, content.getBytes("UTF-8")))
+                case None =>
+                  complete(StatusCodes.NotFound, jsonResponse(ErrorResponse(s"Export not found: $exportId")))
+              }
+            }
+          }
+          ) ~ (
+          // ─── Opening Catalog ─────────────────────────────────────────────────────
+
+          /** GET /v1/chess/openings - List all openings */
+          get {
+            path("openings") {
+              val catalog = OpeningCatalog()
+              val openings = catalog.allOpenings.map { o =>
+                OpeningInfo(o.name, o.ecoCode, o.moves, o.description, o.category)
+              }
+              complete(jsonResponse(OpeningsListResponse(openings, openings.length)))
+            }
+          }
+          ) ~ (
+          /** GET /v1/chess/openings/categories/{category} - Get openings by category */
+          get {
+            path("openings" / "categories" / Segment) { category =>
+              val catalog = OpeningCatalog()
+              val openings = catalog.openingsByCategory(category).map { o =>
+                OpeningInfo(o.name, o.ecoCode, o.moves, o.description, o.category)
+              }
+              complete(jsonResponse(OpeningCategoryResponse(category, openings)))
+            }
+          }
+          ) ~ (
+          /** GET /v1/chess/openings/eco/{ecoCode} - Get opening by ECO code */
+          get {
+            path("openings" / "eco" / Segment) { ecoCode =>
+              val catalog = OpeningCatalog()
+              catalog.openingByEco(ecoCode) match {
+                case Some(opening) =>
+                  val info = OpeningInfo(opening.name, opening.ecoCode, opening.moves, opening.description, opening.category)
+                  complete(jsonResponse(info))
+                case None =>
+                  complete(StatusCodes.NotFound, jsonResponse(ErrorResponse(s"Opening not found: $ecoCode")))
+              }
+            }
+          }
+          ) ~ (
+          /** POST /v1/chess/openings/lookup - Find opening by move sequence */
+          post {
+            path("openings" / "lookup") {
+              entity(as[String]) { body =>
+                parseJson[OpeningLookupRequest](body) match {
+                  case Right(request) =>
+                    val catalog = OpeningCatalog()
+                    catalog.findOpening(request.moves) match {
+                      case Some(matchInfo) =>
+                        val openingInfo = OpeningInfo(matchInfo.opening.name, matchInfo.opening.ecoCode, matchInfo.opening.moves, matchInfo.opening.description, matchInfo.opening.category)
+                        complete(jsonResponse(OpeningMatchInfo(openingInfo, matchInfo.matchedMoves, matchInfo.confidence)))
+                      case None =>
+                        complete(StatusCodes.NotFound, jsonResponse(ErrorResponse("No matching opening found")))
+                    }
+                  case Left(error) =>
+                    complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+                }
+              }
+            }
+          }
+          ) ~ (
+          /** POST /v1/chess/openings/search - Search openings by name/description */
+          post {
+            path("openings" / "search") {
+              entity(as[String]) { body =>
+                parseJson[OpeningSearchRequest](body) match {
+                  case Right(request) =>
+                    val catalog = OpeningCatalog()
+                    val openings = catalog.searchOpenings(request.query).map { o =>
+                      OpeningInfo(o.name, o.ecoCode, o.moves, o.description, o.category)
+                    }
+                    complete(jsonResponse(OpeningsListResponse(openings, openings.length)))
+                  case Left(error) =>
+                    complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+                }
+              }
+            }
+          }
           )
       }
     }
+  
+  private def analyticsToJson(analytics: List[GameAnalytics]): String = {
+    import JsonCodecs.given_ReadWriter_GameAnalytics
+    upickle.default.write(analytics)
+  }
+  
+  private def analyticsToCsv(analytics: List[GameAnalytics]): String = {
+    val header = "gameId,whitePlayer,blackPlayer,result,moveCount,timeControl,createdAt,durationSeconds,averageMoveTime,blunders,mistakes,inaccuracies\n"
+    val rows = analytics.map { a =>
+      s"${a.gameId},${a.whitePlayer},${a.blackPlayer},${a.result},${a.moveCount},${a.timeControl.getOrElse("")},${a.createdAt},${a.durationSeconds.getOrElse("")},${a.averageMoveTime.getOrElse("")},${a.blunders},${a.mistakes},${a.inaccuracies}"
+    }
+    header + rows.mkString("\n")
+  }
+  
+  private def analyticsToPgn(analytics: List[GameAnalytics]): String = {
+    analytics.map { a =>
+      s"""[Event "Chess Game"]
+         |[Site "ME Chess"]
+         |[Date "${a.createdAt.take(10)}"]
+         |[White "${a.whitePlayer}"]
+         |[Black "${a.blackPlayer}"]
+         |[Result "${a.result}"]
+         |
+         |*""".stripMargin.replaceAll("\n", "\r\n")
+    }.mkString("\n\n")
+  }
 }
-

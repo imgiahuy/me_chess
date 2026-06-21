@@ -8,19 +8,19 @@
         <option name="externalProjectPath" value="$PROJECT_DIR$" />
         <option name="modules">
           <set>
-            <option value="C:\sem7\SA\me_chess" />
-            <option value="C:\sem7\SA\me_chess\benchmark" />
-            <option value="C:\sem7\SA\me_chess\bot-service" />
-            <option value="C:\sem7\SA\me_chess\core" />
-            <option value="C:\sem7\SA\me_chess\gui" />
-            <option value="C:\sem7\SA\me_chess\persistent" />
-            <option value="C:\sem7\SA\me_chess\player-service" />
-            <option value="C:\sem7\SA\me_chess\project" />
-            <option value="C:\sem7\SA\me_chess\rest-api" />
-            <option value="C:\sem7\SA\me_chess\shared" />
-            <option value="C:\sem7\SA\me_chess\spark" />
-            <option value="C:\sem7\SA\me_chess\tournament-service" />
-            <option value="C:\sem7\SA\me_chess\tui" />
+            <option value="C:\sem7\SA\chess\me_chess" />
+            <option value="C:\sem7\SA\chess\me_chess\benchmark" />
+            <option value="C:\sem7\SA\chess\me_chess\bot-service" />
+            <option value="C:\sem7\SA\chess\me_chess\core" />
+            <option value="C:\sem7\SA\chess\me_chess\gui" />
+            <option value="C:\sem7\SA\chess\me_chess\persistent" />
+            <option value="C:\sem7\SA\chess\me_chess\player-service" />
+            <option value="C:\sem7\SA\chess\me_chess\project" />
+            <option value="C:\sem7\SA\chess\me_chess\rest-api" />
+            <option value="C:\sem7\SA\chess\me_chess\shared" />
+            <option value="C:\sem7\SA\chess\me_chess\spark" />
+            <option value="C:\sem7\SA\chess\me_chess\tournament-service" />
+            <option value="C:\sem7\SA\chess\me_chess\tui" />
           </set>
         </option>
         <option name="sbtVersion" value="1.12.8" />

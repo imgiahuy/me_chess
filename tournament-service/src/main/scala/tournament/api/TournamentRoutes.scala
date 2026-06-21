@@ -1,5 +1,7 @@
 package tournament.api
 
+import akka.actor.typed.ActorSystem
+import akka.actor.typed.scaladsl.Behaviors
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
@@ -7,13 +9,15 @@ import tournament.engine.TournamentManager
 import tournament.kafka.TournamentKafkaService
 import tournament.model._
 import tournament.persistence.TournamentRepository
+import tournament.auth.JwtService
 
 import java.time.Instant
 import java.util.UUID
+import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
 /** REST API routes for the tournament service. */
-class TournamentRoutes(repo: TournamentRepository, kafka: TournamentKafkaService):
+class TournamentRoutes(repo: TournamentRepository, kafka: TournamentKafkaService, jwtService: JwtService)(implicit system: ActorSystem[?]):
 
   import upickle.default.{ReadWriter, macroRW, read, write, given}
   import JsonFormats.{*, given}
@@ -29,6 +33,38 @@ class TournamentRoutes(repo: TournamentRepository, kafka: TournamentKafkaService
 
   val routes: Route = pathPrefix("v1" / "tournaments") {
     concat(
+      // ─── Authentication ───────────────────────────────────────────────────────
+      path("auth" / "register") {
+        post {
+          entity(as[String]) { body =>
+            parseJson[BotAuthRequest](body) match
+              case Right(req) =>
+                jwtService.generateToken(req.botId, req.botName, req.botFamily) match
+                  case Right(token) =>
+                    complete(StatusCodes.OK, jsonResponse(BotAuthResponse(token, req.botId, req.botName)))
+                  case Left(err) =>
+                    complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(err)))
+              case Left(err) =>
+                complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(err)))
+          }
+        }
+      },
+      path("auth" / "validate") {
+        post {
+          entity(as[String]) { body =>
+            parseJson[TokenValidationRequest](body) match
+              case Right(req) =>
+                jwtService.validateToken(req.token) match
+                  case Right(claims) =>
+                    complete(StatusCodes.OK, jsonResponse(TokenValidationResponse(true, Some(claims.sub), Some(claims.name))))
+                  case Left(err) =>
+                    complete(StatusCodes.Unauthorized, jsonResponse(TokenValidationResponse(false, None, None, Some(err))))
+              case Left(err) =>
+                complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(err)))
+          }
+        }
+      },
+      // ─── Tournament Management ───────────────────────────────────────────────
       pathEnd {
         concat(
           get {
@@ -191,11 +227,7 @@ class TournamentRoutes(repo: TournamentRepository, kafka: TournamentKafkaService
     )
 
   private def parseFormat(s: String): Option[TournamentFormat] =
-    s.trim.toLowerCase match
-      case "roundrobin" | "round-robin" | "round_robin" => Some(TournamentFormat.RoundRobin)
-      case "swiss" => Some(TournamentFormat.Swiss)
-      case "arena" => Some(TournamentFormat.Arena)
-      case _ => None
+    TournamentFormat.fromString(s)
 
   case class ErrorResponse(error: String)
   case class HealthResponse(status: String, service: String)
@@ -229,3 +261,7 @@ class TournamentRoutes(repo: TournamentRepository, kafka: TournamentKafkaService
     given ReadWriter[TournamentSummary] = macroRW
     given ReadWriter[ErrorResponse] = macroRW
     given ReadWriter[HealthResponse] = macroRW
+    given ReadWriter[BotAuthRequest] = macroRW
+    given ReadWriter[BotAuthResponse] = macroRW
+    given ReadWriter[TokenValidationRequest] = macroRW
+    given ReadWriter[TokenValidationResponse] = macroRW

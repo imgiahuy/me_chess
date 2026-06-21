@@ -274,7 +274,7 @@ services:
           cpus: '0.25'
     environment:
       - JAVA_OPTS=-Xmx256m
-      - LICHESS_API_TOKEN=${LICHESS_API_TOKEN}
+      - LICHESS_API_TOKEN=${lip_PcChT6gUXywyu8eKKps4}
       - BOT_TYPE=${BOT_TYPE:-greedy}
       - LICHESS_BASE_URL=${LICHESS_BASE_URL:-https://lichess.org}
       - ALLOW_RATED=${ALLOW_RATED:-true}

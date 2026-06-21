@@ -8,6 +8,23 @@ enum TournamentFormat:
   case RoundRobin
   case Swiss
   case Arena
+  case SingleElimination
+  case DoubleElimination
+  case GroupStage
+  case League
+  case RandomKnockout
+
+object TournamentFormat:
+  def fromString(value: String): Option[TournamentFormat] = value.trim.toLowerCase match
+    case "roundrobin" | "round-robin" => Some(RoundRobin)
+    case "swiss" => Some(Swiss)
+    case "arena" => Some(Arena)
+    case "singleelimination" | "single-elimination" => Some(SingleElimination)
+    case "doubleelimination" | "double-elimination" => Some(DoubleElimination)
+    case "groupstage" | "group-stage" => Some(GroupStage)
+    case "league" => Some(League)
+    case "randomknockout" | "random-knockout" => Some(RandomKnockout)
+    case _ => None
 
 /** Status of a tournament. */
 enum TournamentStatus:
@@ -142,3 +159,30 @@ case class TournamentStartedEvent(tournamentId: String, timestamp: Instant)
 case class TournamentFinishedEvent(tournamentId: String, timestamp: Instant)
 case class ParticipantRegisteredEvent(tournamentId: String, participantId: String, name: String)
 case class GameResultReportedEvent(tournamentId: String, gameId: String, result: String)
+
+/** JWT authentication request for bot registration */
+case class BotAuthRequest(
+    botId: String,
+    botName: String,
+    botFamily: String
+)
+
+/** JWT authentication response */
+case class BotAuthResponse(
+    token: String,
+    botId: String,
+    botName: String
+)
+
+/** Token validation request */
+case class TokenValidationRequest(
+    token: String
+)
+
+/** Token validation response */
+case class TokenValidationResponse(
+    valid: Boolean,
+    botId: Option[String] = None,
+    botName: Option[String] = None,
+    error: Option[String] = None
+)

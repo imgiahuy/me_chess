@@ -71,3 +71,95 @@ object PairingEngine:
       // Swap colors for every other round to balance
       if roundNumber % 2 == 0 then pairs.map(p => Pairing(p.blackId, p.whiteId, roundNumber))
       else pairs
+
+  /** Single elimination pairing: bracket-style knockout tournament. */
+  def singleElimination(participants: List[Participant], roundNumber: Int): List[Pairing] =
+    if participants.size < 2 then Nil
+    else
+      val ids = participants.map(_.id)
+      // Power of 2 bracket: add byes if needed
+      val bracketSize = nextPowerOfTwo(ids.size)
+      val padded = ids ++ List.fill(bracketSize - ids.size)("__bye__")
+      // Calculate which round this is based on bracket size
+      val totalRounds = log2(bracketSize)
+      val matchesInThisRound = bracketSize / (1 << roundNumber)
+      val startIndex = if roundNumber == 1 then 0 else bracketSize - matchesInThisRound
+      val endIndex = startIndex + matchesInThisRound
+      val roundParticipants = padded.slice(startIndex, endIndex)
+      roundParticipants.grouped(2).collect { 
+        case List(a, b) if a != "__bye__" && b != "__bye__" => 
+          Pairing(a, b, roundNumber)
+        case List(a, "__bye__") => 
+          Pairing(a, "__bye__", roundNumber) // Bye - automatic win
+      }.toList
+
+  /** Double elimination pairing: winners bracket and losers bracket. */
+  def doubleElimination(
+    participants: List[Participant],
+    roundNumber: Int,
+    winnersBracket: List[String],
+    losersBracket: List[String]
+  ): List[Pairing] =
+    if participants.size < 2 then Nil
+    else
+      val wbPairings = if winnersBracket.size >= 2 then
+        winnersBracket.grouped(2).collect { case List(a, b) => Pairing(a, b, roundNumber, Some("wb")) }.toList
+      else Nil
+      
+      val lbPairings = if losersBracket.size >= 2 then
+        losersBracket.grouped(2).collect { case List(a, b) => Pairing(a, b, roundNumber, Some("lb")) }.toList
+      else Nil
+      
+      wbPairings ++ lbPairings
+
+  /** Group stage pairing: participants divided into groups, round-robin within each group. */
+  def groupStage(
+    participants: List[Participant],
+    roundNumber: Int,
+    groupSize: Int = 4
+  ): List[Pairing] =
+    if participants.size < 2 then Nil
+    else
+      val groups = participants.map(_.id).grouped(groupSize).toList
+      groups.flatMap { group =>
+        val n = group.size
+        if n < 2 then Nil
+        else
+          val roundIndex = (roundNumber - 1) % (n - 1)
+          val fixed = group.head
+          val rotating = group.tail.toArray
+          // Rotate for the specific round
+          (0 until roundIndex).foreach { _ =>
+            val last = rotating(rotating.length - 1)
+            System.arraycopy(rotating, 0, rotating, 1, rotating.length - 1)
+            rotating(0) = last
+          }
+          val positions = Array(fixed) ++ rotating
+          val half = n / 2
+          (0 until half).map { i =>
+            val white = positions(i)
+            val black = positions(n - 1 - i)
+            Pairing(white, black, roundNumber)
+          }.toList
+      }
+
+  /** League pairing: everyone plays everyone (round-robin) over the entire season. */
+  def league(participants: List[Participant], roundNumber: Int, gamesPerPairing: Int = 2): List[Pairing] =
+    roundRobin(participants, gamesPerPairing).drop(roundNumber - 1).take(1).headOption.map(_.pairings).getOrElse(Nil)
+
+  /** Random knockout pairing: random pairings each round, no bracket. */
+  def randomKnockout(participants: List[Participant], roundNumber: Int): List[Pairing] =
+    if participants.size < 2 then Nil
+    else
+      val ids = scala.util.Random.shuffle(participants.map(_.id))
+      ids.grouped(2).collect { 
+        case List(a, b) => Pairing(a, b, roundNumber)
+        case List(a) => Pairing(a, "__bye__", roundNumber) // Bye for odd number
+      }.toList
+
+  // Helper functions
+  private def nextPowerOfTwo(n: Int): Int =
+    if n <= 1 then 1 else 1 << (32 - Integer.numberOfLeadingZeros(n - 1))
+
+  private def log2(n: Int): Int =
+    if n <= 1 then 0 else Integer.numberOfTrailingZeros(n)

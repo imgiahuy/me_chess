@@ -207,6 +207,59 @@ object JsonCodecs {
     timestamp: String
   )
 
+  final case class AnalyticsExportRequest(
+    format: String,  // "csv", "json", "pgn"
+    startDate: Option[String] = None,
+    endDate: Option[String] = None,
+    includeMoves: Boolean = true,
+    includeTimeControl: Boolean = true
+  )
+
+  final case class AnalyticsExportResponse(
+    exportId: String,
+    format: String,
+    recordCount: Int,
+    downloadUrl: String,
+    expiresAt: String
+  )
+
+  final case class GameAnalytics(
+    gameId: String,
+    whitePlayer: String,
+    blackPlayer: String,
+    result: String,
+    moveCount: Int,
+    timeControl: Option[String],
+    createdAt: String,
+    durationSeconds: Option[Long],
+    averageMoveTime: Option[Double],
+    blunders: Int = 0,
+    mistakes: Int = 0,
+    inaccuracies: Int = 0
+  )
+
+  final case class OpeningInfo(
+    name: String,
+    ecoCode: String,
+    moves: List[String],
+    description: String,
+    category: String
+  )
+
+  final case class OpeningMatchInfo(
+    opening: OpeningInfo,
+    matchedMoves: Int,
+    confidence: Double
+  )
+
+  final case class OpeningsListResponse(openings: List[OpeningInfo], total: Int)
+
+  final case class OpeningLookupRequest(moves: List[String])
+
+  final case class OpeningSearchRequest(query: String)
+
+  final case class OpeningCategoryResponse(category: String, openings: List[OpeningInfo])
+
   given ReadWriter[TimeControlInfo]  = macroRW
 
   given optionTimeControlInfoRW: ReadWriter[Option[TimeControlInfo]] = readwriter[Value].bimap(
@@ -267,4 +320,13 @@ object JsonCodecs {
   given ReadWriter[LeaderboardResponse]   = macroRW
   given ReadWriter[HealthStatus]          = macroRW
   given ReadWriter[MetricsResponse]       = macroRW
+  given ReadWriter[AnalyticsExportRequest] = macroRW
+  given ReadWriter[AnalyticsExportResponse] = macroRW
+  given ReadWriter[GameAnalytics]         = macroRW
+  given ReadWriter[OpeningInfo]           = macroRW
+  given ReadWriter[OpeningMatchInfo]      = macroRW
+  given ReadWriter[OpeningsListResponse]  = macroRW
+  given ReadWriter[OpeningLookupRequest]  = macroRW
+  given ReadWriter[OpeningSearchRequest]  = macroRW
+  given ReadWriter[OpeningCategoryResponse] = macroRW
 }

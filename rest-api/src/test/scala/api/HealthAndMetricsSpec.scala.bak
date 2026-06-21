@@ -1,0 +1,52 @@
+package api
+
+import akka.http.scaladsl.testkit.ScalatestRouteTest
+import akka.http.scaladsl.model.StatusCodes
+import controller.GameController
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.matchers.should.Matchers
+import repository.InMemoryGameRepository
+
+class HealthAndMetricsSpec extends AnyFunSuite with Matchers with ScalatestRouteTest {
+
+  val controller = new GameController()
+  val gameRepository = new InMemoryGameRepository()
+  val sessionController = new GameSessionController(controller, gameRepository, None, None)
+  val routes = new ChessApiRoutes(sessionController).routes
+
+  test("GET /v1/chess/health returns health status") {
+    Get("/v1/chess/health") ~> routes ~> check {
+      status shouldEqual StatusCodes.OK
+      val response = responseAs[String]
+      response should include ("UP")
+      response should include ("ME Chess REST API")
+    }
+  }
+
+  test("GET /v1/chess/health/ready returns READY status") {
+    Get("/v1/chess/health/ready") ~> routes ~> check {
+      status shouldEqual StatusCodes.OK
+      val response = responseAs[String]
+      response should include ("READY")
+    }
+  }
+
+  test("GET /v1/chess/health/live returns ALIVE status") {
+    Get("/v1/chess/health/live") ~> routes ~> check {
+      status shouldEqual StatusCodes.OK
+      val response = responseAs[String]
+      response should include ("ALIVE")
+    }
+  }
+
+  test("GET /v1/chess/metrics returns metrics data") {
+    Get("/v1/chess/metrics") ~> routes ~> check {
+      status shouldEqual StatusCodes.OK
+      val response = responseAs[String]
+      response should include ("activeGames")
+      response should include ("heapUsedMb")
+      response should include ("heapMaxMb")
+      response should include ("uptimeSeconds")
+    }
+  }
+}

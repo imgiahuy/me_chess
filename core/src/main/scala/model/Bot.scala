@@ -424,6 +424,9 @@ object BotFactory {
     case "defensive" => new DefensiveBot()
     case "aggressive" => new AggressiveBot()
     case "smarter" => new SmarterBot()
+    case "stockfish" | "uci" => new RandomBot() // UCI bots require external engine setup via UciBotService
+    case "stockfish-easy" => new RandomBot()
+    case "stockfish-medium" => new RandomBot()
     case _ => new RandomBot()
   }
 

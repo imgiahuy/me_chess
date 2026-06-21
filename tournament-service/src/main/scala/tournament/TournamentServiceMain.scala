@@ -6,6 +6,7 @@ import akka.http.scaladsl.Http
 import tournament.api.TournamentRoutes
 import tournament.kafka.TournamentKafkaService
 import tournament.persistence.{InMemoryTournamentRepository, MongoTournamentRepository, TournamentRepository}
+import tournament.auth.JwtService
 
 import scala.concurrent.ExecutionContextExecutor
 import scala.util.{Failure, Success}
@@ -51,18 +52,23 @@ object TournamentServiceMain:
       new InMemoryTournamentRepository()
 
     val kafka = TournamentKafkaService.fromEnv()
-    val routes = new TournamentRoutes(repo, kafka).routes
+    val jwtService = JwtService.create()
+    val routes = new TournamentRoutes(repo, kafka, jwtService).routes
 
     Http().newServerAt(host, port).bind(routes).onComplete {
       case Success(binding) =>
         val addr = binding.localAddress
         println(s"[SUCCESS] Tournament service running at http://${addr.getHostString}:${addr.getPort}")
+        println("[INFO]    POST   /v1/tournaments/auth/register - register bot and get JWT token")
+        println("[INFO]    POST   /v1/tournaments/auth/validate - validate JWT token")
         println("[INFO]    POST   /v1/tournaments              - create tournament")
         println("[INFO]    GET    /v1/tournaments              - list tournaments")
         println("[INFO]    POST   /v1/tournaments/{id}/register - register participant")
         println("[INFO]    POST   /v1/tournaments/{id}/start   - start tournament")
         println("[INFO]    POST   /v1/tournaments/{id}/result  - report game result")
         println("[INFO]    GET    /v1/tournaments/{id}/standings")
+        println("[INFO]    GET    /v1/tournaments/{id}/stream  - SSE tournament events")
+        println("[INFO]    GET    /v1/tournaments/{id}/game/{gameId}/stream - SSE game events")
         println("[INFO]    GET    /health")
 
         sys.addShutdownHook {

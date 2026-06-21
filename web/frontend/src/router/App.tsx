@@ -7,6 +7,10 @@ import { LeaderboardPage } from "../pages/LeaderboardPage";
 import { AnalyticsPage } from "../pages/AnalyticsPage";
 import { PlayersPage } from "../pages/PlayersPage";
 import { TournamentPage } from "../pages/TournamentPage";
+import { AnalyticsExportPage } from "../pages/AnalyticsExportPage";
+import { OpeningCatalogPage } from "../pages/OpeningCatalogPage";
+import { SpectatePage } from "../pages/SpectatePage";
+import { EngineManagementPage } from "../pages/EngineManagementPage";
 
 type Theme = "dark" | "light";
 
@@ -51,8 +55,12 @@ export default function App() {
                     <Route path="/" element={<MenuPage />} />
                     <Route path="/games" element={<GameList />} />
                     <Route path="/game/:gameId" element={<GamePage />} />
+                    <Route path="/spectate/:gameId" element={<SpectatePage />} />
                     <Route path="/leaderboard" element={<LeaderboardPage />} />
                     <Route path="/analytics" element={<AnalyticsPage />} />
+                    <Route path="/analytics/export" element={<AnalyticsExportPage />} />
+                    <Route path="/openings" element={<OpeningCatalogPage />} />
+                    <Route path="/engines" element={<EngineManagementPage />} />
                     <Route path="/players" element={<PlayersPage />} />
                     <Route path="/tournaments" element={<TournamentPage />} />
                 </Routes>

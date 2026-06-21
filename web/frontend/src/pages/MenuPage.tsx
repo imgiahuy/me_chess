@@ -164,6 +164,8 @@ export function MenuPage() {
                     { label: "Players", icon: "👤", onClick: () => navigate("/players"), primary: false },
                     { label: "Tournaments", icon: "🎯", onClick: () => navigate("/tournaments"), primary: false },
                     { label: "Analytics", icon: "📊", onClick: () => navigate("/analytics"), primary: false },
+                    { label: "Openings", icon: "📚", onClick: () => navigate("/openings"), primary: false },
+                    { label: "Engines", icon: "⚙", onClick: () => navigate("/engines"), primary: false },
                 ].map(({ label, icon, onClick, primary }) => (
                     <button
                         key={label}
