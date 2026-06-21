@@ -7,6 +7,14 @@ services:
       - "8081:8080"
     networks:
       - chess-network
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: '1.0'
+        reservations:
+          memory: 512m
+          cpus: '0.5'
     environment:
       - KEYCLOAK_ADMIN=admin
       - KEYCLOAK_ADMIN_PASSWORD=admin
@@ -40,6 +48,14 @@ services:
       - "5432:5432"
     networks:
       - chess-network
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: '0.5'
+        reservations:
+          memory: 256m
+          cpus: '0.25'
     environment:
       - POSTGRES_DB=chess
       - POSTGRES_USER=chess_user
@@ -62,6 +78,14 @@ services:
       - "27017:27017"
     networks:
       - chess-network
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: '0.5'
+        reservations:
+          memory: 512m
+          cpus: '0.25'
     environment:
       - MONGO_INITDB_DATABASE=chess
     volumes:
@@ -79,6 +103,14 @@ services:
     container_name: chess-zookeeper
     networks:
       - chess-network
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: '0.5'
+        reservations:
+          memory: 256m
+          cpus: '0.25'
     environment:
       - ZOOKEEPER_CLIENT_PORT=2181
       - ZOOKEEPER_TICK_TIME=2000
@@ -95,6 +127,14 @@ services:
       - "9092:9092"
     networks:
       - chess-network
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: '1.0'
+        reservations:
+          memory: 512m
+          cpus: '0.5'
     depends_on:
       zookeeper:
         condition: service_healthy
@@ -121,6 +161,14 @@ services:
       - "6379:6379"
     networks:
       - chess-network
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: '0.25'
+        reservations:
+          memory: 128m
+          cpus: '0.1'
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -137,6 +185,14 @@ services:
       - "8085:8080"
     networks:
       - chess-network
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: '1.0'
+        reservations:
+          memory: 512m
+          cpus: '0.5'
     depends_on:
       postgres:
         condition: service_healthy
@@ -177,6 +233,14 @@ services:
       - "8090:8090"
     networks:
       - chess-network
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: '0.5'
+        reservations:
+          memory: 256m
+          cpus: '0.25'
     depends_on:
       mongodb:
         condition: service_healthy
@@ -192,6 +256,78 @@ services:
       retries: 3
       start_period: 30s
 
+  # Lichess Bot Microservice
+  bot-service:
+    build:
+      context: .
+      dockerfile: bot-service/Dockerfile
+    container_name: chess-bot-service
+    networks:
+      - chess-network
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: '0.5'
+        reservations:
+          memory: 256m
+          cpus: '0.25'
+    environment:
+      - JAVA_OPTS=-Xmx256m
+      - LICHESS_API_TOKEN=${LICHESS_API_TOKEN}
+      - BOT_TYPE=${BOT_TYPE:-greedy}
+      - LICHESS_BASE_URL=${LICHESS_BASE_URL:-https://lichess.org}
+      - ALLOW_RATED=${ALLOW_RATED:-true}
+      - ALLOW_UNRATED=${ALLOW_UNRATED:-true}
+      - ALLOWED_SPEEDS=${ALLOWED_SPEEDS:-bullet,blitz,rapid,classical}
+      - ALLOWED_VARIANTS=${ALLOWED_VARIANTS:-standard}
+      - MAX_INITIAL_TIME_SECONDS=${MAX_INITIAL_TIME_SECONDS:-2147483647}
+      - MIN_INCREMENT_SECONDS=${MIN_INCREMENT_SECONDS:-0}
+      - BOT_HEALTH_HOST=0.0.0.0
+      - BOT_HEALTH_PORT=8080
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Tournament Microservice
+  tournament-service:
+    build:
+      context: .
+      dockerfile: tournament-service/Dockerfile
+    container_name: chess-tournament-service
+    ports:
+      - "8070:8070"
+    networks:
+      - chess-network
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: '0.5'
+        reservations:
+          memory: 256m
+          cpus: '0.25'
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      - JAVA_OPTS=-Xmx256m
+      - SERVICE_PORT=8070
+      - MONGODB_HOST=mongodb
+      - MONGODB_PORT=27017
+      - MONGODB_DATABASE=chess
+      - KAFKA_ENABLED=${KAFKA_ENABLED:-false}
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8070/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
   # Web Frontend Service
   web-frontend:
     build:
@@ -202,15 +338,27 @@ services:
       - "3005:3000"
     networks:
       - chess-network
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: '0.25'
+        reservations:
+          memory: 128m
+          cpus: '0.1'
     depends_on:
       rest-api:
         condition: service_healthy
       player-service:
         condition: service_healthy
+      tournament-service:
+        condition: service_healthy
     environment:
       - REACT_APP_API_URL=http://rest-api:8080
+      - REACT_APP_TOURNAMENT_API_URL=http://tournament-service:8070
       - API_UPSTREAM=rest-api:8080
       - PLAYER_SERVICE_UPSTREAM=player-service:8090
+      - TOURNAMENT_SERVICE_UPSTREAM=tournament-service:8070
 
   # GUI Service (with X11 forwarding for display) - Desktop only, commented out
   # gui:
@@ -258,6 +406,14 @@ services:
     container_name: chess-spark
     networks:
       - chess-network
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: '2.0'
+        reservations:
+          memory: 1g
+          cpus: '1.0'
     depends_on:
       mongodb:
         condition: service_healthy
@@ -280,6 +436,14 @@ services:
     restart: always
     networks:
       - chess-network
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: '2.0'
+        reservations:
+          memory: 1g
+          cpus: '1.0'
     depends_on:
       mongodb:
         condition: service_healthy
@@ -288,7 +452,7 @@ services:
       - MONGODB_URI=mongodb://mongodb:27017
       - MONGODB_DATABASE=chess
       - SPARK_OUTPUT_PATH=/tmp/chess-analytics
-      - REFRESH_INTERVAL_SECONDS=300
+      - REFRESH_INTERVAL_SECONDS=${SPARK_REFRESH_INTERVAL:-300}
     volumes:
       - ./sample_games.pgn:/tmp/sample_games.pgn:ro
       - spark-results:/tmp/chess-analytics

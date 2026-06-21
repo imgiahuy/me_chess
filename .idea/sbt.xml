@@ -9,6 +9,8 @@
         <option name="modules">
           <set>
             <option value="C:\sem7\SA\me_chess" />
+            <option value="C:\sem7\SA\me_chess\benchmark" />
+            <option value="C:\sem7\SA\me_chess\bot-service" />
             <option value="C:\sem7\SA\me_chess\core" />
             <option value="C:\sem7\SA\me_chess\gui" />
             <option value="C:\sem7\SA\me_chess\persistent" />
@@ -17,6 +19,7 @@
             <option value="C:\sem7\SA\me_chess\rest-api" />
             <option value="C:\sem7\SA\me_chess\shared" />
             <option value="C:\sem7\SA\me_chess\spark" />
+            <option value="C:\sem7\SA\me_chess\tournament-service" />
             <option value="C:\sem7\SA\me_chess\tui" />
           </set>
         </option>

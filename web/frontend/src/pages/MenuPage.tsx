@@ -162,6 +162,7 @@ export function MenuPage() {
                     { label: "All Games", icon: "🗂", onClick: () => navigate("/games"), primary: false },
                     { label: "Leaderboard", icon: "🏆", onClick: () => navigate("/leaderboard"), primary: false },
                     { label: "Players", icon: "👤", onClick: () => navigate("/players"), primary: false },
+                    { label: "Tournaments", icon: "🎯", onClick: () => navigate("/tournaments"), primary: false },
                     { label: "Analytics", icon: "📊", onClick: () => navigate("/analytics"), primary: false },
                 ].map(({ label, icon, onClick, primary }) => (
                     <button

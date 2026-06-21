@@ -6,6 +6,7 @@ import { GameList } from "../components/GameList";
 import { LeaderboardPage } from "../pages/LeaderboardPage";
 import { AnalyticsPage } from "../pages/AnalyticsPage";
 import { PlayersPage } from "../pages/PlayersPage";
+import { TournamentPage } from "../pages/TournamentPage";
 
 type Theme = "dark" | "light";
 
@@ -53,6 +54,7 @@ export default function App() {
                     <Route path="/leaderboard" element={<LeaderboardPage />} />
                     <Route path="/analytics" element={<AnalyticsPage />} />
                     <Route path="/players" element={<PlayersPage />} />
+                    <Route path="/tournaments" element={<TournamentPage />} />
                 </Routes>
             </BrowserRouter>
         </ThemeProvider>

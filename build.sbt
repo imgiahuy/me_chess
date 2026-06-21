@@ -235,6 +235,85 @@ lazy val playerService = project
     }
   )
 
+// --- Bot Service (Lichess Bot API integration) ---
+lazy val botService = project
+  .in(file("bot-service"))
+  .settings(
+    commonSettings,
+    fork := true,
+    libraryDependencies ++= Seq(
+      ("com.typesafe.akka" % "akka-actor-typed_3" % "2.8.5")
+        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
+      ("com.typesafe.akka" % "akka-http_3" % "10.5.3")
+        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
+      ("com.typesafe.akka" % "akka-stream_3" % "2.8.5")
+        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
+      ("com.typesafe.akka" % "akka-http-testkit_3" % "10.5.3" % Test)
+        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
+      "com.lihaoyi" %% "upickle" % "3.1.0",
+      "org.scala-lang.modules" % "scala-java8-compat_3" % "1.0.2"
+    ),
+    sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyJarName := "chess-bot-service.jar",
+    sbtassembly.AssemblyPlugin.autoImport.assembly / mainClass := Some("lichess.LichessBotMain"),
+    sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyMergeStrategy := {
+      case PathList("META-INF", "MANIFEST.MF") => MergeStrategy.discard
+      case PathList("META-INF", xs @ _*) => MergeStrategy.discard
+      case "reference.conf" => MergeStrategy.concat
+      case _ => MergeStrategy.first
+    }
+  )
+  .dependsOn(core, shared)
+
+// --- Tournament Service (bot evaluation arena + tournaments) ---
+lazy val tournamentService = project
+  .in(file("tournament-service"))
+  .settings(
+    commonSettings,
+    fork := true,
+    libraryDependencies ++= Seq(
+      ("com.typesafe.akka" % "akka-actor-typed_3" % "2.8.5")
+        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
+      ("com.typesafe.akka" % "akka-http_3" % "10.5.3")
+        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
+      ("com.typesafe.akka" % "akka-stream_3" % "2.8.5")
+        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
+      ("com.typesafe.akka" % "akka-http-testkit_3" % "10.5.3" % Test)
+        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
+      ("com.typesafe.akka" % "akka-stream-kafka_2.13" % "4.0.2")
+        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13")
+        .exclude("com.typesafe.akka", "akka-actor_2.13")
+        .exclude("com.typesafe.akka", "akka-stream_2.13")
+        .exclude("com.typesafe.akka", "akka-protobuf-v3_2.13")
+        .exclude("com.typesafe", "ssl-config-core_2.13"),
+      "org.apache.kafka" % "kafka-clients" % "3.5.1",
+      "com.lihaoyi" %% "upickle" % "3.1.0",
+      "org.scala-lang.modules" % "scala-java8-compat_3" % "1.0.2",
+      "org.mongodb" % "mongodb-driver-sync" % "4.11.0"
+    ),
+    sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyJarName := "chess-tournament-service.jar",
+    sbtassembly.AssemblyPlugin.autoImport.assembly / mainClass := Some("tournament.TournamentServiceMain"),
+    sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyMergeStrategy := {
+      case PathList("META-INF", "MANIFEST.MF") => MergeStrategy.discard
+      case PathList("META-INF", xs @ _*) => MergeStrategy.discard
+      case "reference.conf" => MergeStrategy.concat
+      case _ => MergeStrategy.first
+    }
+  )
+  .dependsOn(core, shared)
+
+// --- JMH Benchmarks ---
+lazy val benchmark = project
+  .in(file("benchmark"))
+  .enablePlugins(JmhPlugin)
+  .settings(
+    commonSettings,
+    libraryDependencies ++= Seq(
+      "org.openjdk.jmh" % "jmh-core" % "1.37" % "provided",
+      "org.openjdk.jmh" % "jmh-generator-bytecode" % "1.37" % "provided"
+    )
+  )
+  .dependsOn(core)
+
 // --- Root project (aggregator only) ---
 lazy val root = project
   .in(file("."))
@@ -244,7 +323,10 @@ lazy val root = project
     persistent,
     restApi,
     spark,
-    playerService
+    playerService,
+    botService,
+    tournamentService,
+    benchmark
   )
   .settings(
     name := "me_chess"

@@ -13,3 +13,11 @@ patches:
     target:
       kind: ConfigMap
       name: web-frontend-config
+  - path: ingress-class-patch.yaml
+    target:
+      kind: Ingress
+      name: chess-ingress
+  - path: ingress-class-patch.yaml
+    target:
+      kind: Ingress
+      name: kafka-ui-ingress

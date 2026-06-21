@@ -7,6 +7,9 @@ data:
   MONGODB_HOST: mongodb
   MONGODB_PORT: "27017"
   MONGODB_DATABASE: chess
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_ENABLED: "true"
   KAFKA_ENABLED: "true"
   KAFKA_BOOTSTRAP_SERVERS: kafka:29092
   SPARK_OUTPUT_PATH: /tmp/chess-analytics
@@ -51,6 +54,21 @@ spec:
             configMapKeyRef:
               name: rest-api-config
               key: MONGODB_DATABASE
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: rest-api-config
+              key: REDIS_HOST
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: rest-api-config
+              key: REDIS_PORT
+        - name: REDIS_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: rest-api-config
+              key: REDIS_ENABLED
         - name: KAFKA_ENABLED
           valueFrom:
             configMapKeyRef:

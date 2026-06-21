@@ -124,6 +124,36 @@ services:
           --partitions 4 \
           --replication-factor 1
 
+        kafka-topics --create --if-not-exists \
+          --bootstrap-server kafka:29092 \
+          --topic chess-tournament-created \
+          --partitions 2 \
+          --replication-factor 1
+
+        kafka-topics --create --if-not-exists \
+          --bootstrap-server kafka:29092 \
+          --topic chess-tournament-started \
+          --partitions 2 \
+          --replication-factor 1
+
+        kafka-topics --create --if-not-exists \
+          --bootstrap-server kafka:29092 \
+          --topic chess-tournament-finished \
+          --partitions 2 \
+          --replication-factor 1
+
+        kafka-topics --create --if-not-exists \
+          --bootstrap-server kafka:29092 \
+          --topic chess-tournament-participant-registered \
+          --partitions 2 \
+          --replication-factor 1
+
+        kafka-topics --create --if-not-exists \
+          --bootstrap-server kafka:29092 \
+          --topic chess-tournament-result-reported \
+          --partitions 4 \
+          --replication-factor 1
+
         echo "All topics created successfully!"
         echo "Listing all topics:"
         kafka-topics --list --bootstrap-server kafka:29092

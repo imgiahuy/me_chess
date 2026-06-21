@@ -1,4 +1,4 @@
-import analytics.ChessAnalytics
+import analytics.{ChessAnalytics, BronzeSilverGold, EloRating}
 import streaming.ChessKafkaStreaming
 import org.apache.spark.sql.{SparkSession, DataFrame, Row}
 import org.apache.spark.sql.functions._
@@ -21,6 +21,8 @@ object ChessSparkApp {
     try {
       val analytics = ChessAnalytics.create(spark)
       val streaming = ChessKafkaStreaming.create(spark)
+      val bsg = BronzeSilverGold.create(spark)
+      val elo = EloRating.create(spark)
       
       println("=== Chess Analytics Spark Application ===")
       
@@ -37,6 +39,8 @@ object ChessSparkApp {
         case "kafka" => processKafkaData(streaming, args.drop(1))
         case "batch" => runBatchAnalytics(analytics, args.drop(1))
         case "mongo" => runMongoAnalytics(analytics, args.drop(1))
+        case "elo"   => runEloRatings(elo, args.drop(1))
+        case "bsg"   => runBronzeSilverGold(bsg, args.drop(1))
         case _ =>
           println(s"Unknown mode: $mode")
           printUsage()
@@ -201,6 +205,7 @@ object ChessSparkApp {
         val resultStr    = Option(doc.getString("result")).getOrElse("")
         val moveCount    = movesColl.countDocuments(Filters.eq("gameId", gameId)).toInt
         val creationDate = Option(doc.getDate("creationDate"))
+          .filter(_ != null)
           .map(d => new java.sql.Date(d.getTime))
           .getOrElse(new java.sql.Date(System.currentTimeMillis()))
         val tcStr        = Option(doc.getString("timeControl"))
@@ -268,6 +273,93 @@ object ChessSparkApp {
     )
   }
   
+  /** Run ELO rating calculation */
+  def runEloRatings(elo: EloRating, args: Array[String]): Unit = {
+    val outputPath = if (args.length > 0) args(0) else sys.env.getOrElse("SPARK_OUTPUT_PATH", "/tmp/chess-analytics")
+    val mongoUri = sys.env.getOrElse("MONGODB_URI", "mongodb://localhost:27017")
+    val dbName = sys.env.getOrElse("MONGODB_DATABASE", "chess")
+
+    println("=== Running ELO Rating Calculation ===")
+
+    // Read games from MongoDB
+    val client: MongoClient = MongoClients.create(mongoUri)
+    try {
+      val db = client.getDatabase(dbName)
+      val gamesColl = db.getCollection("games")
+      val playersColl = db.getCollection("players")
+      val movesColl = db.getCollection("moves")
+
+      // Build player id -> name map
+      val playerMap: Map[Int, String] = playersColl.find().asScala.flatMap { doc =>
+        Option(doc.getInteger("id")).map(id => id.intValue -> doc.getString("name"))
+      }.toMap
+
+      val rows = gamesColl.find().asScala.flatMap { doc =>
+        val gameId = doc.getString("id")
+        val whiteId = Option(doc.getInteger("whitePlayerId")).map(_.intValue).getOrElse(-1)
+        val blackId = Option(doc.getInteger("blackPlayerId")).map(_.intValue).getOrElse(-1)
+        val whiteName = playerMap.getOrElse(whiteId, s"Player$whiteId")
+        val blackName = playerMap.getOrElse(blackId, s"Player$blackId")
+        val resultStr = Option(doc.getString("result")).getOrElse("")
+        val moveCount = movesColl.countDocuments(Filters.eq("gameId", gameId)).toInt
+        val creationDate = Option(doc.getDate("creationDate"))
+          .filter(_ != null)
+          .map(d => new java.sql.Date(d.getTime))
+          .getOrElse(new java.sql.Date(System.currentTimeMillis()))
+
+        val (pgResult, winner) = resultStr match {
+          case s if s.startsWith("checkmate:White") => ("1-0", Some("White"))
+          case s if s.startsWith("checkmate:Black") => ("0-1", Some("Black"))
+          case s if s.startsWith("resignation:White") => ("1-0", Some("White"))
+          case s if s.startsWith("resignation:Black") => ("0-1", Some("Black"))
+          case s if s.startsWith("timeout:White") => ("1-0", Some("White"))
+          case s if s.startsWith("timeout:Black") => ("0-1", Some("Black"))
+          case s if s.startsWith("draw:") => ("1/2-1/2", None)
+          case _ => return None
+        }
+        Some(Row(gameId, whiteName, blackName, pgResult, winner.orNull,
+          moveCount, creationDate, null, null: java.lang.Long, null: java.lang.Long))
+      }.toSeq
+
+      if (rows.isEmpty) {
+        println("No completed games found in MongoDB")
+      } else {
+        println(s"Found ${rows.size} completed games in MongoDB")
+        val gamesDF = elo.spark.createDataFrame(
+          elo.spark.sparkContext.parallelize(rows),
+          ChessAnalytics(elo.spark).gameSchema
+        )
+
+        // Calculate ELO ratings
+        val ratingsDF = elo.calculateEloRatingsIterative(gamesDF)
+        elo.saveRatings(ratingsDF, s"$outputPath/elo-ratings", "json")
+
+        println("=== ELO Ratings ===")
+        ratingsDF.show(20, truncate = false)
+      }
+    } finally {
+      client.close()
+    }
+  }
+
+  /** Run Bronze/Silver/Gold pipeline */
+  def runBronzeSilverGold(bsg: BronzeSilverGold, args: Array[String]): Unit = {
+    val basePath = if (args.length > 0) args(0) else sys.env.getOrElse("SPARK_OUTPUT_PATH", "/tmp/chess-analytics")
+    val mongoUri = sys.env.getOrElse("MONGODB_URI", "mongodb://localhost:27017")
+    val dbName = sys.env.getOrElse("MONGODB_DATABASE", "chess")
+    val collection = "games"
+
+    println("=== Running Bronze/Silver/Gold Pipeline ===")
+
+    // Run batch pipeline
+    bsg.runBatchPipeline(mongoUri, dbName, collection, basePath)
+
+    println(s"=== Pipeline Complete ===")
+    println(s"Bronze layer: $basePath/bronze")
+    println(s"Silver layer: $basePath/silver")
+    println(s"Gold layer: $basePath/gold")
+  }
+
   /** Print usage information */
   def printUsage(): Unit = {
     println("""
@@ -280,12 +372,18 @@ object ChessSparkApp {
       |  file <input_path> <output_path> [format]  - Process data from files
       |  kafka <bootstrap_servers> <output_path>   - Process streaming data from Kafka
       |  batch [output_path]                       - Run batch analytics on sample data
+      |  mongo [output_path]                        - Run analytics on MongoDB data
+      |  elo [output_path]                          - Calculate ELO ratings
+      |  bsg [output_path]                          - Run Bronze/Silver/Gold pipeline
       |
       |Examples:
       |  ChessSparkApp file data/games.pgn /tmp/results json
       |  ChessSparkApp file data/games.json /tmp/results
       |  ChessSparkApp kafka localhost:9092 /tmp/streaming-results
       |  ChessSparkApp batch /tmp/batch-results
+      |  ChessSparkApp mongo /tmp/mongo-results
+      |  ChessSparkApp elo /tmp/elo-results
+      |  ChessSparkApp bsg /tmp/bsg-results
       |
       |File formats supported:
       |  - PGN (.pgn) - Portable Game Notation

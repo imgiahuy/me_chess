@@ -24,18 +24,6 @@ data:
     fi
 ---
 apiVersion: v1
-kind: Secret
-metadata:
-  name: postgres-secret
-  namespace: chess
-type: Opaque
-stringData:
-  POSTGRES_DB: chess
-  POSTGRES_USER: chess_user
-  POSTGRES_PASSWORD: chess_password
-  POSTGRES_MULTIPLE_DATABASES: keycloak
----
-apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: postgres-pvc

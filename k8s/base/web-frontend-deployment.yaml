@@ -5,8 +5,10 @@ metadata:
   namespace: chess
 data:
   REACT_APP_API_URL: http://localhost/v1
+  REACT_APP_TOURNAMENT_API_URL: http://localhost/v1/tournaments
   API_UPSTREAM: rest-api.chess.svc.cluster.local:8080
   PLAYER_SERVICE_UPSTREAM: player-service.chess.svc.cluster.local:8090
+  TOURNAMENT_SERVICE_UPSTREAM: tournament-service.chess.svc.cluster.local:8070
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -40,6 +42,11 @@ spec:
             configMapKeyRef:
               name: web-frontend-config
               key: API_UPSTREAM
+        - name: TOURNAMENT_SERVICE_UPSTREAM
+          valueFrom:
+            configMapKeyRef:
+              name: web-frontend-config
+              key: TOURNAMENT_SERVICE_UPSTREAM
         resources:
           requests:
             memory: "64Mi"
@@ -94,6 +101,13 @@ spec:
             name: player-service
             port:
               number: 8090
+      - path: /v1/tournaments
+        pathType: Prefix
+        backend:
+          service:
+            name: tournament-service
+            port:
+              number: 8070
       - path: /v1
         pathType: Prefix
         backend:

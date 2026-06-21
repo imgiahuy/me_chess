@@ -34,6 +34,78 @@ docker-compose up -d
 - **MongoDB**: localhost:27017
 - **Spark Analytics**: runs once on startup (batch mode), results in `spark-results` Docker volume
 
+### Tournament Service
+
+The `tournament-service` manages chess tournaments and bot evaluation arenas. It supports round-robin, Swiss, and arena formats and persists data to MongoDB.
+
+**API endpoints:**
+- `POST /v1/tournaments` — create a tournament
+- `GET /v1/tournaments` — list tournaments
+- `POST /v1/tournaments/{id}/register` — register a participant
+- `POST /v1/tournaments/{id}/start` — start the tournament
+- `POST /v1/tournaments/{id}/result` — report a game result
+- `GET /v1/tournaments/{id}/standings` — get standings
+- `GET /v1/tournaments/{id}/pairings` — get pairings
+
+**Kafka topics:**
+- `chess-tournament-created`
+- `chess-tournament-started`
+- `chess-tournament-finished`
+- `chess-tournament-participant-registered`
+- `chess-tournament-result-reported`
+
+**Web UI:** navigate to `/tournaments` from the main menu.
+
+### Lichess Bot Service
+
+The `bot-service` connects to Lichess via the Bot API and plays games using the internal chess engine. It is optional and requires a Lichess **BOT account** token.
+
+**Create a Lichess BOT account:**
+1. Register a dedicated account at https://lichess.org.
+2. Enable the Bot API at https://lichess.org/account/oauth/create (scope: `challenge:read`, `challenge:write`, `bot:play`, `game:read`, `game:write`).
+3. Copy the generated token.
+
+**Docker Compose:**
+
+```bash
+export LICHESS_API_TOKEN="your_lichess_bot_token"
+# Optional: choose a different bot engine
+export BOT_TYPE="greedy"  # or random / capture
+
+docker-compose up -d bot-service
+```
+
+**Kubernetes:**
+
+```bash
+# Update the secret value
+kubectl patch secret lichess-secret -n chess --type=string -p='{"stringData":{"LICHESS_API_TOKEN":"your_lichess_bot_token"}}'
+kubectl rollout restart deployment/bot-service -n chess
+```
+
+**Configuration options (env vars):**
+
+| Variable | Default | Description |
+|---|---|---|
+| `LICHESS_API_TOKEN` | (required) | Lichess BOT account API token |
+| `BOT_TYPE` | `greedy` | Internal bot engine used for moves |
+| `ALLOW_RATED` | `true` | Accept rated challenges |
+| `ALLOW_UNRATED` | `true` | Accept unrated challenges |
+| `ALLOWED_SPEEDS` | `bullet,blitz,rapid,classical` | Comma-separated accepted time controls |
+| `ALLOWED_VARIANTS` | `standard` | Comma-separated accepted variants |
+| `MAX_INITIAL_TIME_SECONDS` | `2147483647` | Maximum initial time in seconds |
+| `MIN_INCREMENT_SECONDS` | `0` | Minimum increment in seconds |
+
+**View bot logs:**
+
+```bash
+# Docker Compose
+docker-compose logs -f bot-service
+
+# Kubernetes
+kubectl logs -n chess -f deployment/bot-service
+```
+
 ### Keycloak Configuration
 
 - **Admin Console**: http://localhost:8081/admin
@@ -378,7 +450,94 @@ kubectl logs -n chess deployment/zookeeper
 - Use environment variables for secrets
 - Enable HTTPS for production
 - Configure proper firewall rules
-- Use secrets management for Kubernetes
+  - Use secrets management for Kubernetes
+
+         ## Performance Testing
+
+The project includes multiple performance-testing tools to verify the REST API and core chess engine.
+
+### Gatling (SBT)
+
+Simulations are located under `rest-api/src/test/scala/performance/` and use the shared `BaseChessSimulation` class with CSV feeders.
+
+Run the default simulation:
+
+```bash
+sbt "restApi/GatlingIt/testOnly performance.ChessApiSimulation"
+```
+
+Run the smoke test:
+
+```bash
+sbt "restApi/GatlingIt/testOnly performance.SmokeChessSimulation"
+```
+
+Run the load test:
+
+```bash
+sbt "restApi/GatlingIt/testOnly performance.LoadChessSimulation"
+```
+
+Run the stress test:
+
+```bash
+sbt "restApi/GatlingIt/testOnly performance.StressChessSimulation"
+```
+
+Run the soak test:
+
+```bash
+sbt "restApi/GatlingIt/testOnly performance.SoakChessSimulation"
+```
+
+Run the end-to-end test:
+
+```bash
+sbt "restApi/GatlingIt/testOnly performance.EndToEndChessSimulation"
+```
+
+Run the capacity test (finds server max limit/breaking point):
+
+```bash
+sbt "restApi/GatlingIt/testOnly performance.CapacitySimulation"
+```
+
+The capacity test ramps up to 300 concurrent users over 10 minutes to identify the server's breaking point. Monitor the Gatling HTML report to see when response times degrade or error rates increase.
+
+Override the base URL via Java property:
+
+```bash
+sbt -Dgatling.baseUrl=http://localhost:8085/v1/chess "restApi/GatlingIt/testOnly performance.LoadChessSimulation"
+```
+
+### k6
+
+k6 scripts are located under `k6/` and cover smoke, load, and stress profiles.
+
+```bash
+# Smoke test
+k6 run k6/smoke.js
+
+# Load test
+k6 run k6/load.js
+
+# Stress test
+k6 run k6/stress.js
+```
+
+Override the target URL:
+
+```bash
+k6 run -e BASE_URL=http://localhost:8085/v1/chess k6/load.js
+```
+
+### JMH Microbenchmarks
+
+JMH benchmarks are located under `benchmark/src/main/scala/chess/benchmark/` and run via the `sbt-jmh` plugin.
+
+```bash
+sbt benchmark/Jmh/run
+```
 
 ## Monitoring
 

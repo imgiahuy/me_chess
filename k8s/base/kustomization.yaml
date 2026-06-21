@@ -3,13 +3,18 @@ kind: Kustomization
 
 resources:
   - namespace.yaml
+  - secrets.yaml
   - postgres-deployment.yaml
   - mongodb-deployment.yaml
   - keycloak-realm-config.yaml
   - keycloak-deployment.yaml
   - kafka-deployment.yaml
   - player-service-deployment.yaml
+  - bot-service-deployment.yaml
+  - tournament-service-deployment.yaml
   - rest-api-deployment.yaml
+  - rest-api-hpa.yaml
+  - pod-disruption-budgets.yaml
   - web-frontend-deployment.yaml
   - kafka-ui-deployment.yaml
   - spark-job.yaml

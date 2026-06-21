@@ -27,4 +27,4 @@ COPY nginx.conf /etc/nginx/templates/nginx.conf.template
 EXPOSE 3000
 
 # Start nginx with envsubst to substitute environment variables
-CMD ["/bin/sh", "-c", "envsubst '$$API_UPSTREAM $$PLAYER_SERVICE_UPSTREAM' < /etc/nginx/templates/nginx.conf.template > /etc/nginx/nginx.conf && nginx -g 'daemon off;'"]
+CMD ["/bin/sh", "-c", "envsubst '$$API_UPSTREAM $$PLAYER_SERVICE_UPSTREAM $$TOURNAMENT_SERVICE_UPSTREAM' < /etc/nginx/templates/nginx.conf.template > /etc/nginx/nginx.conf && nginx -g 'daemon off;'"]
