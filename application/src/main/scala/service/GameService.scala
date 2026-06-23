@@ -155,6 +155,7 @@ object GameService {
 
    /** Checks if the move is legal according to piece movement rules and doesn't leave king in check. */
   def isLegalMove(snapshot: PositionState, move: Move, piece: Piece): Either[String, Unit] = {
+    println(s"[GameService] Validating move: $move for piece $piece")
     for {
       _ <- isPieceMoveLegal(snapshot.board, move, piece, Some(snapshot))
       boardAfterMove <- applyMoveToBoard(snapshot.board, move, piece, Some(snapshot))
@@ -163,12 +164,15 @@ object GameService {
         (),
         "Move leaves your king in check"
       )
-    } yield ()
+    } yield {
+      println(s"[GameService] Move $move validated successfully")
+    }
   }
 
   /** Validates that a move follows the piece's movement rules. */
   def isPieceMoveLegal(board: Board, move: Move, piece: Piece, snapshot: Option[PositionState] = None): Either[String, Unit] = {
-    piece.pieceType match {
+    println(s"[GameService] Checking piece movement: $piece from ${move.from} to ${move.to}")
+    val result = piece.pieceType match {
       case Pawn   => isPawnMoveLegal(board, move, piece, snapshot.getOrElse(PositionState(board, White, List(), Player(""), Player(""), timeControl = None)))
       case Knight => isKnightMoveLegal(board, move)
       case Bishop => isBishopMoveLegal(board, move)
@@ -176,6 +180,11 @@ object GameService {
       case Queen  => isQueenMoveLegal(board, move)
       case King   => isKingMoveLegal(board, move, snapshot)
     }
+    result match {
+      case Right(_) => println(s"[GameService] Piece movement validated: $piece")
+      case Left(err) => println(s"[GameService] Piece movement failed: $err")
+    }
+    result
   }
 
   /** Simplified version for attack detection - doesn't check castling to avoid infinite recursion */

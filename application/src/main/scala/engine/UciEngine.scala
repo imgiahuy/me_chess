@@ -7,10 +7,12 @@ import scala.io.Source
 import java.io.{BufferedReader, BufferedWriter, InputStreamReader, OutputStreamWriter}
 import java.util.concurrent.{ArrayBlockingQueue, TimeUnit}
 import scala.util.{Try, Success, Failure}
+import org.slf4j.LoggerFactory
 
 /** UCI (Universal Chess Interface) engine client for communicating with external chess engines like Stockfish */
 class UciEngine(enginePath: String, options: Map[String, String] = Map.empty) extends Bot {
-  
+
+  private val logger = LoggerFactory.getLogger(getClass)
   private var process: Option[Process] = None
   private var reader: Option[BufferedReader] = None
   private var writer: Option[BufferedWriter] = None
@@ -28,6 +30,7 @@ class UciEngine(enginePath: String, options: Map[String, String] = Map.empty) ex
   
   /** Initialize the engine process */
   def initialize(): Try[Unit] = Try {
+    logger.info(s"Initializing UCI engine at: $enginePath with options: $options")
     val pb = new ProcessBuilder(enginePath)
     pb.redirectErrorStream(true)
     process = Some(pb.start())
@@ -61,13 +64,16 @@ class UciEngine(enginePath: String, options: Map[String, String] = Map.empty) ex
         val line = reader.get.readLine()
         if (line == null) {
           // Engine process ended
+          logger.error("Engine process ended (stream closed)")
           shutdown()
         } else {
           handleResponse(line)
         }
       }
     } catch {
-      case _: Exception => // Thread interrupted or error
+      case e: Exception =>
+        logger.error(s"Error reading responses from engine: ${e.getMessage}", e)
+        shutdown()
     }
   }
   
@@ -129,17 +135,34 @@ class UciEngine(enginePath: String, options: Map[String, String] = Map.empty) ex
   
   /** Go: start calculating on current position */
   def go(depth: Int = 15, timeMs: Long = 1000): Future[String] = {
+    logger.info(s"Starting search with depth=$depth, timeMs=$timeMs")
     if (!isReady) {
+      logger.info("Engine not ready, initializing...")
       initialize() match {
         case Failure(e) => return Future.failed(e)
         case Success(_) =>
       }
     }
-    
+
     val promise = Promise[String]()
     bestMovePromise = Some(promise)
-    
-    sendCommand(s"go depth $depth movetime $timeMs")
+
+    val command = s"go depth $depth movetime $timeMs"
+    logger.info(s"Sending UCI command: $command")
+    try {
+      sendCommand(command)
+    } catch {
+      case e: Exception =>
+        logger.error(s"Failed to send command to engine: ${e.getMessage}, attempting restart", e)
+        shutdown()
+        Thread.sleep(500)
+        initialize() match {
+          case Failure(e2) => return Future.failed(e2)
+          case Success(_) =>
+            logger.info("Engine restarted successfully, retrying command")
+            sendCommand(command)
+        }
+    }
     
     // Timeout fallback
     Future {

@@ -4,15 +4,21 @@ import model.{PositionState, Bot, BotFactory, Move}
 import engine.{UciBotService, UciEngine, EngineManager}
 import scala.concurrent.{ExecutionContext, Future, Await}
 import scala.concurrent.duration._
+import org.slf4j.LoggerFactory
 
 /** Service for handling bot moves and interactions */
 object BotService {
-  
+
+  private val logger = LoggerFactory.getLogger(getClass)
   private implicit val ec: ExecutionContext = scala.concurrent.ExecutionContext.global
   private val uciBotService = UciBotService()
-  
+
+  // Cache for bot instances to reuse engines across moves
+  private val botCache = scala.collection.mutable.Map[String, Bot]()
+
   // Initialize UCI bot service on load
   uciBotService.initialize()
+  logger.info("BotService initialized with UCI bot service")
 
   /** Get the next move for a bot in the given position
     *
@@ -52,12 +58,19 @@ object BotService {
     * @return Created bot instance
     */
   def createBot(botType: String): Bot = {
-    botType.toLowerCase match {
-      case "stockfish" | "uci" => new StockfishBotWrapper(depth = 15, skillLevel = 20)
-      case "stockfish-easy" => new StockfishBotWrapper(depth = 10, skillLevel = 5)
-      case "stockfish-medium" => new StockfishBotWrapper(depth = 12, skillLevel = 10)
-      case _ => BotFactory.createBot(botType)
-    }
+    val cacheKey = botType.toLowerCase
+    logger.info(s"Creating bot of type: $botType (cache hit: ${botCache.contains(cacheKey)})")
+    
+    botCache.getOrElseUpdate(cacheKey, {
+      cacheKey match {
+        case "stockfish" | "uci" => new StockfishBotWrapper(engineName = "stockfish", depth = 15, skillLevel = 20)
+        case "stockfish-easy" => new StockfishBotWrapper(engineName = "stockfish-easy", depth = 10, skillLevel = 5)
+        case "stockfish-medium" => new StockfishBotWrapper(engineName = "stockfish-medium", depth = 12, skillLevel = 10)
+        case _ =>
+          logger.info(s"Creating non-Stockfish bot: $botType")
+          BotFactory.createBot(botType)
+      }
+    })
   }
 
   /** Get list of available bot types */
@@ -66,64 +79,85 @@ object BotService {
   }
   
   /** Wrapper for Stockfish bot using UciBotService */
-  private class StockfishBotWrapper(depth: Int, skillLevel: Int) extends Bot {
-    private var uciBot: Option[UciBot] = None
-    
+  private class StockfishBotWrapper(engineName: String, depth: Int, skillLevel: Int) extends Bot {
+    private val logger = LoggerFactory.getLogger(getClass)
+    // Reuse the same UciBot instance across moves to maintain engine state
+    private val uciBot = new UciBot(engineName, depth)
+
     override def name: String = s"Stockfish (Skill $skillLevel)"
     override def difficulty: String = if (skillLevel <= 5) "Medium" else if (skillLevel <= 15) "Hard" else "Expert"
     override def description: String = s"Stockfish chess engine at depth $depth with skill level $skillLevel"
-    
-    private def ensureBot(state: PositionState): Unit = {
-      if (uciBot.isEmpty) {
-        uciBot = Some(new UciBot(depth, state))
-      }
-    }
-    
+
     override def selectMove(state: PositionState, availableMoves: List[Move]): Move = {
       try {
-        ensureBot(state)
-        uciBot match {
-          case Some(bot) => bot.selectMove(state, availableMoves)
-          case None => availableMoves.head
-        }
+        logger.info(s"StockfishBotWrapper.selectMove called with ${availableMoves.length} available moves")
+        uciBot.selectMove(state, availableMoves)
       } catch {
-        case _: Exception => availableMoves.head
+        case e: Exception =>
+          logger.error(s"Error in StockfishBotWrapper.selectMove: ${e.getMessage}", e)
+          availableMoves.head
       }
     }
   }
   
   /** UCI Bot implementation using UciBotService */
-  private class UciBot(depth: Int, initialState: PositionState) extends Bot {
+  private class UciBot(engineName: String, depth: Int) extends Bot {
+    private val logger = LoggerFactory.getLogger(getClass)
     private var uciEngineInstance: Option[UciEngine] = None
-    
+
     override def name: String = "UCI Engine Bot"
     override def difficulty: String = "Expert"
     override def description: String = "Bot backed by external UCI chess engine (e.g., Stockfish)"
-    
+
     private def ensureEngine(): Unit = {
+      logger.info(s"ensureEngine called for: $engineName")
+      EngineManager.initializeDefault()
+      // Check if current engine instance is still running, if not, clear it
+      if (uciEngineInstance.isDefined && !EngineManager().isEngineRunning(engineName)) {
+        logger.warn(s"Engine $engineName stopped, clearing instance")
+        uciEngineInstance = None
+      }
+      // Get or start the engine
       if (uciEngineInstance.isEmpty) {
-        EngineManager.initializeDefault()
-        uciEngineInstance = EngineManager().getEngine("stockfish")
+        logger.info(s"Getting or starting engine: $engineName")
+        uciEngineInstance = EngineManager().getEngine(engineName).orElse {
+          // Try to start the engine if not running
+          logger.info(s"Engine not running, attempting to start: $engineName")
+          EngineManager().startEngine(engineName).toOption
+        }
+        if (uciEngineInstance.isDefined) {
+          logger.info(s"Engine $engineName started successfully")
+        } else {
+          logger.error(s"Failed to start engine: $engineName")
+        }
       }
     }
     
     override def selectMove(state: PositionState, availableMoves: List[Move]): Move = {
       try {
+        logger.info(s"UciBot.selectMove called for engine: $engineName")
         ensureEngine()
         uciEngineInstance match {
           case Some(uciEngine) =>
+            // Get configured time from EngineManager
+            val config = EngineManager().getEngineConfig(engineName)
+            val timeMs = config.map(_.defaultTimeMs).getOrElse(5000L)
+            logger.info(s"Using UCI engine $engineName for move calculation (depth=$depth, timeMs=$timeMs)")
             val fen = stateToFen(state)
             uciEngine.setPosition(fen)
-            val bestMoveFuture = uciEngine.go(depth = depth, timeMs = 1000)
-            val bestMove = Await.result(bestMoveFuture, 5.seconds)
-            
+            val bestMoveFuture = uciEngine.go(depth = depth, timeMs = timeMs)
+            val bestMove = Await.result(bestMoveFuture, timeMs.milliseconds + 5.seconds)
+            logger.info(s"UCI engine $engineName returned move: $bestMove")
+
             // Convert UCI move to internal Move
             uciToInternalMove(bestMove, state, availableMoves)
           case None =>
+            logger.error(s"Engine $engineName not available, falling back to first legal move")
             availableMoves.head
         }
       } catch {
-        case _: Exception => 
+        case e: Exception =>
+          logger.error(s"Error using UCI engine $engineName: ${e.getMessage}, falling back to first legal move", e)
           availableMoves.head
       }
     }

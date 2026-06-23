@@ -48,6 +48,7 @@ class LichessClient(config: LichessBotConfig)(implicit system: ActorSystem[?]) {
                 .map(_.utf8String)
                 .filter(_.trim.nonEmpty)
                 .map { line =>
+                  println(s"[LichessClient] Received event line: $line")
                   try {
                     upickle.default.read[LichessEvent](line)
                   } catch {
@@ -83,6 +84,7 @@ class LichessClient(config: LichessBotConfig)(implicit system: ActorSystem[?]) {
                 .map(_.utf8String)
                 .filter(_.trim.nonEmpty)
                 .map { line =>
+                  println(s"[LichessClient] Received game event line: $line")
                   try {
                     upickle.default.read[GameStreamEvent](line)
                   } catch {

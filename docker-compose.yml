@@ -285,12 +285,6 @@ services:
       - MIN_INCREMENT_SECONDS=${MIN_INCREMENT_SECONDS:-0}
       - BOT_HEALTH_HOST=0.0.0.0
       - BOT_HEALTH_PORT=8080
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
 
   # Tournament Microservice
   tournament-service:

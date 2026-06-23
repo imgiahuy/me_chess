@@ -327,7 +327,25 @@ export function GamePage() {
             }, 500); // Small delay for better UX
             return () => clearTimeout(timer);
         }
-    }, [game?.turn, game?.gameResult.status, game?.isPaused, whiteBotType, blackBotType]);
+    }, [game?.turn, game?.gameResult.status, game?.isPaused, whiteBotType, blackBotType, isBotMoving]);
+
+    // Fallback: if it's bot vs bot and no move happened for 5 seconds, force a retry
+    React.useEffect(() => {
+        if (!game || game.gameResult.status !== "ongoing" || game.isPaused) return;
+        if (!whiteBotType && !blackBotType) return; // Not a bot vs bot game
+
+        const currentTurnBot = game.turn === "White" ? whiteBotType : blackBotType;
+        if (!currentTurnBot) return; // Current player is human
+
+        const timer = setTimeout(() => {
+            if (!isBotMoving) {
+                // Force a bot move if stuck
+                handleBotMove(currentTurnBot);
+            }
+        }, 5000); // 5 second timeout
+
+        return () => clearTimeout(timer);
+    }, [game?.turn, game?.gameResult.status, game?.isPaused, whiteBotType, blackBotType, isBotMoving]);
 
     const { theme, toggleTheme } = useTheme();
     const isOngoing = game?.gameResult.status === "ongoing";

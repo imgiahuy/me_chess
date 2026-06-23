@@ -3,13 +3,13 @@ package tournament.client.model
 import java.time.Instant
 import upickle.default.{ReadWriter, macroRW}
 
-/** Models for external Tournament Server API integration */
+/** Models for external Tournament Server API integration - matches OpenAPI spec */
 
 // --- Authentication ---
 
 case class RegisterRequest(
   name: String,
-  isBot: Boolean
+  isBot: Boolean = false
 )
 
 case class RegisterResponse(
@@ -20,146 +20,162 @@ case class RegisterResponse(
 // --- Tournament ---
 
 case class TournamentListResponse(
-  created: List[TournamentSummary],
-  started: List[TournamentSummary],
-  finished: List[TournamentSummary]
+  created: List[TournamentInfo],
+  started: List[TournamentInfo],
+  finished: List[TournamentInfo]
 )
 
-case class TournamentSummary(
+case class TournamentInfo(
   id: String,
-  name: String,
-  status: String,
+  fullName: String,
+  clock: Clock,
+  variant: Variant,
+  rated: Boolean,
+  nbPlayers: Int,
+  nbRounds: Int,
   format: String,
-  rounds: Int,
-  currentRound: Int,
-  participantCount: Int,
-  createdAt: Instant
+  matchesPerPairing: Int,
+  startPosition: String,
+  createdBy: String,
+  startsAt: String
+)
+
+case class Clock(
+  limit: Int,
+  increment: Int
+)
+
+case class Variant(
+  key: String,
+  name: String
 )
 
 case class TournamentDetail(
   id: String,
-  name: String,
-  status: String,
+  fullName: String,
+  clock: Clock,
+  variant: Variant,
+  rated: Boolean,
+  nbPlayers: Int,
+  nbRounds: Int,
   format: String,
-  rounds: Int,
-  gamesPerPairing: Int,
-  timeControlSeconds: Int,
-  incrementSeconds: Int,
-  participants: List[ParticipantInfo],
-  standings: List[StandingInfo],
-  createdAt: Instant,
-  startedAt: Option[Instant],
-  finishedAt: Option[Instant]
+  matchesPerPairing: Int,
+  startPosition: String,
+  createdBy: String,
+  startsAt: String,
+  status: String,
+  round: Int,
+  standing: Standing,
+  winner: Option[BotRef]
 )
 
-case class ParticipantInfo(
-  id: String,
-  name: String,
-  botType: Option[String],
-  rating: Double
+case class Standing(
+  page: Int,
+  players: List[Result]
 )
 
-case class StandingInfo(
-  participantId: String,
-  name: String,
-  score: Double,
+case class Result(
+  rank: Int,
+  points: Double,
+  tieBreak: Double,
+  bot: BotRef,
+  nbGames: Int,
   wins: Int,
   draws: Int,
-  losses: Int,
-  rating: Double
+  losses: Int
+)
+
+case class BotRef(
+  id: String,
+  name: String
 )
 
 // --- Tournament Events (NDJSON) ---
 
-sealed trait TournamentEvent
-case class TournamentStartedEvent(
-  `type`: String = "tournamentStarted",
-  tournamentId: String,
-  timestamp: Instant
-) extends TournamentEvent
-case class RoundStartedEvent(
-  `type`: String = "roundStarted",
-  tournamentId: String,
-  round: Int,
-  timestamp: Instant
-) extends TournamentEvent
-case class GameStartEvent(
-  `type`: String = "gameStart",
-  tournamentId: String,
-  round: Int,
-  gameId: String,
-  color: String, // "white" or "black"
-  opponentId: String,
-  opponentName: String,
-  timestamp: Instant
-) extends TournamentEvent
-case class RoundFinishedEvent(
-  `type`: String = "roundFinished",
-  tournamentId: String,
-  round: Int,
-  timestamp: Instant
-) extends TournamentEvent
-case class TournamentFinishedEvent(
-  `type`: String = "tournamentFinished",
-  tournamentId: String,
-  timestamp: Instant
-) extends TournamentEvent
-case class HeartbeatEvent(
-  `type`: String = "heartbeat",
-  timestamp: Instant
-) extends TournamentEvent
+case class TournamentEvent(
+  `type`: String,
+  round: Option[Int] = None,
+  gameId: Option[String] = None,
+  color: Option[String] = None,
+  winner: Option[BotRef] = None
+)
 
 // --- Game Events (NDJSON) ---
 
-sealed trait GameEvent
-case class GameStateEvent(
-  `type`: String = "gameState",
+case class GameEvent(
+  `type`: String,
+  uci: Option[String] = None,
+  fen: Option[String] = None,
+  turn: Option[String] = None,
+  clock: Option[GameClock] = None,
+  winner: Option[String] = None,
+  status: Option[String] = None
+)
+
+case class GameClock(
+  whiteTime: Double,
+  blackTime: Double,
+  increment: Int
+)
+
+// --- Game State ---
+
+case class GameState(
+  id: String,
   tournamentId: String,
-  gameId: String,
+  round: Int,
+  white: BotRef,
+  black: BotRef,
+  moves: String,
   fen: String,
-  turn: String, // "white" or "black"
-  whiteTimeMs: Long,
-  blackTimeMs: Long,
-  timestamp: Instant
-) extends GameEvent
-case class MoveEvent(
-  `type`: String = "move",
-  tournamentId: String,
-  gameId: String,
-  uci: String,
-  fen: String,
+  status: String,
   turn: String,
-  timestamp: Instant
-) extends GameEvent
-case class GameEndEvent(
-  `type`: String = "gameEnd",
-  tournamentId: String,
-  gameId: String,
-  result: String, // "whiteWin", "blackWin", "draw"
-  reason: String,
-  timestamp: Instant
-) extends GameEvent
-case class GameHeartbeatEvent(
-  `type`: String = "heartbeat",
-  timestamp: Instant
-) extends GameEvent
+  winner: Option[String],
+  clock: GameClock,
+  startPosition: String
+)
 
 // --- Bot Registration ---
 
 case class RegisterBotRequest(
   name: String,
-  family: String,
-  strategyType: String,
-  engineType: String,
-  modelVersion: String
+  endpoint: Option[String] = None,
+  family: Option[String] = None,
+  strategyType: Option[String] = None,
+  engineType: Option[String] = None,
+  modelVersion: Option[String] = None
 )
 
-case class RegisterBotResponse(
-  botId: String
+case class RegisteredBot(
+  id: String,
+  name: String,
+  endpoint: Option[String],
+  family: Option[String],
+  strategyType: Option[String],
+  engineType: Option[String],
+  modelVersion: Option[String]
 )
 
 case class AddParticipantRequest(
   botId: String
+)
+
+// --- Create Tournament Form ---
+
+case class CreateTournamentForm(
+  name: String,
+  nbRounds: Int,
+  clockLimit: Int,
+  clockIncrement: Int,
+  rated: Boolean = true,
+  format: String = "swiss",
+  startPosition: String = "standard",
+  matchesPerPairing: Int = 1,
+  groupSize: Option[Int] = None,
+  opening: Option[String] = None,
+  bots: Option[String] = None,
+  maxConcurrentGames: Option[Int] = None,
+  openings: Option[String] = None
 )
 
 // --- Error Response ---
@@ -167,6 +183,12 @@ case class AddParticipantRequest(
 case class ErrorResponse(
   error: String,
   details: Option[String] = None
+)
+
+// --- Simple Response ---
+
+case class Ok(
+  ok: Boolean = true
 )
 
 // --- uPickle JSON Readers/Writers ---
@@ -179,23 +201,22 @@ object JsonFormats {
   
   given ReadWriter[RegisterRequest] = macroRW
   given ReadWriter[RegisterResponse] = macroRW
-  given ReadWriter[TournamentSummary] = macroRW
-  given ReadWriter[TournamentDetail] = macroRW
   given ReadWriter[TournamentListResponse] = macroRW
-  given ReadWriter[ParticipantInfo] = macroRW
-  given ReadWriter[StandingInfo] = macroRW
-  given ReadWriter[TournamentStartedEvent] = macroRW
-  given ReadWriter[RoundStartedEvent] = macroRW
-  given ReadWriter[GameStartEvent] = macroRW
-  given ReadWriter[RoundFinishedEvent] = macroRW
-  given ReadWriter[TournamentFinishedEvent] = macroRW
-  given ReadWriter[HeartbeatEvent] = macroRW
-  given ReadWriter[GameStateEvent] = macroRW
-  given ReadWriter[MoveEvent] = macroRW
-  given ReadWriter[GameEndEvent] = macroRW
-  given ReadWriter[GameHeartbeatEvent] = macroRW
+  given ReadWriter[TournamentInfo] = macroRW
+  given ReadWriter[Clock] = macroRW
+  given ReadWriter[Variant] = macroRW
+  given ReadWriter[TournamentDetail] = macroRW
+  given ReadWriter[Standing] = macroRW
+  given ReadWriter[Result] = macroRW
+  given ReadWriter[BotRef] = macroRW
+  given ReadWriter[TournamentEvent] = macroRW
+  given ReadWriter[GameEvent] = macroRW
+  given ReadWriter[GameClock] = macroRW
+  given ReadWriter[GameState] = macroRW
   given ReadWriter[RegisterBotRequest] = macroRW
-  given ReadWriter[RegisterBotResponse] = macroRW
+  given ReadWriter[RegisteredBot] = macroRW
   given ReadWriter[AddParticipantRequest] = macroRW
+  given ReadWriter[CreateTournamentForm] = macroRW
   given ReadWriter[ErrorResponse] = macroRW
+  given ReadWriter[Ok] = macroRW
 }

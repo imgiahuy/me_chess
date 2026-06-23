@@ -424,9 +424,9 @@ object BotFactory {
     case "defensive" => new DefensiveBot()
     case "aggressive" => new AggressiveBot()
     case "smarter" => new SmarterBot()
-    case "stockfish" | "uci" => new RandomBot() // UCI bots require external engine setup via UciBotService - fallback to random
-    case "stockfish-easy" => new RandomBot() // UCI bots require external engine setup - fallback to random
-    case "stockfish-medium" => new RandomBot() // UCI bots require external engine setup - fallback to random
+    case "stockfish" | "uci" => throw new IllegalArgumentException("Stockfish bots must be created via BotService.createBot which handles UCI engine initialization")
+    case "stockfish-easy" => throw new IllegalArgumentException("Stockfish bots must be created via BotService.createBot which handles UCI engine initialization")
+    case "stockfish-medium" => throw new IllegalArgumentException("Stockfish bots must be created via BotService.createBot which handles UCI engine initialization")
     case _ => new RandomBot()
   }
 

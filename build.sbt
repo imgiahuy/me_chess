@@ -36,7 +36,10 @@ lazy val core = project
 // Contains: services, controllers, use cases, engines, formatters, parsers
 lazy val application = project
   .in(file("application"))
-  .settings(commonSettings)
+  .settings(
+    commonSettings,
+    libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.4.14"
+  )
   .dependsOn(core, domainPersistence, shared)
 
 // --- Domain Persistence Layer (interfaces only) ---

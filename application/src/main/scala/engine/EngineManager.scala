@@ -97,7 +97,7 @@ object EngineManager {
         "Hash" -> "256"
       ),
       defaultDepth = 15,
-      defaultTimeMs = 1000
+      defaultTimeMs = 5000  // Increased from 1000ms to 5000ms for better search
     ))
     
     instance.registerEngine("stockfish-easy", UciEngineConfig(
@@ -108,7 +108,7 @@ object EngineManager {
         "Hash" -> "128"
       ),
       defaultDepth = 10,
-      defaultTimeMs = 500
+      defaultTimeMs = 2000  // Increased from 500ms to 2000ms
     ))
     
     instance.registerEngine("stockfish-medium", UciEngineConfig(
@@ -119,7 +119,7 @@ object EngineManager {
         "Hash" -> "128"
       ),
       defaultDepth = 12,
-      defaultTimeMs = 750
+      defaultTimeMs = 3000  // Increased from 750ms to 3000ms
     ))
   }
 }

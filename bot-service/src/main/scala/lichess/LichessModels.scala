@@ -23,8 +23,19 @@ case class Challenge(
   timeControl: Option[TimeControl],
   variant: Variant,
   challenger: PlayerRef,
-  destUser: Option[PlayerRef]
+  destUser: Option[PlayerRef],
+  url: Option[String] = None,
+  color: Option[String] = None,
+  finalColor: Option[String] = None,
+  perf: Option[Perf] = None,
+  compat: Option[Compat] = None
 )
+
+/** Performance statistics */
+case class Perf(icon: String, name: String)
+
+/** Compatibility information */
+case class Compat(bot: Boolean, board: Boolean)
 
 /** Time control of a Lichess challenge. */
 case class TimeControl(
@@ -35,13 +46,17 @@ case class TimeControl(
 )
 
 /** Lichess variant (standard, chess960, etc.). */
-case class Variant(key: String, name: String)
+case class Variant(key: String, name: String, short: Option[String] = None)
 
 /** Minimal player reference used in challenges and game streams. */
 case class PlayerRef(
   id: Option[String] = None,
   name: Option[String] = None,
-  rating: Option[Int] = None
+  rating: Option[Int] = None,
+  title: Option[String] = None,
+  online: Option[Boolean] = None,
+  lag: Option[Int] = None,
+  provisional: Option[Boolean] = None
 )
 
 /** Game reference from the account event stream. */
@@ -49,7 +64,15 @@ case class GameInfo(
   id: String,
   color: Option[String] = None,
   speed: Option[String] = None,
-  rated: Option[Boolean] = None
+  rated: Option[Boolean] = None,
+  fullId: Option[String] = None,
+  fen: Option[String] = None,
+  lastMove: Option[String] = None,
+  source: Option[String] = None,
+  hasMoved: Option[Boolean] = None,
+  isMyTurn: Option[Boolean] = None,
+  rating: Option[Int] = None,
+  opponent: Option[PlayerRef] = None
 )
 
 /** Sealed trait for events received on a single game stream. */
@@ -77,7 +100,8 @@ case class GameState(
   binc: Option[Int],
   status: Option[String],
   winner: Option[String],
-  draw: Option[Boolean] = None
+  draw: Option[Boolean] = None,
+  fen: Option[String] = None
 ) extends GameStreamEvent {
   override val `type`: String = "gameState"
 }

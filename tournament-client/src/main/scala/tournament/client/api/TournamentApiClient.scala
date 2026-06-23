@@ -118,14 +118,15 @@ class TournamentApiClient(baseUrl: String)(implicit system: ActorSystem[?], ec: 
     nbRounds: Int,
     clockLimit: Int,
     clockIncrement: Int = 0,
-    rated: Boolean = false,
-    format: String = "roundrobin",
-    startPosition: Option[String] = None,
+    rated: Boolean = true,
+    format: String = "swiss",
+    startPosition: String = "standard",
     matchesPerPairing: Int = 1,
-    groupSize: Int = 2,
+    groupSize: Option[Int] = None,
     opening: Option[String] = None,
     bots: Option[String] = None,
-    maxConcurrentGames: Int = 1
+    maxConcurrentGames: Option[Int] = None,
+    openings: Option[String] = None
   )(implicit directorToken: String): Future[TournamentDetail] = {
     import upickle.default._
     
@@ -137,10 +138,9 @@ class TournamentApiClient(baseUrl: String)(implicit system: ActorSystem[?], ec: 
         "clockIncrement" -> clockIncrement.toString,
         "rated" -> rated.toString,
         "format" -> format,
-        "matchesPerPairing" -> matchesPerPairing.toString,
-        "groupSize" -> groupSize.toString,
-        "maxConcurrentGames" -> maxConcurrentGames.toString
-      ) ++ startPosition.map("startPosition" -> _) ++ opening.map("opening" -> _) ++ bots.map("bots" -> _)
+        "startPosition" -> startPosition,
+        "matchesPerPairing" -> matchesPerPairing.toString
+      ) ++ groupSize.map("groupSize" -> _.toString) ++ opening.map("opening" -> _) ++ bots.map("bots" -> _) ++ maxConcurrentGames.map("maxConcurrentGames" -> _.toString) ++ openings.map("openings" -> _)
     )
     
     val entity = formData.toEntity
@@ -177,7 +177,7 @@ class TournamentApiClient(baseUrl: String)(implicit system: ActorSystem[?], ec: 
   }
   
   /** Register a bot (requires director token) */
-  def registerBot(request: RegisterBotRequest)(implicit directorToken: String): Future[RegisterBotResponse] = {
+  def registerBot(request: RegisterBotRequest)(implicit directorToken: String): Future[RegisteredBot] = {
     import upickle.default._
     
     val entity = HttpEntity(ContentTypes.`application/json`, write(request))
@@ -185,7 +185,7 @@ class TournamentApiClient(baseUrl: String)(implicit system: ActorSystem[?], ec: 
       .withEntity(entity)
     
     executeRequest(httpRequest, response => Unmarshal(response.entity).to[String].map { body =>
-      read[RegisterBotResponse](body)
+      read[RegisteredBot](body)
     })
   }
   
@@ -270,16 +270,8 @@ class TournamentApiClient(baseUrl: String)(implicit system: ActorSystem[?], ec: 
     import upickle.default._
     
     Try {
-      val eventType = read[String](json).split("\"type\":\"")(1).split("\"")(0)
-      eventType match {
-        case "tournamentStarted" => Some(read[TournamentStartedEvent](json))
-        case "roundStarted" => Some(read[RoundStartedEvent](json))
-        case "gameStart" => Some(read[GameStartEvent](json))
-        case "roundFinished" => Some(read[RoundFinishedEvent](json))
-        case "tournamentFinished" => Some(read[TournamentFinishedEvent](json))
-        case "heartbeat" => Some(read[HeartbeatEvent](json))
-        case _ => None
-      }
+      val event = read[TournamentEvent](json)
+      if (event.`type` == "heartbeat") None else Some(event)
     }.getOrElse(None)
   }
   
@@ -288,14 +280,8 @@ class TournamentApiClient(baseUrl: String)(implicit system: ActorSystem[?], ec: 
     import upickle.default._
     
     Try {
-      val eventType = read[String](json).split("\"type\":\"")(1).split("\"")(0)
-      eventType match {
-        case "gameState" => Some(read[GameStateEvent](json))
-        case "move" => Some(read[MoveEvent](json))
-        case "gameEnd" => Some(read[GameEndEvent](json))
-        case "heartbeat" => Some(read[GameHeartbeatEvent](json))
-        case _ => None
-      }
+      val event = read[GameEvent](json)
+      if (event.`type` == "heartbeat") None else Some(event)
     }.getOrElse(None)
   }
   

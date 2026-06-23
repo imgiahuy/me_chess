@@ -54,7 +54,7 @@ class TournamentBotRunner(
     println(s"[INFO] Joining tournament $tournamentId")
     
     apiClient.joinTournament(tournamentId).map { tournament =>
-      println(s"[INFO] Successfully joined tournament '${tournament.name}'")
+      println(s"[INFO] Successfully joined tournament '${tournament.fullName}'")
       tournament
     }.recover { case error =>
       println(s"[ERROR] Failed to join tournament: ${error.getMessage}")
@@ -85,42 +85,49 @@ class TournamentBotRunner(
   
   /** Handle a tournament event */
   private def handleTournamentEvent(tournamentId: String, event: TournamentEvent): Unit = {
-    event match {
-      case _: HeartbeatEvent =>
+    event.`type` match {
+      case "heartbeat" =>
         // Ignore heartbeat events (keep-alive only)
         ()
         
-      case started: TournamentStartedEvent =>
+      case "tournamentStarted" =>
         println(s"[INFO] Tournament $tournamentId started")
         
-      case roundStarted: RoundStartedEvent =>
-        println(s"[INFO] Round ${roundStarted.round} started in tournament $tournamentId")
+      case "roundStarted" =>
+        println(s"[INFO] Round ${event.round.getOrElse(0)} started in tournament $tournamentId")
         
-      case gameStart: GameStartEvent =>
-        handleGameStart(tournamentId, gameStart)
+      case "gameStart" =>
+        event.gameId.foreach { gameId =>
+          event.color.foreach { color =>
+            handleGameStart(tournamentId, gameId, event.round.getOrElse(0), color)
+          }
+        }
         
-      case roundFinished: RoundFinishedEvent =>
-        println(s"[INFO] Round ${roundFinished.round} finished in tournament $tournamentId")
+      case "roundFinished" =>
+        println(s"[INFO] Round ${event.round.getOrElse(0)} finished in tournament $tournamentId")
         // Clear processed states for this round
         processedStates = Set.empty
         
-      case finished: TournamentFinishedEvent =>
+      case "tournamentFinished" =>
         println(s"[INFO] Tournament $tournamentId finished")
         activeGames = Set.empty
+        
+      case _ =>
+        println(s"[WARN] Unknown tournament event type: ${event.`type`}")
     }
   }
   
   /** Handle a game start event */
-  private def handleGameStart(tournamentId: String, event: GameStartEvent): Unit = {
-    println(s"[INFO] Game ${event.gameId} started in round ${event.round}")
-    println(s"[INFO] Assigned color: ${event.color}, Opponent: ${event.opponentName}")
+  private def handleGameStart(tournamentId: String, gameId: String, round: Int, color: String): Unit = {
+    println(s"[INFO] Game $gameId started in round $round")
+    println(s"[INFO] Assigned color: $color")
     
     // Store assigned color for this game
-    gameColors = gameColors + (event.gameId -> event.color)
-    activeGames = activeGames + event.gameId
+    gameColors = gameColors + (gameId -> color)
+    activeGames = activeGames + gameId
     
     // Open game stream
-    openGameStream(tournamentId, event.gameId)
+    openGameStream(tournamentId, gameId)
   }
   
   /** Open and handle game event stream */
@@ -147,26 +154,43 @@ class TournamentBotRunner(
   
   /** Handle a game event */
   private def handleGameEvent(tournamentId: String, gameId: String, event: GameEvent): Unit = {
-    event match {
-      case _: GameHeartbeatEvent =>
+    event.`type` match {
+      case "heartbeat" =>
         // Ignore heartbeat events
         ()
         
-      case gameState: GameStateEvent =>
-        handleGameState(tournamentId, gameId, gameState)
+      case "gameState" =>
+        event.fen.foreach { fen =>
+          event.turn.foreach { turn =>
+            handleGameState(tournamentId, gameId, fen, turn)
+          }
+        }
         
-      case move: MoveEvent =>
-        handleMoveEvent(tournamentId, gameId, move)
+      case "move" =>
+        event.uci.foreach { uci =>
+          event.fen.foreach { fen =>
+            event.turn.foreach { turn =>
+              handleMoveEvent(tournamentId, gameId, uci, fen, turn)
+            }
+          }
+        }
         
-      case gameEnd: GameEndEvent =>
-        handleGameEnd(tournamentId, gameId, gameEnd)
+      case "gameEnd" =>
+        event.winner.foreach { winner =>
+          event.status.foreach { status =>
+            handleGameEnd(tournamentId, gameId, winner, status)
+          }
+        }
+        
+      case _ =>
+        println(s"[WARN] Unknown game event type: ${event.`type`}")
     }
   }
   
   /** Handle a game state event */
-  private def handleGameState(tournamentId: String, gameId: String, event: GameStateEvent): Unit = {
+  private def handleGameState(tournamentId: String, gameId: String, fen: String, turn: String): Unit = {
     // Deduplication check
-    val stateKey = s"$gameId:${event.fen}:${event.turn}"
+    val stateKey = s"$gameId:$fen:$turn"
     if (processedStates.contains(stateKey)) {
       println(s"[DEBUG] Duplicate state ignored for $gameId")
       return
@@ -181,23 +205,23 @@ class TournamentBotRunner(
     }
     
     // Check if it's the bot's turn
-    if (event.turn != assignedColor.get) {
-      println(s"[DEBUG] Not bot's turn in $gameId: bot is ${assignedColor.get}, turn is ${event.turn}")
+    if (turn != assignedColor.get) {
+      println(s"[DEBUG] Not bot's turn in $gameId: bot is ${assignedColor.get}, turn is $turn")
       return
     }
     
-    println(s"[INFO] Bot's turn in $gameId (FEN: ${event.fen.take(20)}...)")
+    println(s"[INFO] Bot's turn in $gameId (FEN: ${fen.take(20)}...)")
     
     // Compute and submit move
-    computeAndSubmitMove(tournamentId, gameId, event.fen, event.turn, assignedColor.get)
+    computeAndSubmitMove(tournamentId, gameId, fen, turn, assignedColor.get)
   }
   
   /** Handle a move event (opponent's move) */
-  private def handleMoveEvent(tournamentId: String, gameId: String, event: MoveEvent): Unit = {
-    println(s"[INFO] Move played in $gameId: ${event.uci}")
+  private def handleMoveEvent(tournamentId: String, gameId: String, uci: String, fen: String, turn: String): Unit = {
+    println(s"[INFO] Move played in $gameId: $uci")
     
     // Deduplication check
-    val stateKey = s"$gameId:${event.fen}:${event.turn}"
+    val stateKey = s"$gameId:$fen:$turn"
     if (processedStates.contains(stateKey)) {
       println(s"[DEBUG] Duplicate state ignored for $gameId")
       return
@@ -212,20 +236,20 @@ class TournamentBotRunner(
     }
     
     // Check if it's the bot's turn
-    if (event.turn != assignedColor.get) {
-      println(s"[DEBUG] Not bot's turn in $gameId: bot is ${assignedColor.get}, turn is ${event.turn}")
+    if (turn != assignedColor.get) {
+      println(s"[DEBUG] Not bot's turn in $gameId: bot is ${assignedColor.get}, turn is $turn")
       return
     }
     
     println(s"[INFO] Bot's turn in $gameId after opponent move")
     
     // Compute and submit move
-    computeAndSubmitMove(tournamentId, gameId, event.fen, event.turn, assignedColor.get)
+    computeAndSubmitMove(tournamentId, gameId, fen, turn, assignedColor.get)
   }
   
   /** Handle a game end event */
-  private def handleGameEnd(tournamentId: String, gameId: String, event: GameEndEvent): Unit = {
-    println(s"[INFO] Game $gameId ended: ${event.result} (${event.reason})")
+  private def handleGameEnd(tournamentId: String, gameId: String, winner: String, status: String): Unit = {
+    println(s"[INFO] Game $gameId ended: $winner ($status)")
     activeGames = activeGames - gameId
     gameColors = gameColors - gameId
   }

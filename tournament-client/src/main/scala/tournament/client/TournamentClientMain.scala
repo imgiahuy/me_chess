@@ -93,7 +93,7 @@ object TournamentClientMain {
   
   /** Get tournament server URL from options or environment */
   private def getServerUrl(options: Map[String, String]): String = {
-    options.getOrElse("url", sys.env.getOrElse("TOURNAMENT_SERVER_URL", "http://localhost:8080"))
+    options.getOrElse("url", sys.env.getOrElse("TOURNAMENT_SERVER_URL", "http://localhost:8086"))
   }
   
   /** Get bot type from options or environment */
@@ -155,15 +155,15 @@ object TournamentClientMain {
         println(s"\n[SUCCESS] Tournament list retrieved:")
         println(s"\nCreated (${response.created.length}):")
         response.created.foreach { t =>
-          println(s"  - ${t.id}: ${t.name} (${t.format}, ${t.rounds} rounds)")
+          println(s"  - ${t.id}: ${t.fullName} (${t.format}, ${t.nbRounds} rounds)")
         }
         println(s"\nStarted (${response.started.length}):")
         response.started.foreach { t =>
-          println(s"  - ${t.id}: ${t.name} (${t.format}, round ${t.currentRound}/${t.rounds})")
+          println(s"  - ${t.id}: ${t.fullName} (${t.format}, ${t.nbRounds} rounds)")
         }
         println(s"\nFinished (${response.finished.length}):")
         response.finished.foreach { t =>
-          println(s"  - ${t.id}: ${t.name} (${t.format})")
+          println(s"  - ${t.id}: ${t.fullName} (${t.format})")
         }
         apiClient.shutdown()
         system.terminate()
@@ -206,11 +206,11 @@ object TournamentClientMain {
     
     apiClient.joinTournament(tournamentId).onComplete {
       case Success(tournament) =>
-        println(s"[SUCCESS] Joined tournament '${tournament.name}'")
+        println(s"[SUCCESS] Joined tournament '${tournament.fullName}'")
         println(s"  Status: ${tournament.status}")
         println(s"  Format: ${tournament.format}")
-        println(s"  Rounds: ${tournament.rounds}")
-        println(s"  Participants: ${tournament.participants.length}")
+        println(s"  Rounds: ${tournament.nbRounds}")
+        println(s"  Players: ${tournament.nbPlayers}")
         apiClient.shutdown()
         system.terminate()
         System.exit(0)
