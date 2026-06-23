@@ -6,6 +6,7 @@ resources:
   - secrets.yaml
   - postgres-deployment.yaml
   - mongodb-deployment.yaml
+  - redis-deployment.yaml
   - keycloak-realm-config.yaml
   - keycloak-deployment.yaml
   - kafka-deployment.yaml
@@ -18,3 +19,4 @@ resources:
   - web-frontend-deployment.yaml
   - kafka-ui-deployment.yaml
   - spark-job.yaml
+  - ingress.yaml

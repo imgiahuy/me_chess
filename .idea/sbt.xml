@@ -9,10 +9,13 @@
         <option name="modules">
           <set>
             <option value="C:\sem7\SA\chess\me_chess" />
+            <option value="C:\sem7\SA\chess\me_chess\application" />
             <option value="C:\sem7\SA\chess\me_chess\benchmark" />
             <option value="C:\sem7\SA\chess\me_chess\bot-service" />
             <option value="C:\sem7\SA\chess\me_chess\core" />
+            <option value="C:\sem7\SA\chess\me_chess\domain-persistence" />
             <option value="C:\sem7\SA\chess\me_chess\gui" />
+            <option value="C:\sem7\SA\chess\me_chess\infrastructure-persistence" />
             <option value="C:\sem7\SA\chess\me_chess\persistent" />
             <option value="C:\sem7\SA\chess\me_chess\player-service" />
             <option value="C:\sem7\SA\chess\me_chess\project" />

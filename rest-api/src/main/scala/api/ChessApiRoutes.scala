@@ -8,7 +8,7 @@ import akka.http.scaladsl.server.{RejectionHandler, Route}
 import akka.http.scaladsl.marshalling.sse.EventStreamMarshalling
 import akka.stream.scaladsl.Source
 import scala.concurrent.duration._
-import api.JsonCodecs.{ActionResponse, CreateGameRequest, CreatedGameResponse, ErrorResponse, GameInfos, GameStateResponse, GameSummary, GamesListResponse, MoveRequest, ResignRequest, BotMoveRequest, BotInfoResponse, AvailableBotsResponse, LeaderboardEntry, LeaderboardResponse, HealthStatus, MetricsResponse, AnalyticsExportRequest, AnalyticsExportResponse, GameAnalytics, OpeningInfo, OpeningMatchInfo, OpeningsListResponse, OpeningLookupRequest, OpeningSearchRequest, OpeningCategoryResponse}
+import api.JsonCodecs.{ActionResponse, CreateGameRequest, CreatedGameResponse, ErrorResponse, GameInfos, GameStateResponse, GameSummary, GamesListResponse, MoveRequest, ResignRequest, BotMoveRequest, BotInfoResponse, AvailableBotsResponse, LeaderboardEntry, LeaderboardResponse, HealthStatus, MetricsResponse, AnalyticsExportRequest, AnalyticsExportResponse, GameAnalytics, OpeningInfo, OpeningMatchInfo, OpeningsListResponse, OpeningLookupRequest, OpeningSearchRequest, OpeningCategoryResponse, EngineInfo, EngineConfigResponse, EngineConfigRequest, EngineStatusResponse, EvaluationRequest, BestMoveRequest, EnginesListResponse, MoveSuggestionRequest, MoveSuggestionResponse}
 import openings.OpeningCatalog
 import java.io.File
 import java.time.Instant
@@ -16,7 +16,7 @@ import java.lang.management.ManagementFactory
 
 
 /** REST API routes for chess game management and play. */
-class ChessApiRoutes(sessionController: GameSessionController)(implicit system: ActorSystem[?]) extends EventStreamMarshalling {
+class ChessApiRoutes(sessionController: GameSessionController, engineController: EngineController)(implicit system: ActorSystem[?]) extends EventStreamMarshalling {
 
   private def jsonResponse[T: upickle.default.Writer](obj: T): HttpEntity.Strict =
     HttpEntity(ContentTypes.`application/json`, upickle.default.write(obj))
@@ -543,6 +543,146 @@ class ChessApiRoutes(sessionController: GameSessionController)(implicit system: 
               } catch {
                 case e: Exception =>
                   complete(StatusCodes.InternalServerError, jsonResponse(ErrorResponse(s"Failed to read leaderboard: ${e.getMessage}")))
+              }
+            }
+          }
+          ) ~ (
+          // ─── Engine Management ────────────────────────────────────────────────
+
+          /** GET /v1/chess/engines - List all engine configurations */
+          get {
+            path("engines") {
+              try {
+                val engines = engineController.listEngines()
+                complete(jsonResponse(EnginesListResponse(engines, engines.length)))
+              } catch {
+                case e: Exception =>
+                  complete(StatusCodes.InternalServerError, jsonResponse(ErrorResponse(s"Failed to list engines: ${e.getMessage}")))
+              }
+            }
+          }
+          ) ~ (
+          /** GET /v1/chess/engines/{name} - Get engine configuration */
+          get {
+            path("engines" / Segment) { name =>
+              engineController.getEngineConfig(name) match {
+                case Some(config) =>
+                  complete(jsonResponse(config))
+                case None =>
+                  complete(StatusCodes.NotFound, jsonResponse(ErrorResponse(s"Engine not found: $name")))
+              }
+            }
+          }
+          ) ~ (
+          /** POST /v1/chess/engines/{name}/start - Start an engine */
+          post {
+            path("engines" / Segment / "start") { name =>
+              engineController.startEngine(name) match {
+                case Right(status) =>
+                  complete(StatusCodes.OK, jsonResponse(status))
+                case Left(error) =>
+                  complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+              }
+            }
+          }
+          ) ~ (
+          /** POST /v1/chess/engines/{name}/stop - Stop an engine */
+          post {
+            path("engines" / Segment / "stop") { name =>
+              engineController.stopEngine(name) match {
+                case Right(status) =>
+                  complete(StatusCodes.OK, jsonResponse(status))
+                case Left(error) =>
+                  complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+              }
+            }
+          }
+          ) ~ (
+          /** GET /v1/chess/engines/{name}/status - Get engine status */
+          get {
+            path("engines" / Segment / "status") { name =>
+              engineController.getEngineStatus(name) match {
+                case Right(status) =>
+                  complete(StatusCodes.OK, jsonResponse(status))
+                case Left(error) =>
+                  complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+              }
+            }
+          }
+          ) ~ (
+          /** POST /v1/chess/engines/{name}/evaluate - Evaluate position */
+          post {
+            path("engines" / Segment / "evaluate") { name =>
+              entity(as[String]) { body =>
+                parseJson[EvaluationRequest](body) match {
+                  case Right(request) =>
+                    engineController.evaluatePosition(name, request.fen, request.depth.getOrElse(15)) match {
+                      case Right(result) =>
+                        complete(StatusCodes.OK, jsonResponse(result))
+                      case Left(error) =>
+                        complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+                    }
+                  case Left(error) =>
+                    complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+                }
+              }
+            }
+          }
+          ) ~ (
+          /** POST /v1/chess/engines/{name}/bestmove - Get best move */
+          post {
+            path("engines" / Segment / "bestmove") { name =>
+              entity(as[String]) { body =>
+                parseJson[BestMoveRequest](body) match {
+                  case Right(request) =>
+                    engineController.getBestMove(name, request.fen, request.depth.getOrElse(15)) match {
+                      case Right(result) =>
+                        complete(StatusCodes.OK, jsonResponse(result))
+                      case Left(error) =>
+                        complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+                    }
+                  case Left(error) =>
+                    complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+                }
+              }
+            }
+          }
+          ) ~ (
+          /** POST /v1/chess/engines/{name}/register - Register custom engine */
+          post {
+            path("engines" / Segment / "register") { name =>
+              entity(as[String]) { body =>
+                parseJson[EngineConfigRequest](body) match {
+                  case Right(request) =>
+                    engineController.registerEngine(name, request) match {
+                      case Right(config) =>
+                        complete(StatusCodes.Created, jsonResponse(config))
+                      case Left(error) =>
+                        complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+                    }
+                  case Left(error) =>
+                    complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+                }
+              }
+            }
+          }
+          ) ~ (
+          /** POST /v1/chess/suggest - Get move suggestion for a position */
+          post {
+            path("suggest") {
+              entity(as[String]) { body =>
+                parseJson[MoveSuggestionRequest](body) match {
+                  case Right(request) =>
+                    val depth = request.depth.getOrElse(15)
+                    engineController.getMoveSuggestion(request.fen, request.engineName, depth) match {
+                      case Right(suggestion) =>
+                        complete(StatusCodes.OK, jsonResponse(suggestion))
+                      case Left(error) =>
+                        complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+                    }
+                  case Left(error) =>
+                    complete(StatusCodes.BadRequest, jsonResponse(ErrorResponse(error)))
+                }
               }
             }
           }

@@ -424,13 +424,13 @@ object BotFactory {
     case "defensive" => new DefensiveBot()
     case "aggressive" => new AggressiveBot()
     case "smarter" => new SmarterBot()
-    case "stockfish" | "uci" => new RandomBot() // UCI bots require external engine setup via UciBotService
-    case "stockfish-easy" => new RandomBot()
-    case "stockfish-medium" => new RandomBot()
+    case "stockfish" | "uci" => new RandomBot() // UCI bots require external engine setup via UciBotService - fallback to random
+    case "stockfish-easy" => new RandomBot() // UCI bots require external engine setup - fallback to random
+    case "stockfish-medium" => new RandomBot() // UCI bots require external engine setup - fallback to random
     case _ => new RandomBot()
   }
 
-  def availableBots: List[String] = List("random", "capture", "greedy", "defensive", "aggressive", "smarter")
+  def availableBots: List[String] = List("random", "capture", "greedy", "defensive", "aggressive", "smarter", "stockfish", "stockfish-easy", "stockfish-medium")
 
   def availableBotInfo: List[BotInfo] = List(
     BotInfo("random", "Random Bot", "Easy", "Makes completely random moves. Perfect for beginners to practice against."),
@@ -438,7 +438,10 @@ object BotFactory {
     BotInfo("greedy", "Greedy Bot", "Medium", "Greedy for material! Always captures the most valuable piece available. Good at tactics."),
     BotInfo("defensive", "Defensive Bot", "Medium", "Plays safe and solid. Prioritizes king safety, avoids unnecessary risks, and maintains a strong defensive structure."),
     BotInfo("aggressive", "Aggressive Bot", "Medium", "Attacks relentlessly! Loves to give check, push forward, and create threats. Exciting to play against!"),
-    BotInfo("smarter", "Smarter Bot", "Hard", "Uses advanced positional evaluation with piece-square tables. Understands piece placement and basic strategy.")
+    BotInfo("smarter", "Smarter Bot", "Hard", "Uses advanced positional evaluation with piece-square tables. Understands piece placement and basic strategy."),
+    BotInfo("stockfish", "Stockfish (Expert)", "Expert", "External UCI chess engine (Stockfish) at maximum strength. Requires Stockfish binary to be configured."),
+    BotInfo("stockfish-easy", "Stockfish (Easy)", "Medium", "External UCI chess engine (Stockfish) at reduced strength. Good for intermediate players."),
+    BotInfo("stockfish-medium", "Stockfish (Medium)", "Hard", "External UCI chess engine (Stockfish) at medium strength. Challenging for advanced players.")
   )
 }
 

@@ -50,8 +50,8 @@ class UciBotService()(implicit ec: ExecutionContext) {
     val turnStr = state.turn.toString.toLowerCase
     val castlingStr = getCastlingRights(state)
     val enPassantStr = getEnPassantSquare(state)
-    val halfMoveStr = "0"
-    val fullMoveStr = "1"
+    val halfMoveStr = state.halfmovesSinceLastCaptureOrPawn.toString
+    val fullMoveStr = ((state.moveHistory.length / 2) + 1).toString
     
     s"$boardStr $turnStr $castlingStr $enPassantStr $halfMoveStr $fullMoveStr"
   }
@@ -132,8 +132,8 @@ class UciBot(engine: UciEngine, initialState: PositionState) extends Bot {
     val turnStr = state.turn.toString.toLowerCase
     val castlingStr = getCastlingRights(state)
     val enPassantStr = getEnPassantSquare(state)
-    val halfMoveStr = "0"
-    val fullMoveStr = "1"
+    val halfMoveStr = state.halfmovesSinceLastCaptureOrPawn.toString
+    val fullMoveStr = ((state.moveHistory.length / 2) + 1).toString
     
     s"$boardStr $turnStr $castlingStr $enPassantStr $halfMoveStr $fullMoveStr"
   }

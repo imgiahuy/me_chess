@@ -100,5 +100,3 @@ class GameController extends GameControllerInterface {
     BotService.availableBots
   }
 }
-
-

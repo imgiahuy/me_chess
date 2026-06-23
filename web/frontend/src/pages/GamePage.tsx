@@ -140,6 +140,8 @@ export function GamePage() {
     const [availableBots, setAvailableBots] = React.useState<BotInfo[]>([]);
     const [selectedBot, setSelectedBot] = React.useState<string>("random");
     const [isBotMoving, setIsBotMoving] = React.useState(false);
+    const [moveSuggestion, setMoveSuggestion] = React.useState<{ bestMove: string; score: string } | null>(null);
+    const [isAnalyzing, setIsAnalyzing] = React.useState(false);
 
     // Load available bots
     React.useEffect(() => {
@@ -283,6 +285,33 @@ export function GamePage() {
             setNotification(`Bot error: ${errorMsg}`);
         } finally {
             setIsBotMoving(false);
+        }
+    }
+
+    async function handleGetMoveSuggestion() {
+        setIsAnalyzing(true);
+        setMoveError(null);
+        setNotification("Analyzing position with Stockfish...");
+        try {
+            const response = await fetch("http://localhost:8085/v1/chess/suggest", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    fen: game.fen,
+                    engineName: "stockfish",
+                    depth: 15
+                })
+            });
+            if (!response.ok) throw new Error("Failed to get move suggestion");
+            const data = await response.json();
+            setMoveSuggestion({ bestMove: data.bestMove, score: data.score });
+            setNotification(`Stockfish suggests: ${data.bestMove} (${data.score})`);
+        } catch (e) {
+            const errorMsg = e instanceof Error ? e.message : "Analysis failed";
+            setMoveError(errorMsg);
+            setNotification(errorMsg);
+        } finally {
+            setIsAnalyzing(false);
         }
     }
 
@@ -445,6 +474,45 @@ export function GamePage() {
                             </div>
                         </div>
                     )}
+
+                    {/* Move suggestion */}
+                    <div className="card" style={{ padding: "0.75rem 1rem" }}>
+                        <p style={{ fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-text-dim)", marginBottom: "0.6rem" }}>💡 Stockfish Analysis</p>
+                        <button 
+                            onClick={handleGetMoveSuggestion} 
+                            disabled={isAnalyzing || !isOngoing}
+                            style={{ 
+                                fontSize: "0.8rem", 
+                                padding: "0.4rem 0.75rem", 
+                                background: isAnalyzing ? "var(--color-text-dim)" : "#10b981",
+                                width: "100%",
+                                marginBottom: moveSuggestion ? "0.5rem" : 0
+                            }}
+                        >
+                            {isAnalyzing ? "Analyzing…" : "Get Suggestion"}
+                        </button>
+                        {moveSuggestion && (
+                            <div style={{ 
+                                background: "var(--color-bg-3)", 
+                                padding: "0.5rem 0.75rem", 
+                                borderRadius: "var(--radius-sm)",
+                                marginTop: "0.5rem"
+                            }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.25rem" }}>
+                                    <span style={{ fontSize: "0.75rem", color: "var(--color-text-dim)" }}>Best Move:</span>
+                                    <span style={{ fontSize: "0.9rem", fontWeight: 700, fontFamily: "monospace", color: "var(--color-success)" }}>
+                                        {moveSuggestion.bestMove}
+                                    </span>
+                                </div>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                    <span style={{ fontSize: "0.75rem", color: "var(--color-text-dim)" }}>Score:</span>
+                                    <span style={{ fontSize: "0.85rem", fontWeight: 600, color: moveSuggestion.score.startsWith("+") ? "var(--color-success)" : moveSuggestion.score.startsWith("-") ? "var(--color-danger)" : "var(--color-text)" }}>
+                                        {moveSuggestion.score}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
 
                     {/* Move history */}
                     <div className="card" style={{ padding: "0.75rem 1rem" }}>

@@ -1,0 +1,3 @@
+// Application layer module
+// TODO: Move service/ and controller/ from core/src/main/scala to this directory
+// TODO: Add use case layer here

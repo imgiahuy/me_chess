@@ -1,30 +1,38 @@
 package api
 
+import usecase.{CreateGameUseCase, MakeMoveUseCase, GetGameUseCase}
 import controller.GameControllerInterface
 import model.{PositionState, Color}
 import repository.GameRepository
 import service.{GameService, BotService}
 import kafka.{KafkaGameEventService, GameEvent}
+import engine.{UciBotService, EngineManager}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.util.{Success, Failure}
 
 class GameSessionController(
+                             createGameUseCase: CreateGameUseCase,
+                             makeMoveUseCase: MakeMoveUseCase,
+                             getGameUseCase: GetGameUseCase,
                              controller: GameControllerInterface,
                              repo: GameRepository,
                              kafkaService: Option[KafkaGameEventService] = None,
                              playerServiceClient: Option[PlayerServiceClient] = None
                            )(implicit ec: ExecutionContext) {
 
+  // Initialize UCI bot service for Stockfish integration
+  private val uciBotService = UciBotService()
+  uciBotService.initialize()
+
   /** Create a new game session and return its ID */
   def createGame(): String = {
-    val initialState = controller.create("White", "Black")
-    repo.createGame(initialState)
+    createGameUseCase.create()
   }
 
   /** Create a new game session with player names and return its ID */
   def createGame(whitePlayer: String, blackPlayer: String): String = {
-    val initialState = controller.create(whitePlayer, blackPlayer)
-    repo.createGame(initialState)
+    createGameUseCase.create(whitePlayer, blackPlayer)
   }
 
   /** Create a new game session with player names and time control */
@@ -52,8 +60,8 @@ class GameSessionController(
       whiteIdOpt <- whitePlayerIdFuture
       blackIdOpt <- blackPlayerIdFuture
     } yield {
-      val initialState = controller.createWithTimeControl(whitePlayer, blackPlayer, timeControl)
-      val gameId = repo.createGame(initialState)
+      val gameId = createGameUseCase.createWithTimeControl(whitePlayer, blackPlayer, timeControl)
+      val initialState = repo.getGame(gameId).get
 
       // Store player IDs in the game state metadata (for future use)
       // Note: PositionState doesn't have player ID fields yet, so we log for now
@@ -77,35 +85,11 @@ class GameSessionController(
 
   /** Get a game by ID */
   def getGame(gameId: String): Option[PositionState] =
-    repo.getGame(gameId)
+    getGameUseCase.getGame(gameId)
 
   /** Apply a move using gameId */
   def makeMove(gameId: String, input: String): Either[String, PositionState] = {
-    if (input.trim.isEmpty) {
-      Left("Move input cannot be empty")
-    } else {
-      for {
-        state    <- repo.getGame(gameId).toRight("Game not found")
-        newState <- controller.makeMove(state, input)
-      } yield {
-        repo.updateGame(gameId, newState)
-
-        // Publish MoveMade event to Kafka
-        kafkaService.foreach { service =>
-          val moveNumber = newState.moveHistory.length
-          service.publishMoveMade(gameId, newState, input, moveNumber)
-            .recover { case ex => println(s"[Kafka] Failed to publish move: ${ex.getMessage}") }
-
-          // If game ended, publish GameEnded event
-          if (newState.gameResult != model.Ongoing) {
-            service.publishGameEnded(gameId, newState)
-              .recover { case ex => println(s"[Kafka] Failed to publish game ended: ${ex.getMessage}") }
-          }
-        }
-
-        newState
-      }
-    }
+    makeMoveUseCase.makeMove(gameId, input)
   }
 
   /** Player resigns from game */
@@ -135,8 +119,41 @@ class GameSessionController(
   def playBotMove(gameId: String, botType: String): Either[String, PositionState] = {
     for {
       state <- repo.getGame(gameId).toRight("Game not found")
-      bot = BotService.createBot(botType)
-      newState <- BotService.playBotMove(bot, state)
+      newState <- {
+        // Check if this is a UCI engine bot
+        val isUciBot = botType.toLowerCase.startsWith("stockfish") || botType.toLowerCase == "uci"
+        
+        if (isUciBot) {
+          // Map bot type to engine name
+          val engineName = botType.toLowerCase match {
+            case "stockfish" | "uci" => "stockfish"
+            case "stockfish-easy" => "stockfish-easy"
+            case "stockfish-medium" => "stockfish-medium"
+            case _ => "stockfish"
+          }
+          
+          // Try to use UCI bot service
+          try {
+            import scala.concurrent.Await
+            import scala.concurrent.duration._
+            val botFuture = uciBotService.createUciBot(engineName, state)
+            val bot = Await.result(botFuture, 5.seconds)
+            val legalMoves = GameService.getLegalMoves(state, state.turn)
+            val move = bot.selectMove(state, legalMoves)
+            GameService.applyMove(state, move)
+          } catch {
+            case e: Exception =>
+              println(s"[UCI Bot] Failed to use UCI bot: ${e.getMessage}, falling back to heuristic bot")
+              // Fallback to heuristic bot
+              val bot = BotService.createBot(botType)
+              BotService.playBotMove(bot, state)
+          }
+        } else {
+          // Use heuristic bot
+          val bot = BotService.createBot(botType)
+          BotService.playBotMove(bot, state)
+        }
+      }
     } yield {
       repo.updateGame(gameId, newState)
 
@@ -204,11 +221,11 @@ class GameSessionController(
 
   /** List all active games */
   def listGames(): List[String] =
-    repo.listGames()
+    getGameUseCase.listGames()
 
   /** Get lightweight summaries of all games */
   def getGameSummaries(): List[(String, String, Int, Boolean)] =
-    repo.getGameSummaries()
+    getGameUseCase.getGameSummaries()
 
   /** Save a specific game to the database */
   def saveGame(gameId: String): Either[String, Unit] = {

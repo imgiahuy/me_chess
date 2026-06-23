@@ -775,164 +775,126 @@ object GameService {
 
   /** Pause the game, freezing both clocks */
   def pauseGame(snapshot: PositionState): Either[String, PositionState] = {
-    if (snapshot.gameResult != Ongoing) Left("Cannot pause a finished game")
-    else if (snapshot.isPaused) Left("Game is already paused")
-    else {
-      val now = System.currentTimeMillis()
-      // Freeze the active player's clock by capturing remaining time at this instant
-      val frozenWhiteTime = snapshot.whiteTime.map { wt =>
-        if (snapshot.turn == White) PlayerTime(wt.getCurrentTime, now)
-        else wt
-      }
-      val frozenBlackTime = snapshot.blackTime.map { bt =>
-        if (snapshot.turn == Black) PlayerTime(bt.getCurrentTime, now)
-        else bt
-      }
-      Right(snapshot.copy(
-        isPaused = true,
-        pausedAt = Some(now),
-        whiteTime = frozenWhiteTime,
-        blackTime = frozenBlackTime
-      ))
+    if (snapshot.isPaused) {
+      Left("Game is already paused")
+    } else {
+      Right(snapshot.copy(isPaused = true, pausedAt = Some(System.currentTimeMillis())))
     }
   }
 
-  /** Resume the game, re-anchoring the active player's clock to now */
+  /** Resume the game, adjusting clocks for the pause duration */
   def resumeGame(snapshot: PositionState): Either[String, PositionState] = {
-    if (snapshot.gameResult != Ongoing) Left("Cannot resume a finished game")
-    else if (!snapshot.isPaused) Left("Game is not paused")
-    else {
+    if (!snapshot.isPaused) {
+      Left("Game is not paused")
+    } else {
+      val pausedAt = snapshot.pausedAt.getOrElse(0L)
       val now = System.currentTimeMillis()
-      // Re-anchor the active player's lastUpdatedAt so no time was lost during pause
-      val resumedWhiteTime = snapshot.whiteTime.map { wt =>
-        if (snapshot.turn == White) wt.copy(lastUpdatedAt = now)
-        else wt
+      val pauseDuration = now - pausedAt
+
+      // Adjust both clocks by adding the pause duration
+      val adjustedWhiteTime = snapshot.whiteTime.map { wt =>
+        wt.copy(remainingTimeMs = wt.remainingTimeMs + pauseDuration, lastUpdatedAt = now)
       }
-      val resumedBlackTime = snapshot.blackTime.map { bt =>
-        if (snapshot.turn == Black) bt.copy(lastUpdatedAt = now)
-        else bt
+      val adjustedBlackTime = snapshot.blackTime.map { bt =>
+        bt.copy(remainingTimeMs = bt.remainingTimeMs + pauseDuration, lastUpdatedAt = now)
       }
+
       Right(snapshot.copy(
         isPaused = false,
         pausedAt = None,
-        whiteTime = resumedWhiteTime,
-        blackTime = resumedBlackTime
+        whiteTime = adjustedWhiteTime,
+        blackTime = adjustedBlackTime
       ))
     }
   }
 
-  // ── Resignation and Time Control ────────────────────────────────────────
+  // ── Resignation ─────────────────────────────────────────────────────────────
 
   /** Player resigns from the game */
   def resign(snapshot: PositionState, color: Color): PositionState = {
-    if (snapshot.gameResult != Ongoing) {
-      snapshot
-    } else {
-      val updated = color match {
-        case White => snapshot.copy(hasWhiteResigned = true)
-        case Black => snapshot.copy(hasBlackResigned = true)
-      }
-      updateGameResult(updated)
+    color match {
+      case White => snapshot.copy(hasWhiteResigned = true, gameResult = Resignation(Black))
+      case Black => snapshot.copy(hasBlackResigned = true, gameResult = Resignation(White))
     }
   }
 
-  /** Offer draw by mutual agreement */
-  def offerDraw(snapshot: PositionState): PositionState = {
-    if (snapshot.gameResult != Ongoing) {
-      snapshot
-    } else {
-      snapshot.copy(gameResult = Draw(MutualAgreement))
+  // ── Time Control ───────────────────────────────────────────────────────────
+
+  /** Get remaining time for a player */
+  def getRemainingTime(snapshot: PositionState, color: Color): Option[Long] = {
+    color match {
+      case White => snapshot.whiteTime.map(_.remainingTimeMs)
+      case Black => snapshot.blackTime.map(_.remainingTimeMs)
     }
   }
 
-  /** Check if a player's time has expired */
-  def isTimeExpired(snapshot: PositionState, color: Color): Boolean = {
+  /** Check if a player has run out of time */
+  def isTimeOver(snapshot: PositionState, color: Color): Boolean = {
     color match {
       case White => snapshot.whiteTime.exists(_.isTimeOver)
       case Black => snapshot.blackTime.exists(_.isTimeOver)
     }
   }
 
-  /** Get remaining time for a player in milliseconds */
-  def getRemainingTime(snapshot: PositionState, color: Color): Option[Long] = {
+  /** Get current time for a player */
+  def getCurrentTime(snapshot: PositionState, color: Color): Option[Long] = {
     color match {
       case White => snapshot.whiteTime.map(_.getCurrentTime)
       case Black => snapshot.blackTime.map(_.getCurrentTime)
     }
   }
 
-  /** Update remaining time for both players (typically called after each move) */
+  /** Update time after a move (manual override) */
   def updateTimeAfterMove(snapshot: PositionState, timeSpentMs: Long, incrementMs: Long = 0): PositionState = {
-    val updatedTime = snapshot.turn match {
-      case White =>
-        snapshot.whiteTime.map { t =>
-          val used = t.useTime(timeSpentMs)
-          used.addTime(Math.max(0, incrementMs))
+    snapshot.timeControl match {
+      case Some(tc) =>
+        if (snapshot.turn == White) {
+          val updatedWhiteTime = snapshot.whiteTime.map { wt =>
+            val newRemaining = (wt.remainingTimeMs - timeSpentMs + incrementMs).max(0)
+            PlayerTime(newRemaining, System.currentTimeMillis())
+          }
+          snapshot.copy(whiteTime = updatedWhiteTime)
+        } else {
+          val updatedBlackTime = snapshot.blackTime.map { bt =>
+            val newRemaining = (bt.remainingTimeMs - timeSpentMs + incrementMs).max(0)
+            PlayerTime(newRemaining, System.currentTimeMillis())
+          }
+          snapshot.copy(blackTime = updatedBlackTime)
         }
-      case Black =>
-        snapshot.blackTime.map { t =>
-          val used = t.useTime(timeSpentMs)
-          used.addTime(Math.max(0, incrementMs))
-        }
-    }
-
-    val updated = snapshot.turn match {
-      case White => snapshot.copy(whiteTime = updatedTime)
-      case Black => snapshot.copy(blackTime = updatedTime)
-    }
-
-    // Check if the current player (who just moved) ran out of time during their turn
-    snapshot.turn match {
-      case White if updated.whiteTime.exists(_.isTimeOver) =>
-        updated.copy(gameResult = TimeOut(Black))
-      case Black if updated.blackTime.exists(_.isTimeOver) =>
-        updated.copy(gameResult = TimeOut(White))
-      case _ => updated
+      case None => snapshot
     }
   }
 
-  // ── Legal Moves Calculation ──────────────────────────────────────────────
+  // ── Legal Moves ─────────────────────────────────────────────────────────────
 
-  /** Get all legal moves for a color in a position */
+  /** Get all legal moves for a position */
   def getLegalMoves(snapshot: PositionState, color: Color): List[Move] = {
-    val legalMoves = scala.collection.mutable.ListBuffer[Move]()
     val promotionRow = if (color == White) 7 else 0
-    val promotionPieces = List(Queen, Rook, Bishop, Knight)
-
-    snapshot.board.piecesOf(color).foreach { case (pos, piece) =>
-      (0 until 8).foreach { toCol =>
-        (0 until 8).foreach { toRow =>
+    val regularMoves = snapshot.board.piecesOf(color).flatMap { case (pos, piece) =>
+      (0 until 8).flatMap { toCol =>
+        (0 until 8).flatMap { toRow =>
           val toPos = Position(toCol, toRow)
           if (piece.pieceType == Pawn && toRow == promotionRow) {
-            promotionPieces.foreach { pt =>
-              val move = Move(pos, toPos, Some(Promotion(pt)))
-              if (applyMove(snapshot, move).isRight) {
-                legalMoves += move
-              }
+            // Try all promotion pieces
+            List(Queen, Rook, Bishop, Knight).flatMap { promoPiece =>
+              val move = Move(pos, toPos, Some(Promotion(promoPiece)))
+              if (applyMoveWithoutGameResultCheck(snapshot, move).isRight) Some(move) else None
             }
           } else {
             val move = Move(pos, toPos)
-            if (applyMove(snapshot, move).isRight) {
-              legalMoves += move
-            }
+            if (applyMoveWithoutGameResultCheck(snapshot, move).isRight) Some(move) else None
           }
         }
       }
-    }
+    }.toList
 
-    // Also include castling moves
+    // Add castling moves if legal
     val kingRow = if (color == White) 0 else 7
-    List(
+    val castlingMoves = List(
       Move(Position(4, kingRow), Position(6, kingRow), Some(CastlingKingSide)),
       Move(Position(4, kingRow), Position(2, kingRow), Some(CastlingQueenSide))
-    ).foreach { m =>
-      if (applyMove(snapshot, m).isRight) {
-        legalMoves += m
-      }
-    }
+    ).filter(m => applyMoveWithoutGameResultCheck(snapshot, m).isRight)
 
-    legalMoves.toList
+    regularMoves ++ castlingMoves
   }
-
-  // ── Helpers ──────────────────────────────────────────────────────────────────
 }

@@ -18,6 +18,9 @@ lazy val commonSettings = Seq(
 
 // --- Modules ---
 
+// --- Domain Layer (pure domain logic) ---
+// DEPENDENCY RULE: Core must NOT depend on any other module (no dependencies)
+// Contains: models, analysis, openings - pure domain logic only
 lazy val core = project
   .in(file("core"))
   .settings(commonSettings,
@@ -27,10 +30,54 @@ lazy val core = project
     )
   )
 
+// --- Application Layer (services, controllers, use cases) ---
+// DEPENDENCY RULE: Application depends on core (domain) and domainPersistence (interfaces)
+// FORBIDDEN: Must NOT depend on infrastructurePersistence (concrete implementations)
+// Contains: services, controllers, use cases, engines, formatters, parsers
+lazy val application = project
+  .in(file("application"))
+  .settings(commonSettings)
+  .dependsOn(core, domainPersistence, shared)
+
+// --- Domain Persistence Layer (interfaces only) ---
+// DEPENDENCY RULE: DomainPersistence depends only on core (domain) and shared
+// FORBIDDEN: Must NOT depend on application or infrastructurePersistence
+// Contains: repository and DAO interfaces (no implementations)
+lazy val domainPersistence = project
+  .in(file("domain-persistence"))
+  .settings(commonSettings)
+  .dependsOn(core, shared)
+
+// --- Infrastructure Persistence Layer (implementations) ---
+// DEPENDENCY RULE: InfrastructurePersistence depends on core, domainPersistence (interfaces), and shared
+// FORBIDDEN: Must NOT depend on application (no business logic)
+// Contains: concrete implementations (InMemoryGameRepository, DatabaseGameRepository, DAOs, database configs)
+lazy val infrastructurePersistence = project
+  .in(file("infrastructure-persistence"))
+  .settings(
+    commonSettings,
+    libraryDependencies ++= Seq(
+      "com.typesafe.slick" %% "slick" % "3.5.1",
+      "com.typesafe.slick" %% "slick-hikaricp" % "3.5.1",
+      "com.h2database" % "h2" % "2.2.224",
+      "org.postgresql" % "postgresql" % "42.7.4",
+      "org.mongodb" % "mongodb-driver-sync" % "4.11.0",
+      "redis.clients" % "jedis" % "5.0.0",
+      "org.flywaydb" % "flyway-core" % "9.22.3",
+      "ch.qos.logback" % "logback-classic" % "1.4.14",
+      "com.lihaoyi" %% "upickle" % "3.1.0"
+    )
+  )
+  .dependsOn(core, domainPersistence, shared)
+
 lazy val shared = project
   .in(file("shared"))
   .settings(commonSettings)
 
+// --- Presentation Layer: TUI ---
+// DEPENDENCY RULE: TUI depends on core (domain), application (use cases), and shared
+// FORBIDDEN: Must NOT depend on infrastructurePersistence directly
+// Contains: terminal user interface
 lazy val tui = project
   .in(file("tui"))
   .settings(
@@ -38,9 +85,12 @@ lazy val tui = project
     sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyJarName := "chess-tui.jar",
     sbtassembly.AssemblyPlugin.autoImport.assembly / mainClass := Some("tui.TuiEntry")
   )
-  .dependsOn(core, shared)
+  .dependsOn(core, application, shared)
 
-// --- GUI (ScalaFX) ---
+// --- Presentation Layer: GUI ---
+// DEPENDENCY RULE: GUI depends on core (domain), application (use cases), and shared
+// FORBIDDEN: Must NOT depend on infrastructurePersistence directly
+// Contains: ScalaFX graphical user interface
 lazy val gui = project
   .in(file("gui"))
   .settings(
@@ -61,8 +111,11 @@ lazy val gui = project
       case x => MergeStrategy.first
     }
   )
-  .dependsOn(core, shared)
+  .dependsOn(core, application, shared)
 
+// --- Legacy Persistent Module (deprecated, use infrastructure-persistence) ---
+// DEPENDENCY RULE: Legacy module - being replaced by infrastructure-persistence
+// TODO: Migrate all code to infrastructure-persistence and remove this module
 lazy val persistent = project
   .in(file("persistent"))
   .settings(
@@ -87,8 +140,11 @@ lazy val persistent = project
       "org.slf4j" % "slf4j-simple" % "2.0.9" % Test
     )
   )
-  .dependsOn(core, shared)
+  .dependsOn(core, application, shared)
 
+// --- Analytics Layer: Spark (analytics) ---
+// DEPENDENCY RULE: Spark depends on core (domain) and shared
+// Contains: Apache Spark analytics for game data analysis
 lazy val spark = project
   .in(file("spark"))
   .settings(
@@ -152,7 +208,10 @@ lazy val spark = project
   )
   .dependsOn(core, shared)
 
-// --- REST API (Http4s) ---
+// --- Presentation Layer: REST API ---
+// DEPENDENCY RULE: REST API depends on core (domain), application (use cases), domainPersistence (interfaces), and shared
+// FORBIDDEN: Must NOT depend on infrastructurePersistence directly (use dependency injection for implementations)
+// Contains: Http4s REST API endpoints and controllers
 lazy val restApi = project
   .in(file("rest-api"))
   .enablePlugins(GatlingPlugin)
@@ -206,9 +265,11 @@ lazy val restApi = project
       case _ => MergeStrategy.first
     }
   )
-  .dependsOn(core, persistent, shared)
+  .dependsOn(core, application, domainPersistence, infrastructurePersistence, shared)
 
-// --- Player Service (standalone microservice) ---
+// --- Infrastructure Layer: Player Service (standalone microservice) ---
+// DEPENDENCY RULE: Player service is a standalone microservice
+// Contains: Akka HTTP-based player management service
 lazy val playerService = project
   .in(file("player-service"))
   .settings(
@@ -235,7 +296,9 @@ lazy val playerService = project
     }
   )
 
-// --- Bot Service (Lichess Bot API integration) ---
+// --- Infrastructure Layer: Bot Service (Lichess Bot API integration) ---
+// DEPENDENCY RULE: Bot service depends on core (domain), application (use cases), and shared
+// Contains: Akka HTTP-based bot service for Lichess integration
 lazy val botService = project
   .in(file("bot-service"))
   .settings(
@@ -262,9 +325,11 @@ lazy val botService = project
       case _ => MergeStrategy.first
     }
   )
-  .dependsOn(core, shared)
+  .dependsOn(core, application, shared)
 
-// --- Tournament Service (bot evaluation arena + tournaments) ---
+// --- Infrastructure Layer: Tournament Service (bot evaluation arena + tournaments) ---
+// DEPENDENCY RULE: Tournament service depends on core (domain), application (use cases), and shared
+// Contains: Akka HTTP-based tournament management service
 lazy val tournamentService = project
   .in(file("tournament-service"))
   .settings(
@@ -299,9 +364,11 @@ lazy val tournamentService = project
       case _ => MergeStrategy.first
     }
   )
-  .dependsOn(core, shared)
+  .dependsOn(core, application, shared)
 
-// --- JMH Benchmarks ---
+// --- Benchmark Layer: JMH Benchmarks ---
+// DEPENDENCY RULE: Benchmark depends on core (domain) and application (services)
+// Contains: JMH microbenchmarks for performance testing
 lazy val benchmark = project
   .in(file("benchmark"))
   .enablePlugins(JmhPlugin)
@@ -312,12 +379,17 @@ lazy val benchmark = project
       "org.openjdk.jmh" % "jmh-generator-bytecode" % "1.37" % "provided"
     )
   )
-  .dependsOn(core)
+  .dependsOn(core, application)
 
 // --- Root project (aggregator only) ---
 lazy val root = project
   .in(file("."))
   .aggregate(
+    core,
+    application,
+    domainPersistence,
+    infrastructurePersistence,
+    shared,
     tui,
     gui,
     persistent,

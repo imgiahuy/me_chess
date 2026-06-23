@@ -4,5 +4,5 @@ metadata:
   name: keycloak-config
   namespace: chess
 data:
-  KC_HOSTNAME: "141.37.123.124"
+  KC_HOSTNAME: "${PRODUCTION_HOST:-141.37.123.124}"
   KC_HOSTNAME_PORT: "80"

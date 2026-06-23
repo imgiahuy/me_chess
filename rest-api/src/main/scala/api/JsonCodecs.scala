@@ -260,6 +260,82 @@ object JsonCodecs {
 
   final case class OpeningCategoryResponse(category: String, openings: List[OpeningInfo])
 
+  // Engine management types
+  final case class EngineInfo(
+    name: String,
+    enginePath: String,
+    options: Map[String, String],
+    defaultDepth: Int,
+    defaultTimeMs: Long,
+    isRunning: Boolean
+  )
+
+  final case class EngineConfigResponse(
+    name: String,
+    enginePath: String,
+    options: Map[String, String],
+    defaultDepth: Int,
+    defaultTimeMs: Long
+  )
+
+  final case class EngineConfigRequest(
+    enginePath: String,
+    options: Map[String, String] = Map.empty,
+    defaultDepth: Int = 15,
+    defaultTimeMs: Long = 1000
+  )
+
+  final case class EngineStatusResponse(
+    name: String,
+    isRunning: Boolean,
+    info: Option[EngineInfoDetails]
+  )
+
+  final case class EngineInfoDetails(
+    name: String,
+    author: String
+  )
+
+  final case class EvaluationResponse(
+    engineName: String,
+    fen: String,
+    depth: Int,
+    score: String,
+    bestMove: String
+  )
+
+  final case class BestMoveResponse(
+    engineName: String,
+    fen: String,
+    depth: Int,
+    bestMove: String
+  )
+
+  final case class EvaluationRequest(
+    fen: String,
+    depth: Option[Int] = None
+  )
+
+  final case class BestMoveRequest(
+    fen: String,
+    depth: Option[Int] = None
+  )
+
+  final case class EnginesListResponse(engines: List[EngineInfo], total: Int)
+
+  final case class MoveSuggestionRequest(
+    fen: String,
+    engineName: String = "stockfish",
+    depth: Option[Int] = None
+  )
+
+  final case class MoveSuggestionResponse(
+    bestMove: String,
+    score: String,
+    depth: Int,
+    engineName: String
+  )
+
   given ReadWriter[TimeControlInfo]  = macroRW
 
   given optionTimeControlInfoRW: ReadWriter[Option[TimeControlInfo]] = readwriter[Value].bimap(
@@ -329,4 +405,16 @@ object JsonCodecs {
   given ReadWriter[OpeningLookupRequest]  = macroRW
   given ReadWriter[OpeningSearchRequest]  = macroRW
   given ReadWriter[OpeningCategoryResponse] = macroRW
+  given ReadWriter[EngineInfo] = macroRW
+  given ReadWriter[EngineConfigResponse] = macroRW
+  given ReadWriter[EngineConfigRequest] = macroRW
+  given ReadWriter[EngineStatusResponse] = macroRW
+  given ReadWriter[EngineInfoDetails] = macroRW
+  given ReadWriter[EvaluationResponse] = macroRW
+  given ReadWriter[BestMoveResponse] = macroRW
+  given ReadWriter[EvaluationRequest] = macroRW
+  given ReadWriter[BestMoveRequest] = macroRW
+  given ReadWriter[EnginesListResponse] = macroRW
+  given ReadWriter[MoveSuggestionRequest] = macroRW
+  given ReadWriter[MoveSuggestionResponse] = macroRW
 }

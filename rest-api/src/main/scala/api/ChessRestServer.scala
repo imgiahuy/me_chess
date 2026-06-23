@@ -4,7 +4,10 @@ import akka.actor.typed.ActorSystem
 import akka.actor.typed.scaladsl.Behaviors
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.{Directives, Route}
+import akka.http.scaladsl.server.RouteConcatenation._
+import akka.http.scaladsl.model.StatusCodes
 import controller.GameController
+import usecase.{CreateGameUseCase, MakeMoveUseCase, GetGameUseCase}
 import database.DatabaseManager
 import redis.{RedisClientFactory, RedisConfig}
 import repository.DatabaseGameRepository
@@ -108,10 +111,28 @@ object ChessRestServer {
 
       // Create database-backed repository
       val gameRepository = new DatabaseGameRepository(dbManager.gameDao)
-      val sessionController = new GameSessionController(controller, gameRepository, kafkaService, playerServiceClient)
+      
+      // Create use cases
+      val createGameUseCase = new CreateGameUseCase(controller, gameRepository)
+      val makeMoveUseCase = new MakeMoveUseCase(controller, gameRepository)
+      val getGameUseCase = new GetGameUseCase(gameRepository)
+      
+      val sessionController = new GameSessionController(
+        createGameUseCase,
+        makeMoveUseCase,
+        getGameUseCase,
+        controller,
+        gameRepository,
+        kafkaService,
+        playerServiceClient
+      )
+
+      // Initialize engine controller for Stockfish integration
+      println("[INFO] Initializing engine controller for UCI engines...")
+      val engineController = new EngineController()
 
       println("[INFO] Setting up API routes...")
-      val chessRoutes = new ChessApiRoutes(sessionController).routes
+      val chessRoutes = new ChessApiRoutes(sessionController, engineController).routes
 
       // Rate limiter: 100 requests per 60 seconds per client IP
       val rateLimiter = new RateLimiter(maxRequests = 100, windowMs = 60000)

@@ -1,0 +1,26 @@
+# Base builder - compiles shared modules once
+FROM eclipse-temurin:21-jdk-alpine AS base-builder
+
+RUN apk add --no-cache curl wget bash git
+
+RUN wget https://github.com/sbt/sbt/releases/download/v1.9.9/sbt-1.9.9.tgz && \
+    tar -xzf sbt-1.9.9.tgz && \
+    mv sbt /usr/local/sbt && \
+    ln -s /usr/local/sbt/bin/sbt /usr/local/bin/sbt && \
+    rm sbt-1.9.9.tgz
+
+ENV PATH="/usr/local/sbt/bin:$PATH"
+
+WORKDIR /app
+
+# Copy shared modules first for better caching
+COPY build.sbt .
+COPY project ./project/
+COPY core ./core/
+COPY shared ./shared/
+COPY infrastructure-persistence ./infrastructure-persistence/
+COPY domain-persistence ./domain-persistence/
+COPY application ./application/
+
+# Compile shared modules
+RUN sbt compile

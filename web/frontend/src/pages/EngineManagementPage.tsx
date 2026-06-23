@@ -8,6 +8,7 @@ interface EngineConfig {
     options: Record<string, string>;
     defaultDepth: number;
     defaultTimeMs: number;
+    isRunning: boolean;
 }
 
 interface EngineStatus {
@@ -35,35 +36,14 @@ export function EngineManagementPage() {
         setLoading(true);
         setError(null);
         try {
-            // Mock data for now - would call actual API
-            const mockEngines: EngineConfig[] = [
-                {
-                    name: "stockfish",
-                    enginePath: "C:\\stockfish-windows-x86-64-avx2\\stockfish\\stockfish-windows-x86-64-avx2.exe",
-                    options: { "Skill Level": "20", "Threads": "4", "Hash": "256" },
-                    defaultDepth: 15,
-                    defaultTimeMs: 1000,
-                },
-                {
-                    name: "stockfish-easy",
-                    enginePath: "C:\\stockfish-windows-x86-64-avx2\\stockfish\\stockfish-windows-x86-64-avx2.exe",
-                    options: { "Skill Level": "5", "Threads": "2", "Hash": "128" },
-                    defaultDepth: 10,
-                    defaultTimeMs: 500,
-                },
-                {
-                    name: "stockfish-medium",
-                    enginePath: "C:\\stockfish-windows-x86-64-avx2\\stockfish\\stockfish-windows-x86-64-avx2.exe",
-                    options: { "Skill Level": "10", "Threads": "2", "Hash": "128" },
-                    defaultDepth: 12,
-                    defaultTimeMs: 750,
-                },
-            ];
-            setEngines(mockEngines);
+            const response = await fetch("http://localhost:8085/v1/chess/engines");
+            if (!response.ok) throw new Error("Failed to load engines");
+            const data = await response.json();
+            setEngines(data.engines);
             
             const statuses: Record<string, EngineStatus> = {};
-            mockEngines.forEach(engine => {
-                statuses[engine.name] = { name: engine.name, isRunning: false };
+            data.engines.forEach((engine: EngineConfig) => {
+                statuses[engine.name] = { name: engine.name, isRunning: engine.isRunning };
             });
             setEngineStatuses(statuses);
         } catch (e) {
@@ -75,10 +55,18 @@ export function EngineManagementPage() {
 
     const handleStartEngine = async (engineName: string) => {
         try {
-            // Would call actual API to start engine
+            const response = await fetch(`http://localhost:8085/v1/chess/engines/${engineName}/start`, {
+                method: "POST"
+            });
+            if (!response.ok) throw new Error("Failed to start engine");
+            const data = await response.json();
             setEngineStatuses(prev => ({
                 ...prev,
-                [engineName]: { ...prev[engineName], isRunning: true, info: { name: "Stockfish 16", author: "Stockfish developers" } }
+                [engineName]: { 
+                    name: engineName, 
+                    isRunning: data.isRunning, 
+                    info: data.info ? { name: data.info.name, author: data.info.author } : undefined
+                }
             }));
         } catch (e) {
             setError(`Failed to start ${engineName}`);
@@ -87,10 +75,18 @@ export function EngineManagementPage() {
 
     const handleStopEngine = async (engineName: string) => {
         try {
-            // Would call actual API to stop engine
+            const response = await fetch(`http://localhost:8085/v1/chess/engines/${engineName}/stop`, {
+                method: "POST"
+            });
+            if (!response.ok) throw new Error("Failed to stop engine");
+            const data = await response.json();
             setEngineStatuses(prev => ({
                 ...prev,
-                [engineName]: { ...prev[engineName], isRunning: false, info: undefined }
+                [engineName]: { 
+                    name: engineName, 
+                    isRunning: data.isRunning, 
+                    info: undefined
+                }
             }));
         } catch (e) {
             setError(`Failed to stop ${engineName}`);
@@ -288,6 +284,33 @@ export function EngineManagementPage() {
                                         fontSize: "0.85rem",
                                         fontWeight: 600,
                                         cursor: "pointer",
+                                    }}
+                                    onClick={async () => {
+                                        const nameInput = document.querySelector('input[placeholder="my-engine"]') as HTMLInputElement;
+                                        const pathInput = document.querySelector('input[placeholder="C:\\\\path\\\\to\\\\engine.exe"]') as HTMLInputElement;
+                                        if (nameInput && pathInput && nameInput.value && pathInput.value) {
+                                            try {
+                                                const response = await fetch(`http://localhost:8085/v1/chess/engines/${nameInput.value}/register`, {
+                                                    method: "POST",
+                                                    headers: { "Content-Type": "application/json" },
+                                                    body: JSON.stringify({
+                                                        enginePath: pathInput.value,
+                                                        options: {},
+                                                        defaultDepth: 15,
+                                                        defaultTimeMs: 1000
+                                                    })
+                                                });
+                                                if (response.ok) {
+                                                    loadEngines();
+                                                    nameInput.value = "";
+                                                    pathInput.value = "";
+                                                } else {
+                                                    setError("Failed to register engine");
+                                                }
+                                            } catch (e) {
+                                                setError("Failed to register engine");
+                                            }
+                                        }
                                     }}
                                 >
                                     Add Engine

@@ -4,6 +4,6 @@ metadata:
   name: web-frontend-config
   namespace: chess
 data:
-  REACT_APP_API_URL: "http://141.37.123.124/v1"
+  REACT_APP_API_URL: "http://${PRODUCTION_HOST:-141.37.123.124}/v1"
   API_UPSTREAM: rest-api.chess.svc.cluster.local:8080
   PLAYER_SERVICE_UPSTREAM: player-service.chess.svc.cluster.local:8090

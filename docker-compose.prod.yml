@@ -20,13 +20,13 @@ services:
     networks:
       - chess-network
     environment:
-      - KEYCLOAK_ADMIN=admin
-      - KEYCLOAK_ADMIN_PASSWORD=admin
+      - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
+      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
       - KC_DB=postgres
       - KC_DB_URL=jdbc:postgresql://postgres:5432/keycloak
-      - KC_DB_USERNAME=chess_user
-      - KC_DB_PASSWORD=chess_password
-      - KC_HOSTNAME=141.37.123.124
+      - KC_DB_USERNAME=${POSTGRES_USER:-chess_user}
+      - KC_DB_PASSWORD=${POSTGRES_PASSWORD:-chess_password}
+      - KC_HOSTNAME=${PRODUCTION_HOST:-141.37.123.124}
       - KC_HOSTNAME_PORT=80
       - KC_HTTP_RELATIVE_PATH=/auth
       - KC_HOSTNAME_STRICT=false
@@ -54,9 +54,9 @@ services:
     networks:
       - chess-network
     environment:
-      - POSTGRES_DB=chess
-      - POSTGRES_USER=chess_user
-      - POSTGRES_PASSWORD=chess_password
+      - POSTGRES_DB=${POSTGRES_DB:-chess}
+      - POSTGRES_USER=${POSTGRES_USER:-chess_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-chess_password}
       - POSTGRES_MULTIPLE_DATABASES=keycloak
     volumes:
       - chess-data:/var/lib/postgresql/data
@@ -68,7 +68,7 @@ services:
       retries: 5
 
   mongodb:
-    image: mongo:4.4
+    image: mongo:7
     container_name: chess-mongodb
     ports:
       - "27017:27017"
@@ -201,7 +201,7 @@ services:
       rest-api:
         condition: service_healthy
     environment:
-      - REACT_APP_API_URL=http://141.37.123.124/v1
+      - REACT_APP_API_URL=http://${PRODUCTION_HOST:-141.37.123.124}/v1
       - API_UPSTREAM=rest-api:8080
 
 networks:
