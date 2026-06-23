@@ -120,39 +120,9 @@ class GameSessionController(
     for {
       state <- repo.getGame(gameId).toRight("Game not found")
       newState <- {
-        // Check if this is a UCI engine bot
-        val isUciBot = botType.toLowerCase.startsWith("stockfish") || botType.toLowerCase == "uci"
-        
-        if (isUciBot) {
-          // Map bot type to engine name
-          val engineName = botType.toLowerCase match {
-            case "stockfish" | "uci" => "stockfish"
-            case "stockfish-easy" => "stockfish-easy"
-            case "stockfish-medium" => "stockfish-medium"
-            case _ => "stockfish"
-          }
-          
-          // Try to use UCI bot service
-          try {
-            import scala.concurrent.Await
-            import scala.concurrent.duration._
-            val botFuture = uciBotService.createUciBot(engineName, state)
-            val bot = Await.result(botFuture, 5.seconds)
-            val legalMoves = GameService.getLegalMoves(state, state.turn)
-            val move = bot.selectMove(state, legalMoves)
-            GameService.applyMove(state, move)
-          } catch {
-            case e: Exception =>
-              println(s"[UCI Bot] Failed to use UCI bot: ${e.getMessage}, falling back to heuristic bot")
-              // Fallback to heuristic bot
-              val bot = BotService.createBot(botType)
-              BotService.playBotMove(bot, state)
-          }
-        } else {
-          // Use heuristic bot
-          val bot = BotService.createBot(botType)
-          BotService.playBotMove(bot, state)
-        }
+        // Use BotService for all bot types (including Stockfish)
+        val bot = BotService.createBot(botType)
+        BotService.playBotMove(bot, state)
       }
     } yield {
       repo.updateGame(gameId, newState)

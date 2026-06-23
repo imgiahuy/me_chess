@@ -240,12 +240,26 @@ class EngineController {
     val lines = output.split("\n")
     lines.find(_.contains("score")).map { line =>
       if (line.contains("mate")) {
-        val mateIn = line.split("mate")(1).split(" ")(0)
-        s"Mate in $mateIn"
+        val parts = line.split("mate")
+        if (parts.length > 1) {
+          val mateIn = parts(1).split(" ").find(_.nonEmpty).getOrElse("0")
+          s"Mate in $mateIn"
+        } else {
+          "0.00"
+        }
       } else if (line.contains("cp")) {
-        val cp = line.split("cp")(1).split(" ")(0)
-        val score = cp.toInt / 100.0
-        f"+$score%.2f"
+        val parts = line.split("cp")
+        if (parts.length > 1) {
+          val cpStr = parts(1).split(" ").find(_.nonEmpty).getOrElse("0")
+          try {
+            val score = cpStr.toInt / 100.0
+            if (score >= 0) f"+$score%.2f" else f"$score%.2f"
+          } catch {
+            case _: NumberFormatException => "0.00"
+          }
+        } else {
+          "0.00"
+        }
       } else {
         "0.00"
       }

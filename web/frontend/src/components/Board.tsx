@@ -77,7 +77,7 @@ export function Board({ fen, onMove, turn, gameOver = false }: Props) {
 
     return (
         <>
-            <div style={{ position: "relative", display: "inline-block" }}>
+            <div style={{ position: "relative", display: "inline-block", padding: "20px" }}>
             {gameOver && (
                 <div style={{
                     position: "absolute",
@@ -93,31 +93,51 @@ export function Board({ fen, onMove, turn, gameOver = false }: Props) {
                     <span style={{ color: "#FFD700", fontSize: "2rem", fontWeight: "bold", textShadow: "0 2px 8px #000" }}>Game Over</span>
                 </div>
             )}
-            <div
-                style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(8, 60px)",
-                    border: "2px solid #1a1a1a",
-                    borderRadius: "4px",
-                    overflow: "hidden",
-                    cursor: gameOver ? "not-allowed" : "pointer",
-                }}
-            >
-                {board.flat().map((piece, i) => {
-                    const pos = indexToSquare(i);
-                    const isDark = (Math.floor(i / 8) + i) % 2 === 1;
+            <div style={{ display: "flex" }}>
+                {/* Rank labels (1-8) on the left */}
+                <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", padding: "0 8px", fontSize: "0.8rem", color: "var(--color-text-dim)", fontWeight: 600 }}>
+                    {Array.from({ length: 8 }, (_, i) => (
+                        <div key={i} style={{ height: "60px", display: "flex", alignItems: "center" }}>
+                            {8 - i}
+                        </div>
+                    ))}
+                </div>
+                <div>
+                    <div
+                        style={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(8, 60px)",
+                            border: "2px solid #1a1a1a",
+                            borderRadius: "4px",
+                            overflow: "hidden",
+                            cursor: gameOver ? "not-allowed" : "pointer",
+                        }}
+                    >
+                        {board.flat().map((piece, i) => {
+                            const pos = indexToSquare(i);
+                            const isDark = (Math.floor(i / 8) + i) % 2 === 1;
 
-                    return (
-                        <Square
-                            key={i}
-                            piece={piece}
-                            position={pos}
-                            isDark={isDark}
-                            isSelected={selected === pos}
-                            onClick={handleClick}
-                        />
-                    );
-                })}
+                            return (
+                                <Square
+                                    key={i}
+                                    piece={piece}
+                                    position={pos}
+                                    isDark={isDark}
+                                    isSelected={selected === pos}
+                                    onClick={handleClick}
+                                />
+                            );
+                        })}
+                    </div>
+                    {/* File labels (a-h) on the bottom */}
+                    <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0 0 0", fontSize: "0.8rem", color: "var(--color-text-dim)", fontWeight: 600 }}>
+                        {Array.from({ length: 8 }, (_, i) => (
+                            <div key={i} style={{ width: "60px", textAlign: "center" }}>
+                                {String.fromCharCode(97 + i)}
+                            </div>
+                        ))}
+                    </div>
+                </div>
             </div>
             </div>
 

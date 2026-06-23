@@ -326,7 +326,7 @@ object JsonCodecs {
   final case class MoveSuggestionRequest(
     fen: String,
     engineName: String = "stockfish",
-    depth: Option[Int] = None
+    depth: Int = 15
   )
 
   final case class MoveSuggestionResponse(

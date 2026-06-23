@@ -20,6 +20,7 @@ class UciEngine(enginePath: String, options: Map[String, String] = Map.empty) ex
   // Queue for async responses
   private val responseQueue = new ArrayBlockingQueue[String](100)
   private var bestMovePromise: Option[Promise[String]] = None
+  private var searchOutput: java.util.ArrayList[String] = new java.util.ArrayList[String]()
   
   override def name: String = s"UCI Engine (${enginePath.split(java.io.File.separator).last})"
   override def difficulty: String = "Expert"
@@ -74,8 +75,21 @@ class UciEngine(enginePath: String, options: Map[String, String] = Map.empty) ex
   private def handleResponse(line: String): Unit = {
     responseQueue.offer(line)
     
+    // Accumulate info lines during search
+    if (line.startsWith("info")) {
+      searchOutput.synchronized {
+        searchOutput.add(line)
+      }
+    }
+    
     if (line.startsWith("bestmove")) {
-      bestMovePromise.foreach(_.success(line))
+      // Include all accumulated info lines in the response
+      val fullOutput = searchOutput.synchronized {
+        val output = searchOutput.toArray.mkString("\n")
+        searchOutput.clear()
+        output
+      }
+      bestMovePromise.foreach(_.success(fullOutput + "\n" + line))
       bestMovePromise = None
     }
   }

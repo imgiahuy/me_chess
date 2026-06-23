@@ -667,14 +667,20 @@ class ChessApiRoutes(sessionController: GameSessionController, engineController:
             }
           }
           ) ~ (
+          /** OPTIONS /v1/chess/suggest - CORS preflight for suggest endpoint */
+          options {
+            path("suggest") {
+              complete(StatusCodes.OK)
+            }
+          }
+          ) ~ (
           /** POST /v1/chess/suggest - Get move suggestion for a position */
           post {
             path("suggest") {
               entity(as[String]) { body =>
                 parseJson[MoveSuggestionRequest](body) match {
                   case Right(request) =>
-                    val depth = request.depth.getOrElse(15)
-                    engineController.getMoveSuggestion(request.fen, request.engineName, depth) match {
+                    engineController.getMoveSuggestion(request.fen, request.engineName, request.depth) match {
                       case Right(suggestion) =>
                         complete(StatusCodes.OK, jsonResponse(suggestion))
                       case Left(error) =>

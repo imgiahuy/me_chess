@@ -439,9 +439,9 @@ object BotFactory {
     BotInfo("defensive", "Defensive Bot", "Medium", "Plays safe and solid. Prioritizes king safety, avoids unnecessary risks, and maintains a strong defensive structure."),
     BotInfo("aggressive", "Aggressive Bot", "Medium", "Attacks relentlessly! Loves to give check, push forward, and create threats. Exciting to play against!"),
     BotInfo("smarter", "Smarter Bot", "Hard", "Uses advanced positional evaluation with piece-square tables. Understands piece placement and basic strategy."),
-    BotInfo("stockfish", "Stockfish (Expert)", "Expert", "External UCI chess engine (Stockfish) at maximum strength. Requires Stockfish binary to be configured."),
-    BotInfo("stockfish-easy", "Stockfish (Easy)", "Medium", "External UCI chess engine (Stockfish) at reduced strength. Good for intermediate players."),
-    BotInfo("stockfish-medium", "Stockfish (Medium)", "Hard", "External UCI chess engine (Stockfish) at medium strength. Challenging for advanced players.")
+    BotInfo("stockfish", "Stockfish (Expert)", "Expert", "Stockfish chess engine at maximum strength (depth 15). World-class play."),
+    BotInfo("stockfish-easy", "Stockfish (Easy)", "Medium", "Stockfish chess engine at reduced strength (depth 10). Good for intermediate players."),
+    BotInfo("stockfish-medium", "Stockfish (Medium)", "Hard", "Stockfish chess engine at medium strength (depth 12). Challenging for advanced players.")
   )
 }
 

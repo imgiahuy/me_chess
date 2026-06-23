@@ -259,9 +259,8 @@ lazy val restApi = project
     sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyJarName := "chess-rest-api.jar",
     sbtassembly.AssemblyPlugin.autoImport.assembly / mainClass := Some("api.ChessRestServer"),
     sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyMergeStrategy := {
-      case PathList("META-INF", "MANIFEST.MF") => MergeStrategy.discard
-      case PathList("META-INF", xs @ _*) => MergeStrategy.discard
       case "reference.conf" => MergeStrategy.concat
+      case "META-INF/MANIFEST.MF" => MergeStrategy.discard
       case _ => MergeStrategy.first
     }
   )
@@ -366,6 +365,35 @@ lazy val tournamentService = project
   )
   .dependsOn(core, application, shared)
 
+// --- Tournament Client Layer (client for external Tournament Server) ---
+// DEPENDENCY RULE: Tournament client depends on core (domain), application (use cases), and shared
+// Contains: Client for integrating with external NowChess Tournament Server
+lazy val tournamentClient = project
+  .in(file("tournament-client"))
+  .settings(
+    commonSettings,
+    fork := true,
+    libraryDependencies ++= Seq(
+      ("com.typesafe.akka" % "akka-actor-typed_3" % "2.8.5")
+        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
+      ("com.typesafe.akka" % "akka-http_3" % "10.5.3")
+        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
+      ("com.typesafe.akka" % "akka-stream_3" % "2.8.5")
+        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
+      "com.lihaoyi" %% "upickle" % "3.1.0",
+      "org.scala-lang.modules" % "scala-java8-compat_3" % "1.0.2"
+    ),
+    sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyJarName := "chess-tournament-client.jar",
+    sbtassembly.AssemblyPlugin.autoImport.assembly / mainClass := Some("tournament.client.TournamentClientMain"),
+    sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyMergeStrategy := {
+      case PathList("META-INF", "MANIFEST.MF") => MergeStrategy.discard
+      case PathList("META-INF", xs @ _*) => MergeStrategy.discard
+      case "reference.conf" => MergeStrategy.concat
+      case _ => MergeStrategy.first
+    }
+  )
+  .dependsOn(core, application, shared)
+
 // --- Benchmark Layer: JMH Benchmarks ---
 // DEPENDENCY RULE: Benchmark depends on core (domain) and application (services)
 // Contains: JMH microbenchmarks for performance testing
@@ -398,6 +426,7 @@ lazy val root = project
     playerService,
     botService,
     tournamentService,
+    tournamentClient,
     benchmark
   )
   .settings(

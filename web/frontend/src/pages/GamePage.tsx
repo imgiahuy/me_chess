@@ -289,6 +289,7 @@ export function GamePage() {
     }
 
     async function handleGetMoveSuggestion() {
+        if (!game) return;
         setIsAnalyzing(true);
         setMoveError(null);
         setNotification("Analyzing position with Stockfish...");

@@ -81,7 +81,13 @@ object EngineManager {
   
   /** Initialize with default Stockfish configuration */
   def initializeDefault(): Unit = {
-    val stockfishPath = sys.env.getOrElse("STOCKFISH_PATH", "C:\\stockfish-windows-x86-64-avx2\\stockfish\\stockfish-windows-x86-64-avx2.exe")
+    val os = System.getProperty("os.name").toLowerCase
+    val defaultPath = if (os.contains("win")) {
+      "C:\\stockfish-windows-x86-64-avx2\\stockfish\\stockfish-windows-x86-64-avx2.exe"
+    } else {
+      "/usr/local/bin/stockfish"
+    }
+    val stockfishPath = sys.env.getOrElse("STOCKFISH_PATH", defaultPath)
     
     instance.registerEngine("stockfish", UciEngineConfig(
       enginePath = stockfishPath,
