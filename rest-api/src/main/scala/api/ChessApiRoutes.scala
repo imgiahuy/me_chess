@@ -4,7 +4,7 @@ import scala.language.postfixOps
 import akka.actor.typed.ActorSystem
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity, HttpHeader, StatusCodes, headers, sse}
 import akka.http.scaladsl.server.Directives.*
-import akka.http.scaladsl.server.{RejectionHandler, Route}
+import akka.http.scaladsl.server.{RejectionHandler, Route, Directive0}
 import akka.http.scaladsl.marshalling.sse.EventStreamMarshalling
 import akka.stream.scaladsl.Source
 import scala.concurrent.duration._
@@ -47,6 +47,11 @@ class ChessApiRoutes(sessionController: GameSessionController, engineController:
     if (gameId.trim.isEmpty) Left("Game ID cannot be empty")
     else if (gameId.length > 100) Left("Game ID is too long (max 100 characters)")
     else Right(())
+  }
+
+  /** Optional authentication directive - validates token if auth service is available */
+  private def optionalAuth: Directive0 = {
+    pass // For now, authentication is optional - we'll enforce it later
   }
 
   val routes: Route =

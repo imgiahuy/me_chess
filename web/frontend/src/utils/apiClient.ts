@@ -1,4 +1,84 @@
 const BASE_URL = "/v1/chess";
+const AUTH_BASE_URL = "/v1/auth";
+
+// Auth functions
+export async function login(username: string, password: string) {
+    const res = await fetch(`${AUTH_BASE_URL}/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+    });
+    if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || `Login failed: ${res.status}`);
+    }
+    return res.json();
+}
+
+export async function register(username: string, email: string, password: string, firstName: string, lastName: string) {
+    const res = await fetch(`${AUTH_BASE_URL}/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, email, password, firstName, lastName }),
+    });
+    if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || `Registration failed: ${res.status}`);
+    }
+    return res.json();
+}
+
+export async function refreshToken(refreshToken: string) {
+    const res = await fetch(`${AUTH_BASE_URL}/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || `Token refresh failed: ${res.status}`);
+    }
+    return res.json();
+}
+
+export async function getUserInfo(accessToken: string) {
+    const res = await fetch(`${AUTH_BASE_URL}/userinfo`, {
+        method: "GET",
+        headers: { "Authorization": `Bearer ${accessToken}` },
+    });
+    if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || `Failed to get user info: ${res.status}`);
+    }
+    return res.json();
+}
+
+// Token storage helpers
+export function setAccessToken(token: string) {
+    localStorage.setItem("access_token", token);
+}
+
+export function setRefreshToken(token: string) {
+    localStorage.setItem("refresh_token", token);
+}
+
+export function getAccessToken(): string | null {
+    return localStorage.getItem("access_token");
+}
+
+export function getRefreshToken(): string | null {
+    return localStorage.getItem("refresh_token");
+}
+
+export function clearTokens() {
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
+}
+
+export function getAuthHeaders(): Record<string, string> {
+    const token = getAccessToken();
+    return token ? { "Authorization": `Bearer ${token}` } : {};
+}
 
 export async function createGame(whitePlayer: string, blackPlayer: string, timeControl?: string | null) {
     const res = await fetch(`${BASE_URL}/games`, {

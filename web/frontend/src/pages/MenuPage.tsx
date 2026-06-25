@@ -1,6 +1,6 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { createGame, loadLatestGame, getAvailableBots } from "../utils/apiClient";
+import { createGame, loadLatestGame, getAvailableBots, clearTokens } from "../utils/apiClient";
 import { useTheme } from "../router/App";
 import type { BotInfo } from "../types/chess";
 
@@ -133,6 +133,11 @@ export function MenuPage() {
         } finally { setLoading(false); }
     }
 
+    const handleLogout = () => {
+        clearTokens();
+        navigate("/auth");
+    };
+
     return (
         <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "2rem 1rem" }}>
             {/* Theme toggle */}
@@ -143,6 +148,16 @@ export function MenuPage() {
                 title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
             >
                 {theme === "dark" ? "☀️" : "🌙"}
+            </button>
+
+            {/* Logout button */}
+            <button
+                onClick={handleLogout}
+                className="ghost"
+                style={{ position: "fixed", top: "1.25rem", right: "5rem", fontSize: "0.9rem", padding: "0.4rem 0.7rem", borderRadius: "var(--radius-sm)" }}
+                title="Logout"
+            >
+                🚪 Logout
             </button>
 
             {/* Hero */}

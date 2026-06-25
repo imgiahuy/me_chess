@@ -75,7 +75,7 @@ object BotService {
 
   /** Get list of available bot types */
   def availableBots: List[String] = {
-    BotFactory.availableBots
+    BotFactory.availableBots ++ List("stockfish", "stockfish-easy", "stockfish-medium")
   }
   
   /** Wrapper for Stockfish bot using UciBotService */

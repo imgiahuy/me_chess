@@ -8,7 +8,7 @@ services:
     hostname: zookeeper
     container_name: chess-zookeeper
     ports:
-      - "2181:2181"
+      - "127.0.0.1:2181:2181"
     networks:
       - chess-network
     environment:
@@ -30,8 +30,8 @@ services:
       zookeeper:
         condition: service_healthy
     ports:
-      - "9092:9092"      # External access
-      - "29092:29092"    # Internal Docker access
+      - "127.0.0.1:9092:9092"      # External access
+      - "127.0.0.1:29092:29092"    # Internal Docker access
     networks:
       - chess-network
     environment:
@@ -60,7 +60,7 @@ services:
       kafka:
         condition: service_healthy
     ports:
-      - "8082:8080"
+      - "127.0.0.1:8082:8080"
     networks:
       - chess-network
     environment:

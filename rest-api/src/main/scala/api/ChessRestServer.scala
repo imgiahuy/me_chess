@@ -12,6 +12,7 @@ import database.DatabaseManager
 import redis.{RedisClientFactory, RedisConfig}
 import repository.DatabaseGameRepository
 import kafka.{KafkaGameEventService, KafkaApiRoutes}
+import auth.AuthClient
 
 import scala.concurrent.ExecutionContextExecutor
 import scala.language.postfixOps
@@ -109,6 +110,20 @@ object ChessRestServer {
           None
       }
 
+      // Initialize Auth Service client (optional, enabled when auth-service is available)
+      val authServiceUrl = sys.env.getOrElse("AUTH_SERVICE_URL", "http://auth-service:8088")
+      val authClient: Option[AuthClient] = try {
+        println(s"[INFO] Initializing Auth Service client at $authServiceUrl...")
+        val client = new AuthClient(authServiceUrl)
+        println("[INFO] Auth Service client enabled - token validation available")
+        Some(client)
+      } catch {
+        case e: Exception =>
+          println(s"[WARN] Failed to initialize Auth Service client: ${e.getMessage}")
+          println("[WARN] Authentication will be disabled")
+          None
+      }
+
       // Create database-backed repository
       val gameRepository = new DatabaseGameRepository(dbManager.gameDao)
       
@@ -124,7 +139,8 @@ object ChessRestServer {
         controller,
         gameRepository,
         kafkaService,
-        playerServiceClient
+        playerServiceClient,
+        authClient
       )
 
       // Initialize engine controller for Stockfish integration

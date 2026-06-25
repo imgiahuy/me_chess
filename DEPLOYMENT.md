@@ -8,6 +8,8 @@ This guide covers deploying the Chess application using Docker Compose, Kubernet
 - For Kubernetes: kubectl installed
 - For k3d: k3d installed (https://k3d.io/)
 - SSH access to 141.37.123.124 for production deployment
+- Scala 3.3.3 (for local builds)
+- Node.js 18+ (for frontend builds)
 
 ## Local Development with Docker Compose
 
@@ -27,12 +29,27 @@ docker-compose up -d
 
 - **Web Frontend**: http://localhost:3005
 - **REST API**: http://localhost:8085
+- **Player Service**: http://localhost:8090
+- **Tournament Service**: http://localhost:8070
 - **Keycloak**: http://localhost:8081
 - **Kafka UI**: http://localhost:8082
 - **Kafka**: localhost:9092
 - **PostgreSQL**: localhost:5432
 - **MongoDB**: localhost:27017
-- **Spark Analytics**: runs once on startup (batch mode), results in `spark-results` Docker volume
+- **Redis**: localhost:6379
+- **Spark Analytics**: runs once on startup (batch mode), then scheduler refreshes every 5 minutes, results in `spark-results` Docker volume
+
+### Player Service
+
+The `player-service` is a standalone microservice that manages player profiles and statistics. It stores player data in MongoDB and provides REST endpoints for player management.
+
+**API endpoints:**
+- `GET /v1/players` — list all players
+- `GET /v1/players/{id}` — get player by ID
+- `POST /v1/players` — create a new player
+- `PUT /v1/players/{id}` — update player
+- `DELETE /v1/players/{id}` — delete player
+- `GET /v1/players/health` — health check
 
 ### Tournament Service
 
@@ -175,10 +192,12 @@ chmod +x scripts/setup-k3d.sh
 
 ### Access the application
 
-All services are routed through the nginx ingress on **port 80**:
+All services are routed through the Traefik ingress (built into k3d) on **port 80**:
 
 - **Web Frontend**: http://chess.local
 - **REST API**: http://chess.local/v1
+- **Player Service**: http://chess.local/v1/players
+- **Tournament Service**: http://chess.local/v1/tournaments
 - **Keycloak**: http://chess.local/auth
 - **Kafka UI**: http://chess.local/kafka-ui
 
@@ -187,24 +206,30 @@ All services are routed through the nginx ingress on **port 80**:
 ```bash
 kubectl logs -n chess -f deployment/rest-api
 kubectl logs -n chess -f deployment/web-frontend
+kubectl logs -n chess -f deployment/player-service
+kubectl logs -n chess -f deployment/tournament-service
+kubectl logs -n chess -f deployment/bot-service
 kubectl logs -n chess -f deployment/kafka
 kubectl logs -n chess -f deployment/zookeeper
+kubectl logs -n chess -f deployment/redis
 ```
 
 ### Spark Analytics Job
 
-The Spark batch job runs automatically on deploy. To view its output:
+The Spark analytics job runs as a CronJob every 5 minutes in Kubernetes, processing game data from MongoDB. To view its output:
 
 ```bash
-# Check job status
+# Check CronJob status
+kubectl get cronjob -n chess
+
+# Check job history
 kubectl get jobs -n chess
 
-# Stream logs from the spark pod
-kubectl logs -n chess -l app=chess-spark --follow
+# Stream logs from the latest spark job pod
+kubectl logs -n chess -l app=chess-spark --follow --tail=100
 
-# Re-run the job after it completes (delete + re-apply)
-kubectl delete job chess-spark-batch -n chess
-kubectl apply -k k8s/overlays/local   # or production
+# Manually trigger a one-off job
+kubectl create job chess-spark-manual --from=cronjob/chess-spark-analytics -n chess
 
 # Run in Kafka streaming mode instead (one-off pod)
 kubectl run chess-spark-kafka \
@@ -236,6 +261,8 @@ This will:
 4. Deploy with Docker Compose
 
 ### Option 2: Kubernetes Deployment (k3s)
+
+Note: This option is currently not fully implemented. The project uses k3d for local development and Docker Compose for production.
 
 ```bash
 chmod +x scripts/deploy-k8s-to-server.sh
@@ -291,6 +318,24 @@ Kubernetes manifests use [Kustomize](https://kustomize.io/) overlays to separate
 ```
 k8s/
   base/                  # environment-agnostic base manifests
+    - namespace.yaml
+    - secrets.yaml
+    - postgres-deployment.yaml
+    - mongodb-deployment.yaml
+    - redis-deployment.yaml
+    - keycloak-deployment.yaml
+    - keycloak-realm-config.yaml
+    - kafka-deployment.yaml
+    - kafka-ui-deployment.yaml
+    - player-service-deployment.yaml
+    - bot-service-deployment.yaml
+    - tournament-service-deployment.yaml
+    - rest-api-deployment.yaml
+    - rest-api-hpa.yaml
+    - web-frontend-deployment.yaml
+    - spark-job.yaml
+    - ingress.yaml
+    - pod-disruption-budgets.yaml
   overlays/
     local/               # chess.local hostnames, used by setup-k3d scripts
     production/          # 141.37.123.124 hostnames, used by deploy-k8s-to-server.sh
@@ -338,15 +383,18 @@ This automatically stops the Docker Compose stack before creating the kind clust
 ```bash
 docker build -t chess-rest-api:latest -f rest-api/Dockerfile .
 docker build -t chess-web-frontend:latest -f web/frontend/Dockerfile web/frontend
+docker build -t chess-player-service:latest -f player-service/Dockerfile .
+docker build -t chess-bot-service:latest -f bot-service/Dockerfile .
+docker build -t chess-tournament-service:latest -f tournament-service/Dockerfile .
 # Spark: multi-stage build, no pre-steps needed
 docker build -t chess-spark:latest -f spark/Dockerfile .
 ```
 
 ### Spark Analytics Modes
 
-**Batch mode** (default — reads `sample_games.pgn`, auto-started by `docker-compose up`):
+**MongoDB mode** (default — reads from MongoDB, auto-started by `docker-compose up`):
 ```bash
-docker run --rm -v $(pwd)/sample_games.pgn:/tmp/sample_games.pgn chess-spark:latest batch /tmp/chess-analytics
+docker run --rm --network chess-network chess-spark:latest mongo
 ```
 
 **File mode** (pass your own PGN or JSON):
@@ -363,7 +411,17 @@ docker run --rm --network chess-network chess-spark:latest kafka kafka:29092 /tm
 
 ```bash
 docker tag chess-rest-api:latest 141.37.123.124:5000/chess-rest-api:latest
+docker tag chess-web-frontend:latest 141.37.123.124:5000/chess-web-frontend:latest
+docker tag chess-player-service:latest 141.37.123.124:5000/chess-player-service:latest
+docker tag chess-bot-service:latest 141.37.123.124:5000/chess-bot-service:latest
+docker tag chess-tournament-service:latest 141.37.123.124:5000/chess-tournament-service:latest
+docker tag chess-spark:latest 141.37.123.124:5000/chess-spark:latest
 docker push 141.37.123.124:5000/chess-rest-api:latest
+docker push 141.37.123.124:5000/chess-web-frontend:latest
+docker push 141.37.123.124:5000/chess-player-service:latest
+docker push 141.37.123.124:5000/chess-bot-service:latest
+docker push 141.37.123.124:5000/chess-tournament-service:latest
+docker push 141.37.123.124:5000/chess-spark:latest
 ```
 
 ## Troubleshooting
@@ -412,6 +470,14 @@ Ensure databases are healthy before starting application:
 docker-compose ps
 ```
 
+### Redis connection issues
+
+Check Redis is running:
+```bash
+docker-compose logs redis
+docker exec chess-redis redis-cli ping
+```
+
 ### Kafka issues
 
 **Check Kafka is running:**
@@ -450,7 +516,9 @@ kubectl logs -n chess deployment/zookeeper
 - Use environment variables for secrets
 - Enable HTTPS for production
 - Configure proper firewall rules
-  - Use secrets management for Kubernetes
+- Use secrets management for Kubernetes
+- The project includes Kubernetes secrets in `k8s/base/secrets.yaml` for sensitive data like Lichess API tokens
+- GUI and TUI services are commented out in Docker Compose as they are desktop-only applications requiring X11 forwarding
 
          ## Performance Testing
 
@@ -539,6 +607,26 @@ JMH benchmarks are located under `benchmark/src/main/scala/chess/benchmark/` and
 sbt benchmark/Jmh/run
 ```
 
+### Run All Performance Tests
+
+Run every Gatling simulation, k6 script, and JMH benchmark in sequence:
+
+```bash
+# All Gatling simulations
+sbt "restApi/GatlingIt/testOnly performance.SmokeChessSimulation" \
+    "restApi/GatlingIt/testOnly performance.LoadChessSimulation" \
+    "restApi/GatlingIt/testOnly performance.StressChessSimulation" \
+    "restApi/GatlingIt/testOnly performance.SoakChessSimulation" \
+    "restApi/GatlingIt/testOnly performance.EndToEndChessSimulation" \
+    "restApi/GatlingIt/testOnly performance.CapacitySimulation"
+
+# All k6 scripts
+k6 run k6/smoke.js && k6 run k6/load.js && k6 run k6/stress.js
+
+# JMH microbenchmarks
+sbt benchmark/Jmh/run
+```
+
 ## Monitoring
 
 ### Check service health
@@ -550,6 +638,8 @@ docker-compose ps
 # Kubernetes
 kubectl get pods -n chess
 kubectl get services -n chess
+kubectl get hpa -n chess
+kubectl get pdb -n chess
 ```
 
 ### Resource usage
@@ -562,3 +652,44 @@ docker stats
 kubectl top pods -n chess
 kubectl top nodes
 ```
+
+## Project Architecture
+
+The chess application follows a modular architecture with clear separation of concerns:
+
+### Core Modules
+- **core**: Pure domain logic (models, analysis, openings) - no dependencies on other modules
+- **application**: Services, controllers, use cases, engines - depends on core and domainPersistence
+- **domainPersistence**: Repository and DAO interfaces - depends on core and shared
+- **infrastructurePersistence**: Concrete implementations (InMemoryGameRepository, DatabaseGameRepository, DAOs) - depends on core, domainPersistence, and shared
+- **shared**: Shared utilities and types
+
+### Presentation Layer
+- **rest-api**: Http4s REST API endpoints with Gatling performance testing
+- **web-frontend**: React 19 + TypeScript + Vite frontend with React Router
+- **gui**: ScalaFX graphical user interface (desktop-only, requires X11 forwarding)
+- **tui**: Terminal user interface (desktop-only)
+
+### Microservices
+- **player-service**: Standalone Akka HTTP-based player management service
+- **bot-service**: Lichess Bot API integration service
+- **tournament-service**: Tournament management and bot evaluation arena service
+- **tournament-client**: Client for external NowChess Tournament Server
+
+### Analytics
+- **spark**: Apache Spark 3.5.1 analytics for game data analysis (uses Scala 2.13 artifacts for compatibility)
+- **benchmark**: JMH microbenchmarks for performance testing
+
+### Legacy
+- **persistent**: Deprecated module being replaced by infrastructure-persistence
+
+### Technology Stack
+- **Backend**: Scala 3.3.3, Akka HTTP, Http4s
+- **Frontend**: React 19, TypeScript, Vite, React Router
+- **Databases**: PostgreSQL 15, MongoDB 7, Redis 7
+- **Message Broker**: Apache Kafka 7.5.0 with Confluent Platform
+- **Authentication**: Keycloak 24.0
+- **Analytics**: Apache Spark 3.5.1
+- **Containerization**: Docker, Docker Compose
+- **Orchestration**: Kubernetes with k3d (local) and k3s (production)
+- **Testing**: Gatling, k6, JMH, ScalaTest

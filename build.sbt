@@ -13,7 +13,12 @@ val platform =
 
 // --- Common settings ---
 lazy val commonSettings = Seq(
-  libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.19" % Test
+  libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.19" % Test,
+  sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyMergeStrategy := {
+    case PathList("META-INF", xs @ _*) => MergeStrategy.discard
+    case "module-info.class" => MergeStrategy.discard
+    case x => MergeStrategy.first
+  }
 )
 
 // --- Modules ---
@@ -257,7 +262,9 @@ lazy val restApi = project
         .exclude("com.typesafe.akka", "akka-protobuf-v3_2.13")
         .exclude("com.typesafe", "ssl-config-core_2.13"),
       // Scala 3 compatible scala-java8-compat
-      "org.scala-lang.modules" % "scala-java8-compat_3" % "1.0.2"
+      "org.scala-lang.modules" % "scala-java8-compat_3" % "1.0.2",
+      // HTTP client for auth service
+      "org.apache.httpcomponents" % "httpclient" % "4.5.14"
     ),
     sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyJarName := "chess-rest-api.jar",
     sbtassembly.AssemblyPlugin.autoImport.assembly / mainClass := Some("api.ChessRestServer"),
@@ -268,6 +275,44 @@ lazy val restApi = project
     }
   )
   .dependsOn(core, application, domainPersistence, infrastructurePersistence, shared)
+
+// --- Infrastructure Layer: Auth Service (Keycloak authentication microservice) ---
+// DEPENDENCY RULE: Auth service is a standalone microservice
+// Contains: Akka HTTP-based authentication service with Keycloak integration
+lazy val authService = (project in file("auth-service"))
+  .settings(
+    commonSettings,
+    fork := true,
+    libraryDependencies ++= Seq(
+      ("com.typesafe.akka" % "akka-actor-typed_3" % "2.8.5")
+        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
+      ("com.typesafe.akka" % "akka-http_3" % "10.5.3")
+        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
+      ("com.typesafe.akka" % "akka-stream_3" % "2.8.5")
+        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
+      ("com.typesafe.akka" % "akka-http-testkit_3" % "10.5.3" % Test)
+        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
+      "com.lihaoyi" %% "upickle" % "3.1.0",
+      "org.scala-lang.modules" % "scala-java8-compat_3" % "1.0.2",
+      // Keycloak Admin Client
+      "org.keycloak" % "keycloak-admin-client" % "24.0.0",
+      // JWT validation
+      "com.auth0" % "java-jwt" % "4.4.0",
+      // HTTP client for Keycloak REST API
+      "org.apache.httpcomponents" % "httpclient" % "4.5.14",
+      // Logging
+      "ch.qos.logback" % "logback-classic" % "1.4.14",
+      "org.slf4j" % "slf4j-api" % "2.0.9"
+    ),
+    sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyJarName := "chess-auth-service.jar",
+    sbtassembly.AssemblyPlugin.autoImport.assembly / mainClass := Some("auth.AuthServiceMain"),
+    sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyMergeStrategy := {
+      case PathList("META-INF", "MANIFEST.MF") => MergeStrategy.discard
+      case PathList("META-INF", xs @ _*) => MergeStrategy.discard
+      case "reference.conf" => MergeStrategy.concat
+      case _ => MergeStrategy.first
+    }
+  )
 
 // --- Infrastructure Layer: Player Service (standalone microservice) ---
 // DEPENDENCY RULE: Player service is a standalone microservice
@@ -426,6 +471,7 @@ lazy val root = project
     persistent,
     restApi,
     spark,
+    authService,
     playerService,
     botService,
     tournamentService,

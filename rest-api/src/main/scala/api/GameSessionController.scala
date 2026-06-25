@@ -18,7 +18,8 @@ class GameSessionController(
                              controller: GameControllerInterface,
                              repo: GameRepository,
                              kafkaService: Option[KafkaGameEventService] = None,
-                             playerServiceClient: Option[PlayerServiceClient] = None
+                             playerServiceClient: Option[PlayerServiceClient] = None,
+                             authClient: Option[auth.AuthClient] = None
                            )(implicit ec: ExecutionContext) {
 
   // Initialize UCI bot service for Stockfish integration
@@ -154,7 +155,11 @@ class GameSessionController(
 
   /** Get available bot types with metadata */
   def getAvailableBotInfos(): List[model.BotInfo] = {
-    model.BotFactory.availableBotInfo
+    model.BotFactory.availableBotInfo ++ List(
+      model.BotInfo("stockfish", "Stockfish (Expert)", "Expert", "Stockfish chess engine at maximum strength (depth 15). World-class play."),
+      model.BotInfo("stockfish-easy", "Stockfish (Easy)", "Medium", "Stockfish chess engine at reduced strength (depth 10). Good for intermediate players."),
+      model.BotInfo("stockfish-medium", "Stockfish (Medium)", "Hard", "Stockfish chess engine at medium strength (depth 12). Challenging for advanced players.")
+    )
   }
 
   /** Pause a game */

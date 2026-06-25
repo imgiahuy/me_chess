@@ -4,7 +4,7 @@ services:
     image: quay.io/keycloak/keycloak:24.0
     container_name: chess-keycloak
     ports:
-      - "8081:8080"
+      - "127.0.0.1:8081:8080"
     networks:
       - chess-network
     deploy:
@@ -36,7 +36,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 90s
+      start_period: 180s
     volumes:
       - ./docker/keycloak-realm.json:/opt/keycloak/data/import/keycloak-realm.json
 
@@ -45,7 +45,7 @@ services:
     image: postgres:15
     container_name: chess-postgres
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     networks:
       - chess-network
     deploy:
@@ -75,7 +75,7 @@ services:
     image: mongo:7
     container_name: chess-mongodb
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"
     networks:
       - chess-network
     deploy:
@@ -124,7 +124,7 @@ services:
     image: confluentinc/cp-kafka:7.5.0
     container_name: chess-kafka
     ports:
-      - "9092:9092"
+      - "127.0.0.1:9092:9092"
     networks:
       - chess-network
     deploy:
@@ -158,7 +158,7 @@ services:
     image: redis:7-alpine
     container_name: chess-redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     networks:
       - chess-network
     deploy:
@@ -182,7 +182,7 @@ services:
       dockerfile: rest-api/Dockerfile
     container_name: chess-rest-api
     ports:
-      - "8085:8080"
+      - "127.0.0.1:8085:8080"
     networks:
       - chess-network
     deploy:
@@ -214,6 +214,7 @@ services:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - SPARK_OUTPUT_PATH=/tmp/chess-analytics
       - PLAYER_SERVICE_URL=http://player-service:8090
+      - AUTH_SERVICE_URL=http://auth-service:8088
     volumes:
       - spark-results:/tmp/chess-analytics:ro
     healthcheck:
@@ -223,6 +224,46 @@ services:
       retries: 3
       start_period: 40s
 
+  # Auth Microservice (Keycloak integration)
+  auth-service:
+    build:
+      context: .
+      dockerfile: auth-service/Dockerfile
+    container_name: chess-auth-service
+    ports:
+      - "127.0.0.1:8088:8088"
+    networks:
+      - chess-network
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: '0.5'
+        reservations:
+          memory: 256m
+          cpus: '0.25'
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      player-service:
+        condition: service_healthy
+    environment:
+      - JAVA_OPTS=-Xmx256m
+      - KEYCLOAK_URL=http://keycloak:8080
+      - KEYCLOAK_REALM=chess
+      - KEYCLOAK_CLIENT_ID=chess-api
+      - KEYCLOAK_CLIENT_SECRET=chess-api-secret
+      - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
+      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      - PLAYER_SERVICE_URL=http://player-service:8090
+      - AUTH_SERVICE_PORT=8088
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8088/v1/auth/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
   # Player Microservice
   player-service:
     build:
@@ -230,7 +271,7 @@ services:
       dockerfile: player-service/Dockerfile
     container_name: chess-player-service
     ports:
-      - "8090:8090"
+      - "127.0.0.1:8090:8090"
     networks:
       - chess-network
     deploy:
@@ -293,7 +334,7 @@ services:
       dockerfile: tournament-service/Dockerfile
     container_name: chess-tournament-service
     ports:
-      - "8070:8070"
+      - "127.0.0.1:8070:8070"
     networks:
       - chess-network
     deploy:
@@ -329,7 +370,7 @@ services:
       dockerfile: Dockerfile
     container_name: chess-web-frontend
     ports:
-      - "3005:3000"
+      - "127.0.0.1:3005:3000"
     networks:
       - chess-network
     deploy:
@@ -346,6 +387,8 @@ services:
       player-service:
         condition: service_healthy
       tournament-service:
+        condition: service_healthy
+      auth-service:
         condition: service_healthy
     environment:
       - REACT_APP_API_URL=http://rest-api:8080
