@@ -1,7 +1,6 @@
 package auth
 
 import akka.actor.typed.ActorSystem
-import akka.actor.typed.scaladsl.Behaviors
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.Route
 import scala.concurrent.ExecutionContextExecutor
@@ -9,6 +8,7 @@ import scala.util.{Success, Failure}
 import ch.qos.logback.classic.Logger
 import org.slf4j.LoggerFactory
 import scala.concurrent.duration._
+import shared.service.ServiceBootstrap
 
 object AuthServiceMain {
   def main(args: Array[String]): Unit = {
@@ -30,7 +30,7 @@ object AuthServiceMain {
     logger.info(s"Player Service URL: $playerServiceUrl")
     
     // Create ActorSystem
-    implicit val system: ActorSystem[?] = ActorSystem(Behaviors.empty, "auth-service")
+    implicit val system: ActorSystem[?] = ServiceBootstrap.createActorSystem("auth-service")
     implicit val ec: ExecutionContextExecutor = system.executionContext
     
     // Create clients

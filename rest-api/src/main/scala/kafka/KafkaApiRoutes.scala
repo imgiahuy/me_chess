@@ -8,6 +8,7 @@ import akka.http.scaladsl.marshalling.sse.EventStreamMarshalling
 import akka.stream.scaladsl.Source
 import upickle.default.{ReadWriter, macroRW}
 import KafkaApiCodecs.given
+import shared.http.HttpHelpers
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import java.time.Instant
@@ -27,15 +28,7 @@ class KafkaApiRoutes(
 
   private implicit val ec: ExecutionContext = system.executionContext
 
-  private def jsonResponse[T: upickle.default.Writer](obj: T): HttpEntity.Strict =
-    HttpEntity(ContentTypes.`application/json`, upickle.default.write(obj))
-
-  private def parseJson[T: upickle.default.Reader](body: String): Either[String, T] =
-    try {
-      Right(upickle.default.read[T](body))
-    } catch {
-      case e: Exception => Left(s"Invalid JSON: ${e.getMessage}")
-    }
+  import HttpHelpers.{jsonResponse, parseJson}
 
   /** All Kafka API routes. */
   val routes: Route = pathPrefix("v1" / "kafka") {

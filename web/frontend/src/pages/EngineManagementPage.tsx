@@ -36,7 +36,7 @@ export function EngineManagementPage() {
         setLoading(true);
         setError(null);
         try {
-            const response = await fetch("http://localhost:8085/v1/chess/engines");
+            const response = await fetch("/v1/chess/engines");
             if (!response.ok) throw new Error("Failed to load engines");
             const data = await response.json();
             setEngines(data.engines);
@@ -55,7 +55,7 @@ export function EngineManagementPage() {
 
     const handleStartEngine = async (engineName: string) => {
         try {
-            const response = await fetch(`http://localhost:8085/v1/chess/engines/${engineName}/start`, {
+            const response = await fetch(`/v1/chess/engines/${engineName}/start`, {
                 method: "POST"
             });
             if (!response.ok) throw new Error("Failed to start engine");
@@ -75,7 +75,7 @@ export function EngineManagementPage() {
 
     const handleStopEngine = async (engineName: string) => {
         try {
-            const response = await fetch(`http://localhost:8085/v1/chess/engines/${engineName}/stop`, {
+            const response = await fetch(`/v1/chess/engines/${engineName}/stop`, {
                 method: "POST"
             });
             if (!response.ok) throw new Error("Failed to stop engine");
@@ -290,7 +290,7 @@ export function EngineManagementPage() {
                                         const pathInput = document.querySelector('input[placeholder="C:\\\\path\\\\to\\\\engine.exe"]') as HTMLInputElement;
                                         if (nameInput && pathInput && nameInput.value && pathInput.value) {
                                             try {
-                                                const response = await fetch(`http://localhost:8085/v1/chess/engines/${nameInput.value}/register`, {
+                                                const response = await fetch(`/v1/chess/engines/${nameInput.value}/register`, {
                                                     method: "POST",
                                                     headers: { "Content-Type": "application/json" },
                                                     body: JSON.stringify({

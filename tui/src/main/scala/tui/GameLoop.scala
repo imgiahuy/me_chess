@@ -2,7 +2,7 @@ package tui
 
 import model.{PositionState, Color, White, Black, Ongoing, TimeOut}
 import controller.GameControllerInterface
-import service.{GameService, BotService}
+import service.{GameService, ChessBotService}
 
 /** The interactive game loop with enhanced features.
  *
@@ -176,8 +176,8 @@ case class GameLoop(gameController: GameControllerInterface) {
 
       case BotMove(botType) =>
         try {
-          val bot = BotService.createBot(botType)
-          BotService.playBotMove(bot, state) match {
+          val bot = ChessBotService.createBot(botType)
+          ChessBotService.playBotMove(bot, state) match {
             case Right(newState) =>
               val message = if GameService.isCheckmate(newState) then
                 s"Bot ($botType) moved - CHECKMATE! ${newState.turn.opposite} wins!"

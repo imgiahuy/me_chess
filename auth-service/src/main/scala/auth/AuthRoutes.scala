@@ -2,27 +2,20 @@ package auth
 
 import akka.actor.typed.ActorSystem
 import akka.actor.typed.scaladsl.Behaviors
-import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import scala.concurrent.ExecutionContextExecutor
 import scala.util.{Success, Failure}
 import upickle.default._
+import shared.http.HttpHelpers
 
 /** Auth routes for authentication service */
 class AuthRoutes(keycloakClient: KeycloakClient, playerServiceClient: PlayerServiceClient)(implicit system: ActorSystem[?]) {
   
   private implicit val ec: ExecutionContextExecutor = system.executionContext
   
-  private def jsonResponse[T: upickle.default.Writer](obj: T): HttpEntity.Strict =
-    HttpEntity(ContentTypes.`application/json`, upickle.default.write(obj))
-  
-  private def parseJson[T: upickle.default.Reader](body: String): Either[String, T] =
-    try {
-      Right(upickle.default.read[T](body))
-    } catch {
-      case e: Exception => Left(s"Invalid JSON request body: ${e.getMessage}")
-    }
+  import HttpHelpers.{jsonResponse, parseJson}
   
   val routes: Route =
     pathPrefix("v1" / "auth") {

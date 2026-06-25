@@ -12,12 +12,11 @@
             <option value="C:\sem7\SA\me_chess\application" />
             <option value="C:\sem7\SA\me_chess\auth-service" />
             <option value="C:\sem7\SA\me_chess\benchmark" />
-            <option value="C:\sem7\SA\me_chess\bot-service" />
             <option value="C:\sem7\SA\me_chess\core" />
             <option value="C:\sem7\SA\me_chess\domain-persistence" />
             <option value="C:\sem7\SA\me_chess\gui" />
             <option value="C:\sem7\SA\me_chess\infrastructure-persistence" />
-            <option value="C:\sem7\SA\me_chess\persistent" />
+            <option value="C:\sem7\SA\me_chess\lichess-integration-service" />
             <option value="C:\sem7\SA\me_chess\player-service" />
             <option value="C:\sem7\SA\me_chess\project" />
             <option value="C:\sem7\SA\me_chess\rest-api" />

@@ -2,7 +2,7 @@ package tournament.api
 
 import akka.actor.typed.ActorSystem
 import akka.actor.typed.scaladsl.Behaviors
-import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import tournament.engine.TournamentManager
@@ -10,6 +10,7 @@ import tournament.kafka.TournamentKafkaService
 import tournament.model._
 import tournament.persistence.TournamentRepository
 import tournament.auth.JwtService
+import shared.http.HttpHelpers
 
 import java.time.Instant
 import java.util.UUID
@@ -21,13 +22,7 @@ class TournamentRoutes(repo: TournamentRepository, kafka: TournamentKafkaService
 
   import upickle.default.{ReadWriter, macroRW, read, write, given}
   import JsonFormats.{*, given}
-
-  private def jsonResponse[T: ReadWriter](obj: T): HttpEntity.Strict =
-    HttpEntity(ContentTypes.`application/json`, write(obj))
-
-  private def parseJson[T: ReadWriter](body: String): Either[String, T] =
-    try Right(read[T](body))
-    catch case e: Exception => Left(s"Invalid JSON request body: ${e.getMessage}")
+  import HttpHelpers.{jsonResponse, parseJson}
 
   private val manager = new TournamentManager()
 

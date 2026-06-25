@@ -80,7 +80,20 @@ lazy val infrastructurePersistence = project
 
 lazy val shared = project
   .in(file("shared"))
-  .settings(commonSettings)
+  .settings(
+    commonSettings,
+    libraryDependencies ++= Seq(
+      ("com.typesafe.akka" % "akka-actor-typed_3" % "2.8.5")
+        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
+      ("com.typesafe.akka" % "akka-http_3" % "10.5.3")
+        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
+      ("com.typesafe.akka" % "akka-stream_3" % "2.8.5")
+        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
+      "com.lihaoyi" %% "upickle" % "3.1.0",
+      "org.scala-lang.modules" % "scala-java8-compat_3" % "1.0.2",
+      "org.mongodb" % "mongodb-driver-sync" % "4.11.0"
+    )
+  )
 
 // --- Presentation Layer: TUI ---
 // DEPENDENCY RULE: TUI depends on core (domain), application (use cases), and shared
@@ -118,35 +131,6 @@ lazy val gui = project
       case PathList("META-INF", xs @ _*) => MergeStrategy.discard
       case x => MergeStrategy.first
     }
-  )
-  .dependsOn(core, application, shared)
-
-// --- Legacy Persistent Module (deprecated, use infrastructure-persistence) ---
-// DEPENDENCY RULE: Legacy module - being replaced by infrastructure-persistence
-// TODO: Migrate all code to infrastructure-persistence and remove this module
-lazy val persistent = project
-  .in(file("persistent"))
-  .settings(
-    commonSettings,
-    libraryDependencies ++= Seq(
-      "com.typesafe.slick" %% "slick" % "3.5.1",
-      "com.typesafe.slick" %% "slick-hikaricp" % "3.5.1",
-      "com.h2database" % "h2" % "2.2.224",
-      "org.postgresql" % "postgresql" % "42.7.4",
-      "org.mongodb" % "mongodb-driver-sync" % "4.11.0",
-      "ch.qos.logback" % "logback-classic" % "1.4.14",
-      "com.lihaoyi" %% "upickle" % "3.1.0",
-      // Flyway for database migrations
-      "org.flywaydb" % "flyway-core" % "9.22.3",
-      // Redis client for caching
-      "redis.clients" % "jedis" % "5.0.0",
-      // Testcontainers for integration testing
-      "org.testcontainers" % "testcontainers" % "1.19.8" % Test,
-      "org.testcontainers" % "postgresql" % "1.19.8" % Test,
-      "org.testcontainers" % "mongodb" % "1.19.8" % Test,
-      "org.testcontainers" % "junit-jupiter" % "1.19.8" % Test,
-      "org.slf4j" % "slf4j-simple" % "2.0.9" % Test
-    )
   )
   .dependsOn(core, application, shared)
 
@@ -284,16 +268,6 @@ lazy val authService = (project in file("auth-service"))
     commonSettings,
     fork := true,
     libraryDependencies ++= Seq(
-      ("com.typesafe.akka" % "akka-actor-typed_3" % "2.8.5")
-        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
-      ("com.typesafe.akka" % "akka-http_3" % "10.5.3")
-        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
-      ("com.typesafe.akka" % "akka-stream_3" % "2.8.5")
-        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
-      ("com.typesafe.akka" % "akka-http-testkit_3" % "10.5.3" % Test)
-        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
-      "com.lihaoyi" %% "upickle" % "3.1.0",
-      "org.scala-lang.modules" % "scala-java8-compat_3" % "1.0.2",
       // Keycloak Admin Client
       "org.keycloak" % "keycloak-admin-client" % "24.0.0",
       // JWT validation
@@ -313,6 +287,7 @@ lazy val authService = (project in file("auth-service"))
       case _ => MergeStrategy.first
     }
   )
+  .dependsOn(shared)
 
 // --- Infrastructure Layer: Player Service (standalone microservice) ---
 // DEPENDENCY RULE: Player service is a standalone microservice
@@ -323,14 +298,6 @@ lazy val playerService = project
     commonSettings,
     fork := true,
     libraryDependencies ++= Seq(
-      ("com.typesafe.akka" % "akka-actor-typed_3" % "2.8.5")
-        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
-      ("com.typesafe.akka" % "akka-http_3" % "10.5.3")
-        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
-      ("com.typesafe.akka" % "akka-stream_3" % "2.8.5")
-        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
-      "com.lihaoyi" %% "upickle" % "3.1.0",
-      "org.scala-lang.modules" % "scala-java8-compat_3" % "1.0.2",
       "org.mongodb" % "mongodb-driver-sync" % "4.11.0"
     ),
     sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyJarName := "chess-player-service.jar",
@@ -342,28 +309,21 @@ lazy val playerService = project
       case _ => MergeStrategy.first
     }
   )
+  .dependsOn(shared)
 
-// --- Infrastructure Layer: Bot Service (Lichess Bot API integration) ---
-// DEPENDENCY RULE: Bot service depends on core (domain), application (use cases), and shared
-// Contains: Akka HTTP-based bot service for Lichess integration
-lazy val botService = project
-  .in(file("bot-service"))
+// --- Infrastructure Layer: Lichess Integration Service (Lichess Bot API integration) ---
+// DEPENDENCY RULE: Lichess integration service depends on core (domain), application (use cases), and shared
+// Contains: Akka HTTP-based service for Lichess integration
+lazy val lichessIntegrationService = project
+  .in(file("lichess-integration-service"))
   .settings(
     commonSettings,
     fork := true,
     libraryDependencies ++= Seq(
-      ("com.typesafe.akka" % "akka-actor-typed_3" % "2.8.5")
-        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
-      ("com.typesafe.akka" % "akka-http_3" % "10.5.3")
-        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
-      ("com.typesafe.akka" % "akka-stream_3" % "2.8.5")
-        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
       ("com.typesafe.akka" % "akka-http-testkit_3" % "10.5.3" % Test)
-        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
-      "com.lihaoyi" %% "upickle" % "3.1.0",
-      "org.scala-lang.modules" % "scala-java8-compat_3" % "1.0.2"
+        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13")
     ),
-    sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyJarName := "chess-bot-service.jar",
+    sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyJarName := "chess-lichess-integration-service.jar",
     sbtassembly.AssemblyPlugin.autoImport.assembly / mainClass := Some("lichess.LichessBotMain"),
     sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyMergeStrategy := {
       case PathList("META-INF", "MANIFEST.MF") => MergeStrategy.discard
@@ -383,14 +343,6 @@ lazy val tournamentService = project
     commonSettings,
     fork := true,
     libraryDependencies ++= Seq(
-      ("com.typesafe.akka" % "akka-actor-typed_3" % "2.8.5")
-        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
-      ("com.typesafe.akka" % "akka-http_3" % "10.5.3")
-        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
-      ("com.typesafe.akka" % "akka-stream_3" % "2.8.5")
-        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
-      ("com.typesafe.akka" % "akka-http-testkit_3" % "10.5.3" % Test)
-        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
       ("com.typesafe.akka" % "akka-stream-kafka_2.13" % "4.0.2")
         .exclude("org.scala-lang.modules", "scala-java8-compat_2.13")
         .exclude("com.typesafe.akka", "akka-actor_2.13")
@@ -398,8 +350,6 @@ lazy val tournamentService = project
         .exclude("com.typesafe.akka", "akka-protobuf-v3_2.13")
         .exclude("com.typesafe", "ssl-config-core_2.13"),
       "org.apache.kafka" % "kafka-clients" % "3.5.1",
-      "com.lihaoyi" %% "upickle" % "3.1.0",
-      "org.scala-lang.modules" % "scala-java8-compat_3" % "1.0.2",
       "org.mongodb" % "mongodb-driver-sync" % "4.11.0"
     ),
     sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyJarName := "chess-tournament-service.jar",
@@ -421,16 +371,6 @@ lazy val tournamentClient = project
   .settings(
     commonSettings,
     fork := true,
-    libraryDependencies ++= Seq(
-      ("com.typesafe.akka" % "akka-actor-typed_3" % "2.8.5")
-        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
-      ("com.typesafe.akka" % "akka-http_3" % "10.5.3")
-        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
-      ("com.typesafe.akka" % "akka-stream_3" % "2.8.5")
-        .exclude("org.scala-lang.modules", "scala-java8-compat_2.13"),
-      "com.lihaoyi" %% "upickle" % "3.1.0",
-      "org.scala-lang.modules" % "scala-java8-compat_3" % "1.0.2"
-    ),
     sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyJarName := "chess-tournament-client.jar",
     sbtassembly.AssemblyPlugin.autoImport.assembly / mainClass := Some("tournament.client.TournamentClientMain"),
     sbtassembly.AssemblyPlugin.autoImport.assembly / assemblyMergeStrategy := {
@@ -468,12 +408,11 @@ lazy val root = project
     shared,
     tui,
     gui,
-    persistent,
     restApi,
     spark,
     authService,
     playerService,
-    botService,
+    lichessIntegrationService,
     tournamentService,
     tournamentClient,
     benchmark

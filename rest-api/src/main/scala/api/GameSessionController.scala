@@ -4,7 +4,7 @@ import usecase.{CreateGameUseCase, MakeMoveUseCase, GetGameUseCase}
 import controller.GameControllerInterface
 import model.{PositionState, Color}
 import repository.GameRepository
-import service.{GameService, BotService}
+import service.{GameService, ChessBotService}
 import kafka.{KafkaGameEventService, GameEvent}
 import engine.{UciBotService, EngineManager}
 import scala.concurrent.{ExecutionContext, Future}
@@ -122,8 +122,8 @@ class GameSessionController(
       state <- repo.getGame(gameId).toRight("Game not found")
       newState <- {
         // Use BotService for all bot types (including Stockfish)
-        val bot = BotService.createBot(botType)
-        BotService.playBotMove(bot, state)
+        val bot = ChessBotService.createBot(botType)
+        ChessBotService.playBotMove(bot, state)
       }
     } yield {
       repo.updateGame(gameId, newState)
@@ -150,7 +150,7 @@ class GameSessionController(
 
   /** Get available bot types */
   def getAvailableBots(): List[String] = {
-    BotService.availableBots
+    ChessBotService.availableBots
   }
 
   /** Get available bot types with metadata */

@@ -75,7 +75,7 @@ The `tournament-service` manages chess tournaments and bot evaluation arenas. It
 
 ### Lichess Bot Service
 
-The `bot-service` connects to Lichess via the Bot API and plays games using the internal chess engine. It is optional and requires a Lichess **BOT account** token.
+The `lichess-integration-service` connects to Lichess via the Bot API and plays games using the internal chess engine. It is optional and requires a Lichess **BOT account** token.
 
 **Create a Lichess BOT account:**
 1. Register a dedicated account at https://lichess.org.
@@ -89,7 +89,7 @@ export LICHESS_API_TOKEN="your_lichess_bot_token"
 # Optional: choose a different bot engine
 export BOT_TYPE="greedy"  # or random / capture
 
-docker-compose up -d bot-service
+docker-compose up -d lichess-integration-service
 ```
 
 **Kubernetes:**
@@ -97,7 +97,7 @@ docker-compose up -d bot-service
 ```bash
 # Update the secret value
 kubectl patch secret lichess-secret -n chess --type=string -p='{"stringData":{"LICHESS_API_TOKEN":"your_lichess_bot_token"}}'
-kubectl rollout restart deployment/bot-service -n chess
+kubectl rollout restart deployment/lichess-integration-service -n chess
 ```
 
 **Configuration options (env vars):**
@@ -117,10 +117,10 @@ kubectl rollout restart deployment/bot-service -n chess
 
 ```bash
 # Docker Compose
-docker-compose logs -f bot-service
+docker-compose logs -f lichess-integration-service
 
 # Kubernetes
-kubectl logs -n chess -f deployment/bot-service
+kubectl logs -n chess -f deployment/lichess-integration-service
 ```
 
 ### Keycloak Configuration
@@ -328,7 +328,7 @@ k8s/
     - kafka-deployment.yaml
     - kafka-ui-deployment.yaml
     - player-service-deployment.yaml
-    - bot-service-deployment.yaml
+    - lichess-integration-service-deployment.yaml
     - tournament-service-deployment.yaml
     - rest-api-deployment.yaml
     - rest-api-hpa.yaml
@@ -384,7 +384,7 @@ This automatically stops the Docker Compose stack before creating the kind clust
 docker build -t chess-rest-api:latest -f rest-api/Dockerfile .
 docker build -t chess-web-frontend:latest -f web/frontend/Dockerfile web/frontend
 docker build -t chess-player-service:latest -f player-service/Dockerfile .
-docker build -t chess-bot-service:latest -f bot-service/Dockerfile .
+docker build -t chess-lichess-integration-service:latest -f lichess-integration-service/Dockerfile .
 docker build -t chess-tournament-service:latest -f tournament-service/Dockerfile .
 # Spark: multi-stage build, no pre-steps needed
 docker build -t chess-spark:latest -f spark/Dockerfile .
@@ -413,13 +413,13 @@ docker run --rm --network chess-network chess-spark:latest kafka kafka:29092 /tm
 docker tag chess-rest-api:latest 141.37.123.124:5000/chess-rest-api:latest
 docker tag chess-web-frontend:latest 141.37.123.124:5000/chess-web-frontend:latest
 docker tag chess-player-service:latest 141.37.123.124:5000/chess-player-service:latest
-docker tag chess-bot-service:latest 141.37.123.124:5000/chess-bot-service:latest
+docker tag chess-lichess-integration-service:latest 141.37.123.124:5000/chess-lichess-integration-service:latest
 docker tag chess-tournament-service:latest 141.37.123.124:5000/chess-tournament-service:latest
 docker tag chess-spark:latest 141.37.123.124:5000/chess-spark:latest
 docker push 141.37.123.124:5000/chess-rest-api:latest
 docker push 141.37.123.124:5000/chess-web-frontend:latest
 docker push 141.37.123.124:5000/chess-player-service:latest
-docker push 141.37.123.124:5000/chess-bot-service:latest
+docker push 141.37.123.124:5000/chess-lichess-integration-service:latest
 docker push 141.37.123.124:5000/chess-tournament-service:latest
 docker push 141.37.123.124:5000/chess-spark:latest
 ```
@@ -672,7 +672,7 @@ The chess application follows a modular architecture with clear separation of co
 
 ### Microservices
 - **player-service**: Standalone Akka HTTP-based player management service
-- **bot-service**: Lichess Bot API integration service
+- **lichess-integration-service**: Lichess Bot API integration service
 - **tournament-service**: Tournament management and bot evaluation arena service
 - **tournament-client**: Client for external NowChess Tournament Server
 

@@ -1,11 +1,12 @@
 package player
 
 import akka.actor.typed.ActorSystem
-import akka.http.scaladsl.model.{ContentTypes, HttpEntity, HttpHeader, StatusCodes, headers}
+import akka.http.scaladsl.model.{HttpHeader, StatusCodes, headers}
 import akka.http.scaladsl.server.Directives.*
 import akka.http.scaladsl.server.Route
-import upickle.default.{ReadWriter, macroRW, write, read}
+import upickle.default.{ReadWriter, macroRW}
 import java.time.Instant
+import shared.http.HttpHelpers
 
 /** REST API routes for the Player microservice.
  *
@@ -22,13 +23,7 @@ import java.time.Instant
 class PlayerRoutes(repo: PlayerRepository)(implicit system: ActorSystem[?]) {
 
   import PlayerJsonCodecs.given
-
-  private def jsonResponse[T: upickle.default.Writer](obj: T): HttpEntity.Strict =
-    HttpEntity(ContentTypes.`application/json`, write(obj))
-
-  private def parseJson[T: upickle.default.Reader](body: String): Either[String, T] =
-    try Right(read[T](body))
-    catch { case e: Exception => Left(s"Invalid JSON: ${e.getMessage}") }
+  import HttpHelpers.{jsonResponse, parseJson}
 
   private def corsHeaders: List[HttpHeader] = List(
     headers.`Access-Control-Allow-Origin`.*,

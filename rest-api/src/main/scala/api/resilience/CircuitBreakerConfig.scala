@@ -52,8 +52,8 @@ class CircuitBreakerManager(config: CircuitBreakerConfig)(implicit system: Actor
           // Circuit is open, use fallback immediately
           fallback
         case _: Exception =>
-          // Call failed but circuit is not open yet, will be counted
-          Future.failed(new Exception("Call failed"))
+          // Call failed but circuit is not open yet, use fallback after retries
+          fallback
       }
     )
   }

@@ -1,11 +1,11 @@
 package player
 
 import akka.actor.typed.ActorSystem
-import akka.actor.typed.scaladsl.Behaviors
 import akka.http.scaladsl.Http
 
 import scala.concurrent.ExecutionContextExecutor
 import scala.util.{Failure, Success}
+import shared.service.ServiceBootstrap
 
 /** Entry point for the Player microservice.
  *
@@ -17,35 +17,22 @@ object PlayerServiceMain {
   def main(args: Array[String]): Unit = run()
 
   def run(host: String = "0.0.0.0", port: Int = 8090): Unit = {
-    implicit val system: ActorSystem[Unit] = ActorSystem(Behaviors.empty[Unit], "player-service")
+    implicit val system: ActorSystem[Unit] = ServiceBootstrap.createActorSystem("player-service")
     implicit val ec: ExecutionContextExecutor = system.executionContext
 
     println("[INFO] Starting Player microservice...")
 
-    val mongoEnabled = sys.env.contains("MONGODB_HOST")
-    val repo: PlayerRepository = if (mongoEnabled) {
+    val repo: PlayerRepository = if (ServiceBootstrap.isMongoDBEnabled) {
       println("[INFO] MongoDB persistence enabled")
-      val maxRetries = 5
-      var attempt = 0
-      var connected: Option[MongoPlayerRepository] = None
-      while (attempt < maxRetries && connected.isEmpty) {
-        attempt += 1
-        try {
-          val mongoRepo = MongoPlayerRepository.fromEnv()
+      ServiceBootstrap.connectToMongoDBWithRetry() match {
+        case Success(mongoClient) =>
+          val databaseName = sys.env.getOrElse("MONGODB_DATABASE", "chess")
+          val mongoRepo = new MongoPlayerRepository(mongoClient, databaseName)
           println(s"[INFO] Connected to MongoDB at ${sys.env.getOrElse("MONGODB_HOST", "localhost")}:${sys.env.getOrElse("MONGODB_PORT", "27017")}")
-          connected = Some(mongoRepo)
-        } catch {
-          case e: Exception =>
-            println(s"[WARN] MongoDB connection attempt $attempt/$maxRetries failed: ${e.getMessage}")
-            if (attempt < maxRetries) {
-              println(s"[INFO] Retrying in ${attempt * 2} seconds...")
-              Thread.sleep(attempt * 2000L)
-            }
-        }
-      }
-      connected.getOrElse {
-        println("[ERROR] All MongoDB connection attempts failed — PLAYER DATA WILL NOT PERSIST!")
-        new PlayerRepository()
+          mongoRepo
+        case Failure(e) =>
+          println(s"[ERROR] All MongoDB connection attempts failed — PLAYER DATA WILL NOT PERSIST! ${e.getMessage}")
+          new PlayerRepository()
       }
     } else {
       println("[INFO] Using in-memory storage (set MONGODB_HOST to enable persistence)")

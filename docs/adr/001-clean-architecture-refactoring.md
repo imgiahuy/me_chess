@@ -80,7 +80,7 @@ The refactoring will be executed incrementally:
    - Moved `service/` and `controller/` from `core` to `application`
    - Moved `engine/`, `formatter/`, and `parser/` to `application` (they depend on services)
    - Updated all imports across the codebase
-   - Updated module dependencies for tui, gui, rest-api, persistent, bot-service, tournament-service
+   - Updated module dependencies for tui, gui, rest-api, persistent, lichess-integration-service, tournament-service
 
 4. ✅ **Phase 4 (Completed)**: Add use case layer
    - Created `usecase/` package in application module

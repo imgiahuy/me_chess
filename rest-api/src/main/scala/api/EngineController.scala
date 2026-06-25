@@ -42,20 +42,37 @@ class EngineController {
   
   /** Start an engine instance */
   def startEngine(name: String): Either[String, EngineStatusResponse] = {
-    engineManager.startEngine(name) match {
-      case Success(engine) =>
-        val info = engine.getEngineInfo
-        engine.shutdown()
-        Right(EngineStatusResponse(
-          name = name,
-          isRunning = true,
-          info = Some(JsonCodecs.EngineInfoDetails(
-            name = info.getOrElse("name", "Unknown"),
-            author = info.getOrElse("author", "Unknown")
+    Try {
+      // If already running, return success without interrupting a possible active search
+      engineManager.getEngine(name) match {
+        case Some(_) =>
+          Right(EngineStatusResponse(
+            name = name,
+            isRunning = true,
+            info = Some(JsonCodecs.EngineInfoDetails(
+              name = "Stockfish",
+              author = "T. Romstad, M. Costalba, J. Kiiski, G. Linscott"
+            ))
           ))
-        ))
-      case Failure(e) =>
-        Left(s"Failed to start engine: ${e.getMessage}")
+        case None =>
+          engineManager.startEngine(name) match {
+            case Success(engine) =>
+              val info = engine.getEngineInfo
+              Right(EngineStatusResponse(
+                name = name,
+                isRunning = true,
+                info = Some(JsonCodecs.EngineInfoDetails(
+                  name = info.getOrElse("name", "Unknown"),
+                  author = info.getOrElse("author", "Unknown")
+                ))
+              ))
+            case Failure(e) =>
+              Left(s"Failed to start engine: ${e.getMessage}")
+          }
+      }
+    }.toEither match {
+      case Right(result) => result
+      case Left(e) => Left(s"Failed to start engine: ${e.getMessage}")
     }
   }
   

@@ -1,7 +1,6 @@
 package api
 
 import akka.actor.typed.ActorSystem
-import akka.actor.typed.scaladsl.Behaviors
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.{Directives, Route}
 import akka.http.scaladsl.server.RouteConcatenation._
@@ -13,6 +12,7 @@ import redis.{RedisClientFactory, RedisConfig}
 import repository.DatabaseGameRepository
 import kafka.{KafkaGameEventService, KafkaApiRoutes}
 import auth.AuthClient
+import shared.service.ServiceBootstrap
 
 import scala.concurrent.ExecutionContextExecutor
 import scala.language.postfixOps
@@ -30,7 +30,7 @@ object ChessRestServer {
   }
 
   def run(host: String = "0.0.0.0", port: Int = 8080): Unit = {
-    implicit val system: ActorSystem[Unit] = ActorSystem(Behaviors.empty[Unit], "chess-api")
+    implicit val system: ActorSystem[Unit] = ServiceBootstrap.createActorSystem("chess-api")
     implicit val ec: ExecutionContextExecutor = system.executionContext
 
     try {

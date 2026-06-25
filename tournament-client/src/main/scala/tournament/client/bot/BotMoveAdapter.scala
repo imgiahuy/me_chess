@@ -2,7 +2,7 @@ package tournament.client.bot
 
 import model.{Move, PositionState, Color, White, Black}
 import parser.FenParser
-import service.BotService
+import service.ChessBotService
 import formatter.UciFormatter
 import scala.util.{Try, Success, Failure}
 
@@ -13,7 +13,7 @@ import scala.util.{Try, Success, Failure}
   */
 class BotMoveAdapter(botType: String = "stockfish") {
   
-  private val bot = BotService.createBot(botType)
+  private val bot = ChessBotService.createBot(botType)
   
   /** Compute a UCI move from the current FEN and assigned color.
     *

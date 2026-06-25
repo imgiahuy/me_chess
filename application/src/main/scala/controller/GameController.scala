@@ -2,7 +2,7 @@ package controller
 
 import model.{PositionState, Color, TimeControl, Bot}
 import parser.UciParser
-import service.{GameService, BotService}
+import service.{GameService, ChessBotService}
 
 import java.nio.file.{Files, Paths}
 
@@ -87,16 +87,16 @@ class GameController extends GameControllerInterface {
 
   /** Play a bot move */
   def playBotMove(bot: Bot, state: PositionState): Either[String, PositionState] = {
-    BotService.playBotMove(bot, state)
+    ChessBotService.playBotMove(bot, state)
   }
 
   /** Create a bot by type name */
   def createBot(botType: String): Bot = {
-    BotService.createBot(botType)
+    ChessBotService.createBot(botType)
   }
 
   /** Get available bot types */
   def getAvailableBots: List[String] = {
-    BotService.availableBots
+    ChessBotService.availableBots
   }
 }

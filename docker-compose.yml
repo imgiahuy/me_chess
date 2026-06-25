@@ -297,12 +297,12 @@ services:
       retries: 3
       start_period: 30s
 
-  # Lichess Bot Microservice
-  bot-service:
+  # Lichess Integration Microservice
+  lichess-integration-service:
     build:
       context: .
-      dockerfile: bot-service/Dockerfile
-    container_name: chess-bot-service
+      dockerfile: lichess-integration-service/Dockerfile
+    container_name: chess-lichess-integration-service
     networks:
       - chess-network
     deploy:

@@ -6,6 +6,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.io.Source
 import java.io.{BufferedReader, BufferedWriter, InputStreamReader, OutputStreamWriter}
 import java.util.concurrent.{ArrayBlockingQueue, TimeUnit}
+import java.util.concurrent.locks.ReentrantLock
 import scala.util.{Try, Success, Failure}
 import org.slf4j.LoggerFactory
 
@@ -23,6 +24,9 @@ class UciEngine(enginePath: String, options: Map[String, String] = Map.empty) ex
   private val responseQueue = new ArrayBlockingQueue[String](100)
   private var bestMovePromise: Option[Promise[String]] = None
   private var searchOutput: java.util.ArrayList[String] = new java.util.ArrayList[String]()
+  
+  // Lock to protect the shared search state and make go() thread-safe
+  private val searchLock = new ReentrantLock()
   
   override def name: String = s"UCI Engine (${enginePath.split(java.io.File.separator).last})"
   override def difficulty: String = "Expert"
@@ -95,8 +99,13 @@ class UciEngine(enginePath: String, options: Map[String, String] = Map.empty) ex
         searchOutput.clear()
         output
       }
-      bestMovePromise.foreach(_.success(fullOutput + "\n" + line))
-      bestMovePromise = None
+      searchLock.lock()
+      try {
+        bestMovePromise.foreach(_.trySuccess(fullOutput + "\n" + line))
+        bestMovePromise = None
+      } finally {
+        searchLock.unlock()
+      }
     }
   }
   
@@ -136,39 +145,52 @@ class UciEngine(enginePath: String, options: Map[String, String] = Map.empty) ex
   /** Go: start calculating on current position */
   def go(depth: Int = 15, timeMs: Long = 1000): Future[String] = {
     logger.info(s"Starting search with depth=$depth, timeMs=$timeMs")
-    if (!isReady) {
-      logger.info("Engine not ready, initializing...")
-      initialize() match {
-        case Failure(e) => return Future.failed(e)
-        case Success(_) =>
-      }
-    }
-
     val promise = Promise[String]()
-    bestMovePromise = Some(promise)
-
-    val command = s"go depth $depth movetime $timeMs"
-    logger.info(s"Sending UCI command: $command")
+    searchLock.lock()
     try {
-      sendCommand(command)
-    } catch {
-      case e: Exception =>
-        logger.error(s"Failed to send command to engine: ${e.getMessage}, attempting restart", e)
-        shutdown()
-        Thread.sleep(500)
+      if (!isReady) {
+        logger.info("Engine not ready, initializing...")
         initialize() match {
-          case Failure(e2) => return Future.failed(e2)
+          case Failure(e) => return Future.failed(e)
           case Success(_) =>
-            logger.info("Engine restarted successfully, retrying command")
-            sendCommand(command)
         }
+      }
+
+      bestMovePromise = Some(promise)
+
+      val command = s"go depth $depth movetime $timeMs"
+      logger.info(s"Sending UCI command: $command")
+      try {
+        sendCommand(command)
+      } catch {
+        case e: Exception =>
+          logger.error(s"Failed to send command to engine: ${e.getMessage}, attempting restart", e)
+          bestMovePromise = None
+          shutdown()
+          Thread.sleep(500)
+          initialize() match {
+            case Failure(e2) => return Future.failed(e2)
+            case Success(_) =>
+              logger.info("Engine restarted successfully, retrying command")
+              bestMovePromise = Some(promise)
+              sendCommand(command)
+          }
+      }
+    } finally {
+      searchLock.unlock()
     }
     
-    // Timeout fallback
+    // Timeout fallback (run outside the lock so the reader thread can complete the promise)
     Future {
       Thread.sleep(timeMs + 2000)
-      if (!promise.isCompleted) {
-        promise.tryFailure(new Exception("Engine timeout"))
+      searchLock.lock()
+      try {
+        if (!promise.isCompleted) {
+          bestMovePromise = None
+          promise.tryFailure(new Exception("Engine timeout"))
+        }
+      } finally {
+        searchLock.unlock()
       }
     }
     
@@ -178,6 +200,11 @@ class UciEngine(enginePath: String, options: Map[String, String] = Map.empty) ex
   /** Stop current calculation */
   def stop(): Unit = {
     sendCommand("stop")
+  }
+  
+  /** Check if the engine process is still alive */
+  def isRunning: Boolean = {
+    process.exists(_.isAlive)
   }
   
   /** Shutdown engine process */

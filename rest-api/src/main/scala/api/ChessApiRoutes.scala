@@ -13,20 +13,13 @@ import openings.OpeningCatalog
 import java.io.File
 import java.time.Instant
 import java.lang.management.ManagementFactory
+import shared.http.HttpHelpers
 
 
 /** REST API routes for chess game management and play. */
 class ChessApiRoutes(sessionController: GameSessionController, engineController: EngineController)(implicit system: ActorSystem[?]) extends EventStreamMarshalling {
 
-  private def jsonResponse[T: upickle.default.Writer](obj: T): HttpEntity.Strict =
-    HttpEntity(ContentTypes.`application/json`, upickle.default.write(obj))
-
-  private def parseJson[T: upickle.default.Reader](body: String): Either[String, T] =
-    try {
-      Right(upickle.default.read[T](body))
-    } catch {
-      case e: Exception => Left(s"Invalid JSON request body: ${e.getMessage}")
-    }
+  import HttpHelpers.{jsonResponse, parseJson}
 
   private val apiVersion = "v1"
 

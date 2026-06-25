@@ -25,11 +25,16 @@ class EngineManager {
   def startEngine(name: String): Try[UciEngine] = {
     configs.get(name) match {
       case Some(config) =>
-        Try {
-          val engine = UciEngine.create(config)
-          engine.initialize()
-          engines(name) = engine
-          engine
+        // If the engine is already running, return it
+        engines.get(name) match {
+          case Some(engine) if engine.isRunning => Success(engine)
+          case _ =>
+            Try {
+              val engine = UciEngine.create(config)
+              engine.initialize()
+              engines(name) = engine
+              engine
+            }
         }
       case None =>
         Failure(new Exception(s"Engine configuration not found: $name"))
@@ -37,7 +42,7 @@ class EngineManager {
   }
   
   /** Get running engine instance */
-  def getEngine(name: String): Option[UciEngine] = engines.get(name)
+  def getEngine(name: String): Option[UciEngine] = engines.get(name).filter(_.isRunning)
   
   /** Stop and remove engine instance */
   def stopEngine(name: String): Try[Unit] = Try {

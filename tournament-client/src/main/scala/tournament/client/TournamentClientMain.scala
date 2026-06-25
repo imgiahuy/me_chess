@@ -1,10 +1,10 @@
 package tournament.client
 
 import akka.actor.typed.ActorSystem
-import akka.actor.typed.scaladsl.Behaviors
 import tournament.client.api.TournamentApiClient
 import tournament.client.runner.TournamentBotRunner
 import tournament.client.model._
+import shared.service.ServiceBootstrap
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
@@ -109,7 +109,7 @@ object TournamentClientMain {
     
     println(s"[INFO] Registering bot '$botName' with server at $serverUrl")
     
-    implicit val system: ActorSystem[Unit] = ActorSystem(Behaviors.empty, "tournament-client")
+    implicit val system: ActorSystem[Unit] = ServiceBootstrap.createActorSystem("tournament-client")
     implicit val ec: ExecutionContext = system.executionContext
     
     val apiClient = TournamentApiClient(serverUrl)
@@ -145,7 +145,7 @@ object TournamentClientMain {
     
     println(s"[INFO] Listing tournaments from server at $serverUrl")
     
-    implicit val system: ActorSystem[Unit] = ActorSystem(Behaviors.empty, "tournament-client")
+    implicit val system: ActorSystem[Unit] = ServiceBootstrap.createActorSystem("tournament-client")
     implicit val ec: ExecutionContext = system.executionContext
     
     val apiClient = TournamentApiClient(serverUrl)
@@ -198,7 +198,7 @@ object TournamentClientMain {
     
     println(s"[INFO] Joining tournament $tournamentId")
     
-    implicit val system: ActorSystem[Unit] = ActorSystem(Behaviors.empty, "tournament-client")
+    implicit val system: ActorSystem[Unit] = ServiceBootstrap.createActorSystem("tournament-client")
     implicit val ec: ExecutionContext = system.executionContext
     
     val apiClient = TournamentApiClient(serverUrl)
@@ -243,7 +243,7 @@ object TournamentClientMain {
     println(s"  Tournament: $tournamentId")
     println(s"  Bot: $botName ($botType)")
     
-    implicit val system: ActorSystem[Unit] = ActorSystem(Behaviors.empty, "tournament-bot")
+    implicit val system: ActorSystem[Unit] = ServiceBootstrap.createActorSystem("tournament-bot")
     implicit val ec: ExecutionContext = system.executionContext
     
     val runner = TournamentBotRunner(serverUrl, botName, botType)

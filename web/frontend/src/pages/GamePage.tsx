@@ -294,7 +294,7 @@ export function GamePage() {
         setMoveError(null);
         setNotification("Analyzing position with Stockfish...");
         try {
-            const response = await fetch("http://localhost:8085/v1/chess/suggest", {
+            const response = await fetch("/v1/chess/suggest", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
